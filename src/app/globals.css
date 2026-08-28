@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  --background: #426b35;
+  --foreground: #172d25;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--background);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+::selection {
+  background: #ffd66b;
+  color: #172d25;
+}
