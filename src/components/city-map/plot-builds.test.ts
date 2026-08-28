@@ -11,7 +11,7 @@ const plot = (z: number): CityEntity => ({
 });
 describe("Level 1 plot development", () => {
   it("places the universal building immediately on a north plot", () => {
-    expect(createPlotDevelopmentEntities(plot(-9.45), { level: 1 })).toEqual([{
+    expect(createPlotDevelopmentEntities(plot(-11), { level: 1 })).toEqual([{
       id: "plot-north-1-startup-building-level-1",
       assetId: "startup-building-level-1",
       position: { x: -18, y: 0, z: -10.85 },
@@ -21,7 +21,7 @@ describe("Level 1 plot development", () => {
   });
 
   it("faces the opposite street side on a south plot", () => {
-    expect(createPlotDevelopmentEntities(plot(9.45), { level: 1 })).toEqual([{
+    expect(createPlotDevelopmentEntities(plot(11), { level: 1 })).toEqual([{
       id: "plot-south-1-startup-building-level-1",
       assetId: "startup-building-level-1",
       position: { x: -18, y: 0, z: 10.85 },
@@ -31,7 +31,7 @@ describe("Level 1 plot development", () => {
   });
 
   it("places the selected Corner Studio variant", () => {
-    expect(createPlotDevelopmentEntities(plot(-9.45), {
+    expect(createPlotDevelopmentEntities(plot(-11), {
       level: 1,
       assetId: "corner-studio-level-1",
     })).toEqual([{

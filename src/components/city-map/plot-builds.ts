@@ -6,6 +6,16 @@ export type StartupBuildingAssetId = "startup-building-level-1" | "corner-studio
 export interface PlotDevelopment {
   level: StartupBuildingLevel;
   assetId?: StartupBuildingAssetId;
+  founder?: {
+    fullName: string;
+    xHandle: string;
+  };
+  project?: {
+    name: string;
+    url: string;
+    type: "website" | "app" | "chrome-extension";
+    logo: File;
+  };
 }
 
 export function createPlotDevelopmentEntities(

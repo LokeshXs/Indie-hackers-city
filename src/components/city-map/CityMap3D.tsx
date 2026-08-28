@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, useGLTF } from "@react-three/drei";
+import { Html, OrbitControls, useGLTF } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { CITY_ASSET_PATHS } from "./city-assets";
@@ -22,6 +22,29 @@ const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: 
   { assetId: "startup-building-level-1", label: "Startup Shop" },
   { assetId: "corner-studio-level-1", label: "Corner Studio" },
 ];
+
+const X_HANDLE_PATTERN = /^@?[A-Za-z0-9_]{1,15}$/;
+type ConstructionPhase = "blueprint" | "reveal" | "complete";
+interface ConstructionState {
+  plotId: string;
+  phase: ConstructionPhase;
+  assetId: StartupBuildingAssetId;
+}
+
+function normalizeWebsite(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const explicitScheme = trimmed.match(/^([a-z][a-z\d+.-]*):\/\//i)?.[1]?.toLowerCase();
+  if (explicitScheme && explicitScheme !== "http" && explicitScheme !== "https") return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    return ["http:", "https:"].includes(url.protocol) && url.hostname && !url.username && !url.password
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 function ModelInstance({ entity }: { entity: Pick<CityEntity, "assetId"> }) {
   const model = useGLTF(CITY_ASSET_PATHS[entity.assetId]);
@@ -105,6 +128,59 @@ function PlotHighlight({ selected }: { selected: boolean }) {
   );
 }
 
+function WaterSurface() {
+  const geometryRef = useRef<THREE.PlaneGeometry>(null);
+  const basePositionsRef = useRef<Float32Array | null>(null);
+
+  useFrame(({ clock }) => {
+    const geometry = geometryRef.current;
+    if (!geometry) return;
+    const positions = geometry.attributes.position as THREE.BufferAttribute;
+    basePositionsRef.current ??= new Float32Array(positions.array as ArrayLike<number>);
+    const base = basePositionsRef.current;
+    const time = clock.elapsedTime;
+    for (let index = 0; index < positions.count; index += 1) {
+      const offset = index * 3;
+      const x = base[offset];
+      const y = base[offset + 1];
+      positions.setZ(index, Math.sin(x * 0.16 + time * 0.75) * 0.1 + Math.cos(y * 0.2 - time * 0.55) * 0.07);
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+  });
+
+  return (
+    <mesh position={[0, -0.62, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow raycast={() => null}>
+      <planeGeometry ref={geometryRef} args={[1200, 1200, 64, 64]} />
+      <meshBasicMaterial color="#168f99" fog toneMapped={false} />
+    </mesh>
+  );
+}
+
+function IslandShoreline() {
+  const copingMaterial = <meshStandardMaterial color="#b9b7ac" roughness={0.88} />;
+  const wallMaterial = <meshStandardMaterial color="#515957" roughness={0.92} />;
+  const lowerLipMaterial = <meshStandardMaterial color="#858d89" roughness={0.9} />;
+  return (
+    <group raycast={() => null}>
+      <mesh position={[0, -0.06, -14.74]} receiveShadow><boxGeometry args={[49.76, 0.1, 0.52]} />{copingMaterial}</mesh>
+      <mesh position={[0, -0.06, 14.74]} receiveShadow><boxGeometry args={[49.76, 0.1, 0.52]} />{copingMaterial}</mesh>
+      <mesh position={[-24.74, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 29.72]} />{copingMaterial}</mesh>
+      <mesh position={[24.74, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 29.72]} />{copingMaterial}</mesh>
+
+      <mesh position={[0, -0.24, -14.86]} receiveShadow><boxGeometry args={[50.16, 0.3, 0.72]} />{wallMaterial}</mesh>
+      <mesh position={[0, -0.24, 14.86]} receiveShadow><boxGeometry args={[50.16, 0.3, 0.72]} />{wallMaterial}</mesh>
+      <mesh position={[-24.86, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 30.04]} />{wallMaterial}</mesh>
+      <mesh position={[24.86, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 30.04]} />{wallMaterial}</mesh>
+
+      <mesh position={[0, -0.43, -14.98]} receiveShadow><boxGeometry args={[50.53, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
+      <mesh position={[0, -0.43, 14.98]} receiveShadow><boxGeometry args={[50.53, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
+      <mesh position={[-24.98, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 30.33]} />{lowerLipMaterial}</mesh>
+      <mesh position={[24.98, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 30.33]} />{lowerLipMaterial}</mesh>
+    </group>
+  );
+}
+
 function CityAsset({
   entity,
   selected,
@@ -112,6 +188,7 @@ function CityAsset({
   selectable,
   onSelect,
   onHover,
+  revealing,
 }: {
   entity: CityEntity;
   selected: boolean;
@@ -119,11 +196,24 @@ function CityAsset({
   selectable: boolean;
   onSelect: (plotId: string) => void;
   onHover: (plotId: string | null) => void;
+  revealing?: boolean;
 }) {
   const scale = entity.scale ?? 1;
+  const groupRef = useRef<THREE.Group>(null);
+  const revealStartedAt = useRef<number | null>(null);
+
+  useFrame(({ clock }) => {
+    if (!revealing || !groupRef.current) return;
+    revealStartedAt.current ??= clock.elapsedTime;
+    const progress = Math.min((clock.elapsedTime - revealStartedAt.current) / 0.85, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    groupRef.current.position.y = entity.position.y - 3.8 * (1 - eased);
+    groupRef.current.scale.setScalar(scale * (0.86 + eased * 0.14));
+  });
 
   return (
     <group
+      ref={groupRef}
       position={[entity.position.x, entity.position.y, entity.position.z]}
       rotation={[0, entity.rotationY ?? 0, 0]}
       scale={scale}
@@ -157,6 +247,16 @@ function CityAsset({
   );
 }
 
+function ConstructionEffect({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <Html position={[0, 2.8, 0]} center style={{ pointerEvents: "none" }}>
+        <div className={styles.constructionLabel}>Setting up your building<span><i /><i /><i /></span></div>
+      </Html>
+    </group>
+  );
+}
+
 function Scene({
   entities,
   selectedPlotId,
@@ -165,6 +265,9 @@ function Scene({
   onSelect,
   onHover,
   controlsRef,
+  construction,
+  constructionPosition,
+  focusedPlotId,
 }: {
   entities: CityEntity[];
   selectedPlotId: string | null;
@@ -173,6 +276,9 @@ function Scene({
   onSelect: (plotId: string) => void;
   onHover: (plotId: string | null) => void;
   controlsRef: RefObject<OrbitControlsImpl | null>;
+  construction: ConstructionState | null;
+  constructionPosition: [number, number, number] | null;
+  focusedPlotId: string | null;
 }) {
   const { camera } = useThree();
 
@@ -184,9 +290,12 @@ function Scene({
 
   return (
     <>
-      <color attach="background" args={["#173e40"]} />
+      <color attach="background" args={["#168f99"]} />
+      <fog attach="fog" args={["#168f99", 90, 190]} />
       <hemisphereLight args={["#fff3c8", "#174544", 1.35]} />
       <directionalLight position={[-16, 24, 12]} intensity={2.65} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0004} />
+      <WaterSurface />
+      <IslandShoreline />
       <OrbitControls
         ref={controlsRef}
         target={[0, 0, 0]}
@@ -203,14 +312,18 @@ function Scene({
         <Suspense fallback={null} key={entity.id}>
           <CityAsset
             entity={entity}
-            selected={Boolean(entity.plotId && entity.plotId === selectedPlotId)}
+            selected={Boolean(entity.plotId && (entity.plotId === selectedPlotId || entity.plotId === focusedPlotId))}
             hovered={Boolean(entity.plotId && entity.plotId === hoveredPlotId)}
             selectable={Boolean(entity.plotId && selectablePlotIds.has(entity.plotId))}
             onSelect={onSelect}
             onHover={onHover}
+            revealing={construction?.phase === "reveal" && entity.id.startsWith(`${construction.plotId}-`)}
           />
         </Suspense>
       ))}
+      {construction?.phase === "blueprint" && constructionPosition && (
+        <ConstructionEffect position={constructionPosition} />
+      )}
     </>
   );
 }
@@ -220,19 +333,37 @@ export function CityMap3D({ district }: CityMap3DProps) {
   const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
   const [developments, setDevelopments] = useState<Record<string, PlotDevelopment>>({});
   const [selectedBuildingAssetId, setSelectedBuildingAssetId] = useState<StartupBuildingAssetId>(BUILDING_OPTIONS[0].assetId);
+  const [formStep, setFormStep] = useState<1 | 2>(1);
+  const [fullName, setFullName] = useState("");
+  const [xHandle, setXHandle] = useState("");
+  const [xHandleTouched, setXHandleTouched] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectUrl, setProjectUrl] = useState("");
+  const [projectType, setProjectType] = useState<"website" | "app" | "chrome-extension">("website");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [websiteTouched, setWebsiteTouched] = useState(false);
+  const [isReserving, setIsReserving] = useState(false);
+  const [reservedPlotId, setReservedPlotId] = useState<string | null>(null);
+  const [construction, setConstruction] = useState<ConstructionState | null>(null);
+  const [completedProject, setCompletedProject] = useState<{ plotId: string; name: string } | null>(null);
+  const [focusedPlotId, setFocusedPlotId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("Choose an empty plot to found a startup.");
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const shellRef = useRef<HTMLElement>(null);
   const modalRef = useRef<HTMLElement>(null);
-  const addBuildingButtonRef = useRef<HTMLButtonElement>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const constructionTimersRef = useRef<number[]>([]);
+  const focusTimerRef = useRef<number | null>(null);
+  const viewBuildingButtonRef = useRef<HTMLButtonElement>(null);
 
   const plotEntities = useMemo(
     () => district.entities.filter((entity) => entity.plotId),
     [district.entities],
   );
   const selectablePlotIds = useMemo(
-    () => new Set(plotEntities.flatMap((entity) => entity.plotId && !developments[entity.plotId] ? [entity.plotId] : [])),
-    [developments, plotEntities],
+    () => new Set(plotEntities.flatMap((entity) => entity.plotId && entity.plotId !== reservedPlotId && !developments[entity.plotId] ? [entity.plotId] : [])),
+    [developments, plotEntities, reservedPlotId],
   );
   const dynamicEntities = useMemo(
     () => plotEntities.flatMap((plotEntity) => {
@@ -247,21 +378,87 @@ export function CityMap3D({ district }: CityMap3DProps) {
   );
   const selectedPlot = district.plots.find((plot) => plot.id === selectedPlotId);
   const selectedBuildingIndex = BUILDING_OPTIONS.findIndex((option) => option.assetId === selectedBuildingAssetId);
-  const selectedBuilding = BUILDING_OPTIONS[selectedBuildingIndex];
+  const normalizedWebsite = normalizeWebsite(projectUrl);
+  const websiteError = websiteTouched && !normalizedWebsite ? "Enter a valid project URL." : null;
+  const xHandleIsValid = X_HANDLE_PATTERN.test(xHandle.trim());
+  const xHandleError = xHandleTouched && !xHandleIsValid ? "Use 1–15 letters, numbers, or underscores." : null;
+  const canContinue = Boolean(fullName.trim()) && xHandleIsValid;
+  const canClaimPlot = Boolean(projectName.trim() && normalizedWebsite && logoFile && !logoError);
+  const constructionPlotEntity = construction
+    ? plotEntities.find((entity) => entity.plotId === construction.plotId)
+    : undefined;
+  const constructionPosition: [number, number, number] | null = constructionPlotEntity
+    ? [constructionPlotEntity.position.x, 0, constructionPlotEntity.position.z < 0 ? -10.85 : 10.85]
+    : null;
+
+  function focusOnBuilding(project: { plotId: string; name: string }) {
+    const plotEntity = plotEntities.find((entity) => entity.plotId === project.plotId);
+    if (!plotEntity || !controlsRef.current) return;
+    const controls = controlsRef.current;
+    const camera = controls.object as THREE.OrthographicCamera;
+    const previousTarget = controls.target.clone();
+    const previousPosition = camera.position.clone();
+    const previousZoom = camera.zoom;
+    const target = new THREE.Vector3(plotEntity.position.x, 0, plotEntity.position.z < 0 ? -10.85 : 10.85);
+    const cameraOffset = camera.position.clone().sub(controls.target);
+    controls.target.copy(target);
+    camera.position.copy(target).add(cameraOffset);
+    camera.zoom = 43;
+    camera.updateProjectionMatrix();
+    controls.update();
+    setFocusedPlotId(project.plotId);
+    setStatusMessage(`Showing ${project.name} for 5 seconds.`);
+    if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = window.setTimeout(() => {
+      controls.target.copy(previousTarget);
+      camera.position.copy(previousPosition);
+      camera.zoom = previousZoom;
+      camera.updateProjectionMatrix();
+      controls.update();
+      setFocusedPlotId(null);
+      setStatusMessage("Choose another empty plot to found a startup.");
+      focusTimerRef.current = null;
+    }, 5000);
+    window.requestAnimationFrame(() => shellRef.current?.focus());
+  }
 
   useEffect(() => {
     useGLTF.preload(CITY_ASSET_PATHS["startup-building-level-1"]);
     useGLTF.preload(CITY_ASSET_PATHS["corner-studio-level-1"]);
     return () => {
       document.body.style.cursor = "auto";
+      constructionTimersRef.current.forEach(window.clearTimeout);
+      if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
     if (!selectedPlotId) return;
-    const frame = window.requestAnimationFrame(() => addBuildingButtonRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => firstFieldRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
-  }, [selectedPlotId]);
+  }, [selectedPlotId, formStep]);
+
+  useEffect(() => {
+    if (!completedProject) return;
+    const timer = window.setTimeout(() => {
+      if (viewBuildingButtonRef.current) viewBuildingButtonRef.current.click();
+      else setCompletedProject(null);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [completedProject]);
+
+  function resetClaimForm() {
+    setFormStep(1);
+    setFullName("");
+    setXHandle("");
+    setXHandleTouched(false);
+    setProjectName("");
+    setProjectUrl("");
+    setProjectType("website");
+    setLogoFile(null);
+    setLogoError(null);
+    setWebsiteTouched(false);
+  }
 
   function restorePlotFocus(plotId: string | null) {
     window.requestAnimationFrame(() => {
@@ -272,27 +469,64 @@ export function CityMap3D({ district }: CityMap3DProps) {
   function closePlotModal() {
     const plotId = selectedPlotId;
     setSelectedPlotId(null);
+    resetClaimForm();
     setStatusMessage("Plot selection cancelled.");
     restorePlotFocus(plotId);
   }
 
   function openPlot(plotId: string) {
+    resetClaimForm();
     setHoveredPlotId(null);
     setSelectedPlotId(plotId);
     document.body.style.cursor = "auto";
     setStatusMessage("Plot selected.");
   }
 
-  function addBuilding() {
-    if (!selectedPlotId || developments[selectedPlotId]) return;
-    setDevelopments((current) => ({
-      ...current,
-      [selectedPlotId]: { level: 1, assetId: selectedBuildingAssetId },
-    }));
+  function addBuilding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPlotId || developments[selectedPlotId] || isReserving) return;
+    const normalizedProject = projectName.trim();
+    if (!canContinue || !normalizedProject || !normalizedWebsite || !logoFile || logoError) {
+      setWebsiteTouched(true);
+      return;
+    }
+    const plotId = selectedPlotId;
+    const development: PlotDevelopment = {
+      level: 1,
+      assetId: selectedBuildingAssetId,
+      founder: { fullName: fullName.trim(), xHandle: xHandle.trim() },
+      project: { name: normalizedProject, url: normalizedWebsite, type: projectType, logo: logoFile },
+    };
+    setIsReserving(true);
+    setReservedPlotId(plotId);
     setHoveredPlotId(null);
-    setSelectedPlotId(null);
-    setStatusMessage(`${selectedBuilding.label} was added to the city.`);
-    window.requestAnimationFrame(() => shellRef.current?.focus());
+    setStatusMessage("Reserving plot…");
+    constructionTimersRef.current = [
+      window.setTimeout(() => {
+        setSelectedPlotId(null);
+        setIsReserving(false);
+        resetClaimForm();
+        setConstruction({ plotId, phase: "blueprint", assetId: selectedBuildingAssetId });
+        setStatusMessage("Preparing your foundation…");
+      }, 500),
+      window.setTimeout(() => {
+        setDevelopments((current) => ({ ...current, [plotId]: development }));
+        setConstruction({ plotId, phase: "reveal", assetId: selectedBuildingAssetId });
+        setStatusMessage(`Building ${normalizedProject}…`);
+      }, 2000),
+      window.setTimeout(() => {
+        setConstruction({ plotId, phase: "complete", assetId: selectedBuildingAssetId });
+        setReservedPlotId(null);
+        setCompletedProject({ plotId, name: normalizedProject });
+        setStatusMessage(`${normalizedProject} is now part of ${district.name}.`);
+      }, 3000),
+    ];
+  }
+
+  function viewCompletedBuilding() {
+    if (!completedProject) return;
+    focusOnBuilding(completedProject);
+    setCompletedProject(null);
   }
 
   function browseBuilding(direction: -1 | 1) {
@@ -357,6 +591,9 @@ export function CityMap3D({ district }: CityMap3DProps) {
             onSelect={openPlot}
             onHover={setHoveredPlotId}
             controlsRef={controlsRef}
+            construction={selectedPlotId ? null : construction}
+            constructionPosition={constructionPosition}
+            focusedPlotId={focusedPlotId}
           />
         </Suspense>
       </Canvas>
@@ -375,7 +612,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
           }}
         >
           <section ref={modalRef} className={styles.plotModal} role="dialog" aria-modal="true" aria-label={`${selectedPlot.label} setup`} onKeyDown={handleModalKeyDown}>
-            <button className={styles.modalClose} type="button" aria-label="Close plot setup" onClick={closePlotModal}>×</button>
+            <button className={styles.modalClose} type="button" aria-label="Close plot setup" disabled={isReserving} onClick={closePlotModal}>×</button>
             <div className={styles.modalSurface}>
               <div className={styles.previewPane} aria-label="Rotating Level 1 startup building preview">
                 <Canvas
@@ -399,19 +636,84 @@ export function CityMap3D({ district }: CityMap3DProps) {
                 </div>
               </div>
               <div className={styles.actionPane}>
-                <div className={styles.startupForm}>
-                  <div className={styles.formHeading}>
-                    <span>Selected office</span>
-                    <p className={styles.buildingName}>{selectedBuilding.label}</p>
+                <form className={styles.startupForm} noValidate aria-busy={isReserving} onSubmit={addBuilding}>
+                  <div className={styles.claimHeading}>
+                    <h2>Claim this plot</h2>
+                    <p><span aria-hidden="true">◆</span>{district.name} <b>·</b> {selectedPlot.label}</p>
                   </div>
-                  <button ref={addBuildingButtonRef} className={styles.addBuildingButton} type="button" onClick={addBuilding}>
-                    <span aria-hidden="true">＋</span>
-                    Add building
-                  </button>
-                </div>
+                  {formStep === 1 ? (
+                    <div className={styles.formStep}>
+                      <div className={styles.stepIntro}><strong>Meet the founder</strong><span>Tell the city who is building here.</span></div>
+                      <div className={styles.claimField}>
+                        <label htmlFor="founder-name">Full name</label>
+                        <input ref={firstFieldRef} id="founder-name" value={fullName} required maxLength={60} placeholder="Your full name" onChange={(event) => setFullName(event.target.value)} />
+                      </div>
+                      <div className={styles.claimField}>
+                        <label htmlFor="x-handle">X handle</label>
+                        <input id="x-handle" value={xHandle} required maxLength={16} autoCapitalize="none" spellCheck={false} placeholder="@yourhandle" pattern="@?[A-Za-z0-9_]{1,15}" aria-invalid={Boolean(xHandleError)} aria-describedby={xHandleError ? "x-handle-error" : undefined} onBlur={() => setXHandleTouched(true)} onChange={(event) => setXHandle(event.target.value)} />
+                        {xHandleError && <small id="x-handle-error" className={styles.claimError}>{xHandleError}</small>}
+                      </div>
+                      <button className={styles.addBuildingButton} type="button" disabled={!canContinue} onClick={() => setFormStep(2)}>Continue <span aria-hidden="true">→</span></button>
+                    </div>
+                  ) : (
+                    <div className={styles.formStep}>
+                      <div className={styles.stepIntro}><strong>Build your billboard</strong><span>Add the identity visitors will discover.</span></div>
+                      <div className={styles.claimField}>
+                        <label htmlFor="project-name">Project name</label>
+                        <input ref={firstFieldRef} id="project-name" value={projectName} required maxLength={40} placeholder="Your project name" onChange={(event) => setProjectName(event.target.value)} />
+                      </div>
+                      <div className={styles.claimField}>
+                        <label htmlFor="project-url">Project URL</label>
+                        <input id="project-url" value={projectUrl} required inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={Boolean(websiteError)} aria-describedby={websiteError ? "website-error" : undefined} placeholder="https://yourproject.com" onBlur={() => { setWebsiteTouched(true); if (normalizedWebsite) setProjectUrl(normalizedWebsite); }} onChange={(event) => setProjectUrl(event.target.value)} />
+                        {websiteError && <small id="website-error" className={styles.claimError}>{websiteError}</small>}
+                      </div>
+                      <fieldset className={styles.projectTypes}>
+                        <legend>Type</legend>
+                        {([['website', 'Website'], ['app', 'App'], ['chrome-extension', 'Chrome extension']] as const).map(([value, label]) => (
+                          <label key={value}><input type="radio" name="project-type" value={value} checked={projectType === value} onChange={() => setProjectType(value)} /><span>{label}</span></label>
+                        ))}
+                      </fieldset>
+                      <div className={styles.claimField}>
+                        <label htmlFor="project-logo">Logo</label>
+                        <label className={styles.logoUpload} htmlFor="project-logo"><strong>{logoFile?.name ?? "Upload PNG or JPG"}</strong><span>{logoFile ? "Choose a different file" : "Select your project logo"}</span></label>
+                        <input className={styles.fileInput} id="project-logo" type="file" required accept="image/png,image/jpeg" onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          if (file && !["image/png", "image/jpeg"].includes(file.type)) {
+                            setLogoFile(null);
+                            setLogoError("Only PNG and JPG logos are supported.");
+                            event.target.value = "";
+                          } else {
+                            setLogoFile(file);
+                            setLogoError(null);
+                          }
+                        }} />
+                        {logoError && <small className={styles.claimError}>{logoError}</small>}
+                      </div>
+                      <div className={styles.formActions}>
+                        <button className={styles.backButton} type="button" onClick={() => setFormStep(1)}>← Back</button>
+                        <button className={styles.addBuildingButton} type="submit" disabled={!canClaimPlot || isReserving}>{isReserving ? "Reserving plot…" : "Claim my plot"}</button>
+                      </div>
+                    </div>
+                  )}
+                </form>
               </div>
             </div>
           </section>
+        </div>
+      )}
+      {completedProject && (
+        <div className={styles.successOverlay} role="presentation">
+          <aside className={styles.successCard} role="dialog" aria-modal="true" aria-label="Plot claimed successfully">
+            <div className={styles.confetti} aria-hidden="true">
+              {Array.from({ length: 24 }, (_, index) => <i key={index} style={{ left: `${4 + ((index * 19) % 92)}%`, animationDelay: `${(index % 8) * -0.18}s` }} />)}
+            </div>
+            <span className={styles.successBadge} aria-hidden="true">✓</span>
+            <p className={styles.successEyebrow}>Plot successfully claimed!</p>
+            <h2>You’re now part of<br />{district.name}</h2>
+            <p className={styles.successCopy}><strong>{completedProject.name}</strong> is ready to begin its story.</p>
+            <button ref={viewBuildingButtonRef} type="button" onClick={viewCompletedBuilding}>View my building <span aria-hidden="true">→</span></button>
+            <small className={styles.successTimer}>Closing automatically in 5 seconds</small>
+          </aside>
         </div>
       )}
       <div className={styles.srOnly} aria-label="Empty buildable plots">

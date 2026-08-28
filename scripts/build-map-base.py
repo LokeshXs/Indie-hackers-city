@@ -32,7 +32,7 @@ def main():
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
     grey = material("Plain grey base", (0.42, 0.44, 0.46))
-    cube("map base", (0, 0, -0.20), (25, 15, 0.20), grey)
+    cube("map base", (0, 0, -0.20), (30, 18, 0.20), grey)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     SOURCE_PATH.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.object.select_all(action="SELECT")
