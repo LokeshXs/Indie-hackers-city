@@ -16,6 +16,7 @@ export interface PlotDevelopment {
     type: "website" | "app" | "chrome-extension";
     logo: File;
   };
+  buildingColor?: string;
 }
 
 export function createPlotDevelopmentEntities(
@@ -29,8 +30,9 @@ export function createPlotDevelopmentEntities(
   return [{
     id: `${plotEntity.plotId}-${assetId}`,
     assetId,
-    position: { x: plotEntity.position.x, y: 0, z: north ? -10.85 : 10.85 },
+    position: { x: plotEntity.position.x, y: 0, z: north ? -9.14 : 9.14 },
     rotationY: north ? Math.PI : undefined,
     scale: 1.4,
+    buildingColor: development.buildingColor,
   }];
 }

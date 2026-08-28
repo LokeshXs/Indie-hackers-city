@@ -2,10 +2,10 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Html, OrbitControls, useGLTF } from "@react-three/drei";
+import { Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
-import { CITY_ASSET_PATHS } from "./city-assets";
+import { BUILDING_WALL_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
 import {
   createPlotDevelopmentEntities,
   type PlotDevelopment,
@@ -21,6 +21,17 @@ interface CityMap3DProps {
 const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: string }> = [
   { assetId: "startup-building-level-1", label: "Startup Shop" },
   { assetId: "corner-studio-level-1", label: "Corner Studio" },
+];
+
+const BUILDING_COLOR_OPTIONS: ReadonlyArray<{ id: string; label: string; hex: string }> = [
+  { id: "cream", label: "Classic Cream", hex: "#d1ad6e" },
+  { id: "coral", label: "Coral", hex: "#e2775c" },
+  { id: "sky", label: "Sky Blue", hex: "#5fa8d3" },
+  { id: "sage", label: "Sage Green", hex: "#7fa87a" },
+  { id: "sun", label: "Sunny Yellow", hex: "#f0c94b" },
+  { id: "lavender", label: "Lavender", hex: "#9b8ac4" },
+  { id: "blush", label: "Blush Pink", hex: "#e8a0b4" },
+  { id: "charcoal", label: "Charcoal", hex: "#5b6670" },
 ];
 
 const X_HANDLE_PATTERN = /^@?[A-Za-z0-9_]{1,15}$/;
@@ -46,22 +57,33 @@ function normalizeWebsite(value: string): string | null {
   }
 }
 
-function ModelInstance({ entity }: { entity: Pick<CityEntity, "assetId"> }) {
+function ModelInstance({ entity }: { entity: Pick<CityEntity, "assetId" | "buildingColor"> }) {
   const model = useGLTF(CITY_ASSET_PATHS[entity.assetId]);
   const instance = useMemo(() => {
     const scene = model.scene.clone(true);
+    const wallMaterialName = BUILDING_WALL_MATERIAL[entity.assetId];
     scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       object.castShadow = entity.assetId !== "startup-building-level-1";
       object.receiveShadow = true;
+      if (
+        entity.buildingColor
+        && wallMaterialName
+        && !Array.isArray(object.material)
+        && object.material.name === wallMaterialName
+      ) {
+        const material = object.material.clone();
+        if (material instanceof THREE.MeshStandardMaterial) material.color.set(entity.buildingColor);
+        object.material = material;
+      }
     });
     return scene;
-  }, [entity.assetId, model.scene]);
+  }, [entity.assetId, entity.buildingColor, model.scene]);
 
   return <primitive object={instance} />;
 }
 
-function BuildingPreview({ assetId }: { assetId: StartupBuildingAssetId }) {
+function BuildingPreview({ assetId, buildingColor }: { assetId: StartupBuildingAssetId; buildingColor: string }) {
   const buildingRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
@@ -75,7 +97,7 @@ function BuildingPreview({ assetId }: { assetId: StartupBuildingAssetId }) {
         <meshStandardMaterial color="#c9e4df" roughness={0.78} />
       </mesh>
       <group ref={buildingRef} position={[0, -1.58, 0]} rotation={[0, -0.55, 0]}>
-        <ModelInstance entity={{ assetId }} />
+        <ModelInstance entity={{ assetId, buildingColor }} />
       </group>
     </>
   );
@@ -128,31 +150,69 @@ function PlotHighlight({ selected }: { selected: boolean }) {
   );
 }
 
+const WATER_SHALLOW_COLOR = new THREE.Color("#7ff2ea");
+const WATER_MID_COLOR = new THREE.Color("#2a90c9");
+const WATER_DEEP_COLOR = new THREE.Color("#1c5f96");
+const WATER_HIGHLIGHT_COLOR = new THREE.Color("#f4fffd");
+const WHITE_COLOR = new THREE.Color("#ffffff");
+const WATER_TINT_STRENGTH = 0.6;
+const WATER_SHORE_START = 18;
+const WATER_MID_DISTANCE = 90;
+const WATER_DEEP_DISTANCE = 260;
+
 function WaterSurface() {
   const geometryRef = useRef<THREE.PlaneGeometry>(null);
   const basePositionsRef = useRef<Float32Array | null>(null);
+  const scratchColor = useRef(new THREE.Color());
+  const loadedWaterTexture = useTexture("/assets/city/v3/water-surface-tile.png");
+  const waterTexture = useMemo(() => {
+    const texture = loadedWaterTexture.clone();
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(40, 40);
+    texture.needsUpdate = true;
+    return texture;
+  }, [loadedWaterTexture]);
 
   useFrame(({ clock }) => {
     const geometry = geometryRef.current;
     if (!geometry) return;
     const positions = geometry.attributes.position as THREE.BufferAttribute;
     basePositionsRef.current ??= new Float32Array(positions.array as ArrayLike<number>);
+    if (!geometry.getAttribute("color")) {
+      geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(positions.count * 3), 3));
+    }
+    const colors = geometry.getAttribute("color") as THREE.BufferAttribute;
     const base = basePositionsRef.current;
     const time = clock.elapsedTime;
     for (let index = 0; index < positions.count; index += 1) {
       const offset = index * 3;
       const x = base[offset];
       const y = base[offset + 1];
-      positions.setZ(index, Math.sin(x * 0.16 + time * 0.75) * 0.1 + Math.cos(y * 0.2 - time * 0.55) * 0.07);
+      const distance = Math.sqrt(x * x + y * y);
+      const wave = Math.sin(distance * 0.11 - time * 0.6) * 0.11 + Math.sin(distance * 0.07 + time * 0.35) * 0.07;
+      positions.setZ(index, wave);
+
+      const depthColor = scratchColor.current;
+      if (distance < WATER_MID_DISTANCE) {
+        depthColor.copy(WATER_SHALLOW_COLOR).lerp(WATER_MID_COLOR, THREE.MathUtils.smoothstep(distance, WATER_SHORE_START, WATER_MID_DISTANCE));
+      } else {
+        depthColor.copy(WATER_MID_COLOR).lerp(WATER_DEEP_COLOR, THREE.MathUtils.smoothstep(distance, WATER_MID_DISTANCE, WATER_DEEP_DISTANCE));
+      }
+      const crestBlend = THREE.MathUtils.clamp((wave + 0.18) / 0.36, 0, 1) ** 4;
+      depthColor.lerp(WATER_HIGHLIGHT_COLOR, crestBlend * 0.65);
+      depthColor.lerp(WHITE_COLOR, 1 - WATER_TINT_STRENGTH);
+      colors.setXYZ(index, depthColor.r, depthColor.g, depthColor.b);
     }
     positions.needsUpdate = true;
+    colors.needsUpdate = true;
     geometry.computeVertexNormals();
   });
 
   return (
     <mesh position={[0, -0.62, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow raycast={() => null}>
       <planeGeometry ref={geometryRef} args={[1200, 1200, 64, 64]} />
-      <meshBasicMaterial color="#168f99" fog toneMapped={false} />
+      <meshStandardMaterial vertexColors map={waterTexture} roughness={0.2} metalness={0.1} fog />
     </mesh>
   );
 }
@@ -163,20 +223,20 @@ function IslandShoreline() {
   const lowerLipMaterial = <meshStandardMaterial color="#858d89" roughness={0.9} />;
   return (
     <group raycast={() => null}>
-      <mesh position={[0, -0.06, -14.74]} receiveShadow><boxGeometry args={[49.76, 0.1, 0.52]} />{copingMaterial}</mesh>
-      <mesh position={[0, -0.06, 14.74]} receiveShadow><boxGeometry args={[49.76, 0.1, 0.52]} />{copingMaterial}</mesh>
-      <mesh position={[-24.74, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 29.72]} />{copingMaterial}</mesh>
-      <mesh position={[24.74, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 29.72]} />{copingMaterial}</mesh>
+      <mesh position={[0, -0.06, -18.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
+      <mesh position={[0, -0.06, 18.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
+      <mesh position={[-29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 37.86]} />{copingMaterial}</mesh>
+      <mesh position={[29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 37.86]} />{copingMaterial}</mesh>
 
-      <mesh position={[0, -0.24, -14.86]} receiveShadow><boxGeometry args={[50.16, 0.3, 0.72]} />{wallMaterial}</mesh>
-      <mesh position={[0, -0.24, 14.86]} receiveShadow><boxGeometry args={[50.16, 0.3, 0.72]} />{wallMaterial}</mesh>
-      <mesh position={[-24.86, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 30.04]} />{wallMaterial}</mesh>
-      <mesh position={[24.86, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 30.04]} />{wallMaterial}</mesh>
+      <mesh position={[0, -0.24, -18.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
+      <mesh position={[0, -0.24, 18.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
+      <mesh position={[-29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 38.18]} />{wallMaterial}</mesh>
+      <mesh position={[29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 38.18]} />{wallMaterial}</mesh>
 
-      <mesh position={[0, -0.43, -14.98]} receiveShadow><boxGeometry args={[50.53, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
-      <mesh position={[0, -0.43, 14.98]} receiveShadow><boxGeometry args={[50.53, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
-      <mesh position={[-24.98, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 30.33]} />{lowerLipMaterial}</mesh>
-      <mesh position={[24.98, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 30.33]} />{lowerLipMaterial}</mesh>
+      <mesh position={[0, -0.43, -19.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
+      <mesh position={[0, -0.43, 19.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
+      <mesh position={[-29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 38.47]} />{lowerLipMaterial}</mesh>
+      <mesh position={[29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 38.47]} />{lowerLipMaterial}</mesh>
     </group>
   );
 }
@@ -199,6 +259,9 @@ function CityAsset({
   revealing?: boolean;
 }) {
   const scale = entity.scale ?? 1;
+  const scaleVector: [number, number, number] = entity.scaleXZ
+    ? [entity.scaleXZ.x, scale, entity.scaleXZ.z]
+    : [scale, scale, scale];
   const groupRef = useRef<THREE.Group>(null);
   const revealStartedAt = useRef<number | null>(null);
 
@@ -216,7 +279,7 @@ function CityAsset({
       ref={groupRef}
       position={[entity.position.x, entity.position.y, entity.position.z]}
       rotation={[0, entity.rotationY ?? 0, 0]}
-      scale={scale}
+      scale={scaleVector}
     >
       <ModelInstance entity={entity} />
       {selectable && entity.plotId && (
@@ -290,8 +353,8 @@ function Scene({
 
   return (
     <>
-      <color attach="background" args={["#168f99"]} />
-      <fog attach="fog" args={["#168f99", 90, 190]} />
+      <color attach="background" args={["#0a3a63"]} />
+      <fog attach="fog" args={["#0a3a63", 90, 190]} />
       <hemisphereLight args={["#fff3c8", "#174544", 1.35]} />
       <directionalLight position={[-16, 24, 12]} intensity={2.65} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0004} />
       <WaterSurface />
@@ -304,7 +367,7 @@ function Scene({
         minZoom={21}
         maxZoom={48}
         minPolarAngle={Math.PI / 5}
-        maxPolarAngle={Math.PI / 2.4}
+        maxPolarAngle={Math.PI / 2.8}
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
         touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
       />
@@ -333,7 +396,8 @@ export function CityMap3D({ district }: CityMap3DProps) {
   const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
   const [developments, setDevelopments] = useState<Record<string, PlotDevelopment>>({});
   const [selectedBuildingAssetId, setSelectedBuildingAssetId] = useState<StartupBuildingAssetId>(BUILDING_OPTIONS[0].assetId);
-  const [formStep, setFormStep] = useState<1 | 2>(1);
+  const [selectedBuildingColor, setSelectedBuildingColor] = useState<string>(BUILDING_COLOR_OPTIONS[0].hex);
+  const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
   const [fullName, setFullName] = useState("");
   const [xHandle, setXHandle] = useState("");
   const [xHandleTouched, setXHandleTouched] = useState(false);
@@ -353,6 +417,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
   const shellRef = useRef<HTMLElement>(null);
   const modalRef = useRef<HTMLElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const firstSwatchRef = useRef<HTMLButtonElement>(null);
   const constructionTimersRef = useRef<number[]>([]);
   const focusTimerRef = useRef<number | null>(null);
   const viewBuildingButtonRef = useRef<HTMLButtonElement>(null);
@@ -388,7 +453,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
     ? plotEntities.find((entity) => entity.plotId === construction.plotId)
     : undefined;
   const constructionPosition: [number, number, number] | null = constructionPlotEntity
-    ? [constructionPlotEntity.position.x, 0, constructionPlotEntity.position.z < 0 ? -10.85 : 10.85]
+    ? [constructionPlotEntity.position.x, 0, constructionPlotEntity.position.z < 0 ? -9.14 : 9.14]
     : null;
 
   function focusOnBuilding(project: { plotId: string; name: string }) {
@@ -399,7 +464,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
     const previousTarget = controls.target.clone();
     const previousPosition = camera.position.clone();
     const previousZoom = camera.zoom;
-    const target = new THREE.Vector3(plotEntity.position.x, 0, plotEntity.position.z < 0 ? -10.85 : 10.85);
+    const target = new THREE.Vector3(plotEntity.position.x, 0, plotEntity.position.z < 0 ? -9.14 : 9.14);
     const cameraOffset = camera.position.clone().sub(controls.target);
     controls.target.copy(target);
     camera.position.copy(target).add(cameraOffset);
@@ -425,6 +490,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
   useEffect(() => {
     useGLTF.preload(CITY_ASSET_PATHS["startup-building-level-1"]);
     useGLTF.preload(CITY_ASSET_PATHS["corner-studio-level-1"]);
+    useTexture.preload("/assets/city/v3/water-surface-tile.png");
     return () => {
       document.body.style.cursor = "auto";
       constructionTimersRef.current.forEach(window.clearTimeout);
@@ -434,7 +500,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
 
   useEffect(() => {
     if (!selectedPlotId) return;
-    const frame = window.requestAnimationFrame(() => firstFieldRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => (firstFieldRef.current ?? firstSwatchRef.current)?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [selectedPlotId, formStep]);
 
@@ -458,6 +524,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
     setLogoFile(null);
     setLogoError(null);
     setWebsiteTouched(false);
+    setSelectedBuildingColor(BUILDING_COLOR_OPTIONS[0].hex);
   }
 
   function restorePlotFocus(plotId: string | null) {
@@ -496,6 +563,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
       assetId: selectedBuildingAssetId,
       founder: { fullName: fullName.trim(), xHandle: xHandle.trim() },
       project: { name: normalizedProject, url: normalizedWebsite, type: projectType, logo: logoFile },
+      buildingColor: selectedBuildingColor,
     };
     setIsReserving(true);
     setReservedPlotId(plotId);
@@ -579,7 +647,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
         className={styles.canvas}
         shadows
         orthographic
-        camera={{ position: [25, 25, 25], zoom: 30, near: 0.1, far: 200 }}
+        camera={{ position: [25, 25, 25], zoom: 30, near: 0.1, far: 500 }}
         dpr={[1, 2]}
       >
         <Suspense fallback={null}>
@@ -615,6 +683,11 @@ export function CityMap3D({ district }: CityMap3DProps) {
             <button className={styles.modalClose} type="button" aria-label="Close plot setup" disabled={isReserving} onClick={closePlotModal}>×</button>
             <div className={styles.modalSurface}>
               <div className={styles.previewPane} aria-label="Rotating Level 1 startup building preview">
+          
+                <div className={styles.previewInfo}>
+                  <span className={styles.permitTag} aria-hidden="true">Build Permit</span>
+                  <p className={styles.previewAddress}><span aria-hidden="true">◆</span>{district.name} <b>·</b> {selectedPlot.label}</p>
+                </div>
                 <Canvas
                   className={styles.previewCanvas}
                   shadows
@@ -625,7 +698,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
                   <ambientLight intensity={1.5} />
                   <hemisphereLight args={["#fffdf2", "#91b9b2", 1.8]} />
                   <directionalLight position={[-6, 9, 7]} intensity={2.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-                  <Suspense fallback={null}><BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} /></Suspense>
+                  <Suspense fallback={null}><BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} buildingColor={selectedBuildingColor} /></Suspense>
                 </Canvas>
                 <button className={`${styles.previewArrow} ${styles.previewArrowLeft}`} type="button" aria-label="Previous building" onClick={() => browseBuilding(-1)}>‹</button>
                 <button className={`${styles.previewArrow} ${styles.previewArrowRight}`} type="button" aria-label="Next building" onClick={() => browseBuilding(1)}>›</button>
@@ -637,10 +710,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
               </div>
               <div className={styles.actionPane}>
                 <form className={styles.startupForm} noValidate aria-busy={isReserving} onSubmit={addBuilding}>
-                  <div className={styles.claimHeading}>
-                    <h2>Claim this plot</h2>
-                    <p><span aria-hidden="true">◆</span>{district.name} <b>·</b> {selectedPlot.label}</p>
-                  </div>
+              
                   {formStep === 1 ? (
                     <div className={styles.formStep}>
                       <div className={styles.stepIntro}><strong>Meet the founder</strong><span>Tell the city who is building here.</span></div>
@@ -655,7 +725,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
                       </div>
                       <button className={styles.addBuildingButton} type="button" disabled={!canContinue} onClick={() => setFormStep(2)}>Continue <span aria-hidden="true">→</span></button>
                     </div>
-                  ) : (
+                  ) : formStep === 2 ? (
                     <div className={styles.formStep}>
                       <div className={styles.stepIntro}><strong>Build your billboard</strong><span>Add the identity visitors will discover.</span></div>
                       <div className={styles.claimField}>
@@ -691,6 +761,32 @@ export function CityMap3D({ district }: CityMap3DProps) {
                       </div>
                       <div className={styles.formActions}>
                         <button className={styles.backButton} type="button" onClick={() => setFormStep(1)}>← Back</button>
+                        <button className={styles.addBuildingButton} type="button" disabled={!canClaimPlot} onClick={() => setFormStep(3)}>Continue <span aria-hidden="true">→</span></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={styles.formStep}>
+                      <div className={styles.stepIntro}><strong>Pick your colors</strong><span>Give the building your brand&apos;s look.</span></div>
+                      <div className={styles.claimField}>
+                        <label id="building-color-label">Building color</label>
+                        <div className={styles.colorSwatches} role="radiogroup" aria-labelledby="building-color-label">
+                          {BUILDING_COLOR_OPTIONS.map((option, index) => (
+                            <button
+                              key={option.id}
+                              ref={index === 0 ? firstSwatchRef : undefined}
+                              type="button"
+                              role="radio"
+                              aria-checked={selectedBuildingColor === option.hex}
+                              aria-label={option.label}
+                              className={`${styles.colorSwatch} ${selectedBuildingColor === option.hex ? styles.colorSwatchActive : ""}`}
+                              style={{ background: option.hex }}
+                              onClick={() => setSelectedBuildingColor(option.hex)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className={styles.formActions}>
+                        <button className={styles.backButton} type="button" onClick={() => setFormStep(2)}>← Back</button>
                         <button className={styles.addBuildingButton} type="submit" disabled={!canClaimPlot || isReserving}>{isReserving ? "Reserving plot…" : "Claim my plot"}</button>
                       </div>
                     </div>

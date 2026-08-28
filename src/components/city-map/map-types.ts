@@ -36,6 +36,8 @@ export interface CityEntity {
   position: WorldPosition;
   rotationY?: number;
   scale?: number;
+  scaleXZ?: { x: number; z: number };
+  buildingColor?: string;
   plotId?: string;
   interactive?: boolean;
 }

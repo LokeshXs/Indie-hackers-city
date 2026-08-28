@@ -11,9 +11,12 @@ vi.mock("@react-three/fiber", () => ({
 
 vi.mock("@react-three/drei", () => {
   const useGLTF = Object.assign(vi.fn(), { preload: vi.fn() });
+  const useTexture = Object.assign(vi.fn(), { preload: vi.fn() });
   return {
     OrbitControls: () => null,
+    Html: () => null,
     useGLTF,
+    useTexture,
   };
 });
 
@@ -48,14 +51,14 @@ describe("plot claim modal", () => {
 
     const projectInput = screen.getByRole("textbox", { name: "Project name" });
     const websiteInput = screen.getByRole("textbox", { name: "Project URL" });
-    const claimButton = screen.getByRole("button", { name: /claim my plot/i });
-    expect(claimButton).toBeDisabled();
+    const continueToColorButton = screen.getByRole("button", { name: /continue/i });
+    expect(continueToColorButton).toBeDisabled();
     await waitFor(() => expect(projectInput).toHaveFocus());
     await user.type(projectInput, "Xenith");
     await user.type(websiteInput, "ftp://xenith.dev");
     await user.tab();
     expect(screen.getByText("Enter a valid project URL.")).toBeInTheDocument();
-    expect(claimButton).toBeDisabled();
+    expect(continueToColorButton).toBeDisabled();
 
     await user.clear(websiteInput);
     await user.type(websiteInput, "xenith.dev");
@@ -63,7 +66,12 @@ describe("plot claim modal", () => {
     expect(websiteInput).toHaveValue("https://xenith.dev/");
     await user.click(screen.getByRole("radio", { name: "App" }));
     await user.upload(screen.getByLabelText("Logo"), new File(["logo"], "xenith.png", { type: "image/png" }));
+    expect(continueToColorButton).toBeEnabled();
+    await user.click(continueToColorButton);
+
+    const claimButton = screen.getByRole("button", { name: /claim my plot/i });
     expect(claimButton).toBeEnabled();
+    await user.click(screen.getByRole("radio", { name: "Coral" }));
     await user.click(claimButton);
 
     expect(screen.getByRole("button", { name: "Reserving plot…" })).toBeDisabled();

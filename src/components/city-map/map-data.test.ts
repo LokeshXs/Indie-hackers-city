@@ -7,7 +7,7 @@ describe("starter district", () => {
     expect(starterDistrict.id).toBe("founders-crossing");
     expect(starterDistrict.plots).toHaveLength(8);
     expect(starterDistrict.plots.every((plot) => plot.status === "available")).toBe(true);
-    expect(starterDistrict.entities).toHaveLength(26);
+    expect(starterDistrict.entities).toHaveLength(34);
     expect(starterDistrict.entities.filter((entity) => entity.plotId)).toHaveLength(8);
     expect(starterDistrict.entities.filter((entity) => entity.interactive)).toHaveLength(8);
     expect(new Set(starterDistrict.entities.map((entity) => entity.assetId))).toEqual(

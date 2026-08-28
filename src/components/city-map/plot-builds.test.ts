@@ -14,7 +14,7 @@ describe("Level 1 plot development", () => {
     expect(createPlotDevelopmentEntities(plot(-11), { level: 1 })).toEqual([{
       id: "plot-north-1-startup-building-level-1",
       assetId: "startup-building-level-1",
-      position: { x: -18, y: 0, z: -10.85 },
+      position: { x: -18, y: 0, z: -9.14 },
       rotationY: Math.PI,
       scale: 1.4,
     }]);
@@ -24,7 +24,7 @@ describe("Level 1 plot development", () => {
     expect(createPlotDevelopmentEntities(plot(11), { level: 1 })).toEqual([{
       id: "plot-south-1-startup-building-level-1",
       assetId: "startup-building-level-1",
-      position: { x: -18, y: 0, z: 10.85 },
+      position: { x: -18, y: 0, z: 9.14 },
       rotationY: undefined,
       scale: 1.4,
     }]);
@@ -37,7 +37,7 @@ describe("Level 1 plot development", () => {
     })).toEqual([{
       id: "plot-north-1-corner-studio-level-1",
       assetId: "corner-studio-level-1",
-      position: { x: -18, y: 0, z: -10.85 },
+      position: { x: -18, y: 0, z: -9.14 },
       rotationY: Math.PI,
       scale: 1.4,
     }]);
