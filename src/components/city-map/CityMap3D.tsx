@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { BUILDING_WALL_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
 import {
   createPlotDevelopmentEntities,
+  getBuildingPlacement,
   type PlotDevelopment,
   type StartupBuildingAssetId,
 } from "./plot-builds";
@@ -156,9 +157,40 @@ const WATER_DEEP_COLOR = new THREE.Color("#1c5f96");
 const WATER_HIGHLIGHT_COLOR = new THREE.Color("#f4fffd");
 const WHITE_COLOR = new THREE.Color("#ffffff");
 const WATER_TINT_STRENGTH = 0.6;
-const WATER_SHORE_START = 18;
-const WATER_MID_DISTANCE = 90;
-const WATER_DEEP_DISTANCE = 260;
+// Distances below are calibrated per-block (each block's own shoreline reaches ~29-30 units
+// from ITS center), not from the world origin — see CITY_BLOCK_CENTERS, used to find the
+// nearest block so the gradient hugs whichever shore is actually closest.
+const WATER_SHORE_START = 28;
+const WATER_MID_DISTANCE = 100;
+const WATER_DEEP_DISTANCE = 270;
+const CITY_BLOCK_CENTERS: ReadonlyArray<{ x: number; z: number }> = [
+  { x: -40, z: -40 },
+  { x: 40, z: -40 },
+  { x: -40, z: 40 },
+  { x: 40, z: 40 },
+];
+
+// Outermost shoreline faces of a single block (IslandShoreline's lower lip), used to derive the
+// whole city's footprint so the zoom-to-fit stays correct if blocks are moved or added.
+const CITY_BLOCK_HALF_EXTENT_X = 30.16;
+const CITY_BLOCK_HALF_EXTENT_Z = 29.51;
+const CITY_HALF_EXTENT_X = Math.max(...CITY_BLOCK_CENTERS.map((center) => Math.abs(center.x))) + CITY_BLOCK_HALF_EXTENT_X;
+const CITY_HALF_EXTENT_Z = Math.max(...CITY_BLOCK_CENTERS.map((center) => Math.abs(center.z))) + CITY_BLOCK_HALF_EXTENT_Z;
+/** Fraction of the viewport the whole city spans when fully zoomed out. */
+const CITY_FIT_FRACTION = 0.6;
+// At the default camera orientation the screen axes are right = (1,0,-1)/√2 and up = (-1,2,-1)/√6,
+// so a ground point (x,0,z) lands at (x-z)/√2 across and -(x+z)/√6 up. Both extremes fall on the
+// same city corner, hence the shared numerator.
+const CITY_SCREEN_WIDTH = (2 * (CITY_HALF_EXTENT_X + CITY_HALF_EXTENT_Z)) / Math.SQRT2;
+const CITY_SCREEN_HEIGHT = (2 * (CITY_HALF_EXTENT_X + CITY_HALF_EXTENT_Z)) / Math.sqrt(6);
+
+/** Orthographic zoom at which the city spans CITY_FIT_FRACTION of the viewport. */
+function computeCityFitZoom(width: number, height: number): number {
+  return Math.min(
+    (width * CITY_FIT_FRACTION) / CITY_SCREEN_WIDTH,
+    (height * CITY_FIT_FRACTION) / CITY_SCREEN_HEIGHT,
+  );
+}
 
 function WaterSurface() {
   const geometryRef = useRef<THREE.PlaneGeometry>(null);
@@ -189,7 +221,13 @@ function WaterSurface() {
       const offset = index * 3;
       const x = base[offset];
       const y = base[offset + 1];
-      const distance = Math.sqrt(x * x + y * y);
+      let distance = Infinity;
+      for (const center of CITY_BLOCK_CENTERS) {
+        const dx = x - center.x;
+        const dz = y - center.z;
+        const centerDistance = Math.sqrt(dx * dx + dz * dz);
+        if (centerDistance < distance) distance = centerDistance;
+      }
       const wave = Math.sin(distance * 0.11 - time * 0.6) * 0.11 + Math.sin(distance * 0.07 + time * 0.35) * 0.07;
       positions.setZ(index, wave);
 
@@ -217,26 +255,26 @@ function WaterSurface() {
   );
 }
 
-function IslandShoreline() {
+function IslandShoreline({ offsetX = 0, offsetZ = 0 }: { offsetX?: number; offsetZ?: number }) {
   const copingMaterial = <meshStandardMaterial color="#b9b7ac" roughness={0.88} />;
   const wallMaterial = <meshStandardMaterial color="#515957" roughness={0.92} />;
   const lowerLipMaterial = <meshStandardMaterial color="#858d89" roughness={0.9} />;
   return (
-    <group raycast={() => null}>
-      <mesh position={[0, -0.06, -18.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
-      <mesh position={[0, -0.06, 18.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
-      <mesh position={[-29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 37.86]} />{copingMaterial}</mesh>
-      <mesh position={[29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 37.86]} />{copingMaterial}</mesh>
+    <group raycast={() => null} position={[offsetX, 0, offsetZ]}>
+      <mesh position={[0, -0.06, -28.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
+      <mesh position={[0, -0.06, 28.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
+      <mesh position={[-29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 57.86]} />{copingMaterial}</mesh>
+      <mesh position={[29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 57.86]} />{copingMaterial}</mesh>
 
-      <mesh position={[0, -0.24, -18.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
-      <mesh position={[0, -0.24, 18.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
-      <mesh position={[-29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 38.18]} />{wallMaterial}</mesh>
-      <mesh position={[29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 38.18]} />{wallMaterial}</mesh>
+      <mesh position={[0, -0.24, -28.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
+      <mesh position={[0, -0.24, 28.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
+      <mesh position={[-29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 58.18]} />{wallMaterial}</mesh>
+      <mesh position={[29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 58.18]} />{wallMaterial}</mesh>
 
-      <mesh position={[0, -0.43, -19.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
-      <mesh position={[0, -0.43, 19.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
-      <mesh position={[-29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 38.47]} />{lowerLipMaterial}</mesh>
-      <mesh position={[29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 38.47]} />{lowerLipMaterial}</mesh>
+      <mesh position={[0, -0.43, -29.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
+      <mesh position={[0, -0.43, 29.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
+      <mesh position={[-29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 58.47]} />{lowerLipMaterial}</mesh>
+      <mesh position={[29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 58.47]} />{lowerLipMaterial}</mesh>
     </group>
   );
 }
@@ -343,33 +381,67 @@ function Scene({
   constructionPosition: [number, number, number] | null;
   focusedPlotId: string | null;
 }) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
+  const fitZoom = useMemo(() => computeCityFitZoom(size.width, size.height), [size.width, size.height]);
+  const framedRef = useRef(false);
 
   useEffect(() => {
-    camera.position.set(25, 25, 25);
+    // Frame once on mount; later viewport resizes only move the `minZoom` floor below, so a
+    // resize never yanks the camera out from under the user.
+    const controls = controlsRef.current;
+    if (framedRef.current || !controls) return;
+    framedRef.current = true;
+    // Orthographic: distance does not affect apparent scale (only `zoom` does), so the camera
+    // sits far back purely to keep the near clip plane clear of the map. Keep in sync with the
+    // <Canvas camera> prop and the fog range (fog is measured from the camera).
+    camera.position.set(600, 600, 600);
     camera.lookAt(0, 0, 0);
-    controlsRef.current?.saveState();
-  }, [camera, controlsRef]);
+    const orthographicCamera = controls.object as THREE.OrthographicCamera;
+    orthographicCamera.zoom = fitZoom;
+    orthographicCamera.updateProjectionMatrix();
+    controls.saveState();
+  }, [camera, controlsRef, fitZoom]);
+
+  // Keep panning (and zoom-to-cursor drift) inside the city so the view can't get lost at sea.
+  useFrame(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const { target } = controls;
+    const clampedX = THREE.MathUtils.clamp(target.x, -CITY_HALF_EXTENT_X, CITY_HALF_EXTENT_X);
+    const clampedZ = THREE.MathUtils.clamp(target.z, -CITY_HALF_EXTENT_Z, CITY_HALF_EXTENT_Z);
+    if (clampedX === target.x && clampedZ === target.z) return;
+    // Move the camera by the same delta, so clamping slides the view rather than swinging it.
+    controls.object.position.x += clampedX - target.x;
+    controls.object.position.z += clampedZ - target.z;
+    target.x = clampedX;
+    target.z = clampedZ;
+  });
 
   return (
     <>
       <color attach="background" args={["#0a3a63"]} />
-      <fog attach="fog" args={["#0a3a63", 90, 190]} />
+      {/* Fog is distance-from-camera, so this range is the original [90, 190] offset by the
+          camera's +995.93 move — reproduces the previous look exactly. */}
+      <fog attach="fog" args={["#0a3a63", 1086, 1186]} />
       <hemisphereLight args={["#fff3c8", "#174544", 1.35]} />
       <directionalLight position={[-16, 24, 12]} intensity={2.65} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0004} />
       <WaterSurface />
-      <IslandShoreline />
+      {CITY_BLOCK_CENTERS.map((center) => (
+        <IslandShoreline key={`${center.x}-${center.z}`} offsetX={center.x} offsetZ={center.z} />
+      ))}
       <OrbitControls
         ref={controlsRef}
         target={[0, 0, 0]}
         enableDamping
         dampingFactor={0.08}
-        minZoom={21}
+        minZoom={fitZoom}
         maxZoom={48}
         minPolarAngle={Math.PI / 5}
         maxPolarAngle={Math.PI / 2.8}
-        mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
-        touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
+        zoomToCursor
+        screenSpacePanning={false}
+        mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }}
+        touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
       />
       {entities.map((entity) => (
         <Suspense fallback={null} key={entity.id}>
@@ -453,7 +525,10 @@ export function CityMap3D({ district }: CityMap3DProps) {
     ? plotEntities.find((entity) => entity.plotId === construction.plotId)
     : undefined;
   const constructionPosition: [number, number, number] | null = constructionPlotEntity
-    ? [constructionPlotEntity.position.x, 0, constructionPlotEntity.position.z < 0 ? -9.14 : 9.14]
+    ? (() => {
+        const { position } = getBuildingPlacement(constructionPlotEntity);
+        return [position.x, 0, position.z];
+      })()
     : null;
 
   function focusOnBuilding(project: { plotId: string; name: string }) {
@@ -464,7 +539,8 @@ export function CityMap3D({ district }: CityMap3DProps) {
     const previousTarget = controls.target.clone();
     const previousPosition = camera.position.clone();
     const previousZoom = camera.zoom;
-    const target = new THREE.Vector3(plotEntity.position.x, 0, plotEntity.position.z < 0 ? -9.14 : 9.14);
+    const buildingPosition = getBuildingPlacement(plotEntity).position;
+    const target = new THREE.Vector3(buildingPosition.x, 0, buildingPosition.z);
     const cameraOffset = camera.position.clone().sub(controls.target);
     controls.target.copy(target);
     camera.position.copy(target).add(cameraOffset);
@@ -629,11 +705,13 @@ export function CityMap3D({ district }: CityMap3DProps) {
   }
 
   function zoomBy(amount: number) {
-    const camera = controlsRef.current?.object as THREE.OrthographicCamera | undefined;
-    if (!camera) return;
-    camera.zoom = THREE.MathUtils.clamp(camera.zoom + amount, 21, 48);
+    const controls = controlsRef.current;
+    const camera = controls?.object as THREE.OrthographicCamera | undefined;
+    if (!controls || !camera) return;
+    // Read the bounds off the controls rather than duplicating them — minZoom is viewport-derived.
+    camera.zoom = THREE.MathUtils.clamp(camera.zoom + amount, controls.minZoom, controls.maxZoom);
     camera.updateProjectionMatrix();
-    controlsRef.current?.update();
+    controls.update();
   }
 
   return (
@@ -647,7 +725,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
         className={styles.canvas}
         shadows
         orthographic
-        camera={{ position: [25, 25, 25], zoom: 30, near: 0.1, far: 500 }}
+        camera={{ position: [600, 600, 600], zoom: 14, near: 0.1, far: 1900 }}
         dpr={[1, 2]}
       >
         <Suspense fallback={null}>
@@ -670,7 +748,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
         <button className={styles.controlButton} type="button" aria-label="Zoom in" onClick={() => zoomBy(3)}>+</button>
         <button className={styles.controlButton} type="button" aria-label="Reset camera" onClick={resetCamera}>⌂</button>
       </div>
-      <p className={styles.hint}>Tap an empty plot to build · Drag to orbit · Scroll or pinch to zoom</p>
+      <p className={styles.hint}>Tap a plot to build · Drag to pan · Right-drag to rotate · Scroll to zoom where you point</p>
       <p className={styles.buildStatus} aria-live="polite">{statusMessage}</p>
       {selectedPlot && (
         <div

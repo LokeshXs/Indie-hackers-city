@@ -31,8 +31,8 @@ describe("plot claim modal", () => {
     const user = userEvent.setup();
     render(<CityMap3D district={starterDistrict} />);
 
-    await user.click(screen.getByRole("button", { name: "North plot 1, available" }));
-    expect(screen.getByRole("dialog", { name: "North plot 1 setup" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Northwest North plot 1, available" }));
+    expect(screen.getByRole("dialog", { name: "Northwest North plot 1 setup" })).toBeInTheDocument();
 
     const fullNameInput = screen.getByRole("textbox", { name: "Full name" });
     const continueButton = screen.getByRole("button", { name: /continue/i });
@@ -80,7 +80,7 @@ describe("plot claim modal", () => {
     expect(successDialog).toHaveTextContent("You’re now part of");
     expect(successDialog).toHaveTextContent("Founders Crossing");
     expect(screen.getByRole("button", { name: "View my building" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "North plot 1, occupied" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Northwest North plot 1, occupied" })).toBeDisabled();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Plot claimed successfully" })).not.toBeInTheDocument(), { timeout: 5500 });
   }, 12_000);
 });
