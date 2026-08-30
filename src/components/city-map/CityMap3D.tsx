@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
+import { Html, OrbitControls, Preload, useGLTF, useTexture } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { AccountMenu } from "@/components/auth/AccountMenu";
@@ -17,6 +17,8 @@ import {
   getBuildingPlacement,
 } from "./plot-builds";
 import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
+import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
+import { CityLoadingScreen } from "./CityLoadingScreen";
 import { ProjectCard } from "./ProjectCard";
 import styles from "./CityMap3D.module.css";
 
@@ -60,33 +62,36 @@ function normalizeWebsite(value: string): string | null {
   }
 }
 
-function ModelInstance({ entity }: { entity: Pick<CityEntity, "assetId" | "buildingColor"> }) {
-  const model = useGLTF(CITY_ASSET_PATHS[entity.assetId]);
+const ModelInstance = memo(function ModelInstance({
+  assetId,
+  buildingColor,
+}: Pick<CityEntity, "assetId" | "buildingColor">) {
+  const model = useGLTF(CITY_ASSET_PATHS[assetId]);
   const instance = useMemo(() => {
     const scene = model.scene.clone(true);
-    const wallMaterialName = BUILDING_WALL_MATERIAL[entity.assetId];
+    const wallMaterialName = BUILDING_WALL_MATERIAL[assetId];
     scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(entity.assetId);
+      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(assetId);
       object.receiveShadow = true;
       if (
-        entity.buildingColor
+        buildingColor
         && wallMaterialName
         && !Array.isArray(object.material)
         && object.material.name === wallMaterialName
       ) {
         const material = object.material.clone();
-        if (material instanceof THREE.MeshStandardMaterial) material.color.set(entity.buildingColor);
+        if (material instanceof THREE.MeshStandardMaterial) material.color.set(buildingColor);
         object.material = material;
       }
     });
     return scene;
-  }, [entity.assetId, entity.buildingColor, model.scene]);
+  }, [assetId, buildingColor, model.scene]);
 
   return <primitive object={instance} />;
-}
+});
 
-function BuildingPreview({ assetId, buildingColor }: { assetId: StartupBuildingAssetId; buildingColor: string }) {
+const BuildingPreview = memo(function BuildingPreview({ assetId, buildingColor }: { assetId: StartupBuildingAssetId; buildingColor: string }) {
   const buildingRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
@@ -100,13 +105,13 @@ function BuildingPreview({ assetId, buildingColor }: { assetId: StartupBuildingA
         <meshStandardMaterial color="#c9e4df" roughness={0.78} />
       </mesh>
       <group ref={buildingRef} position={[0, -1.58, 0]} rotation={[0, -0.55, 0]}>
-        <ModelInstance entity={{ assetId, buildingColor }} />
+        <ModelInstance assetId={assetId} buildingColor={buildingColor} />
       </group>
     </>
   );
-}
+});
 
-function PlotHighlight({ selected }: { selected: boolean }) {
+const PlotHighlight = memo(function PlotHighlight({ selected }: { selected: boolean }) {
   const materialRef = useRef<THREE.MeshBasicMaterial>(null);
   const highlightRef = useRef<THREE.Group>(null);
 
@@ -151,7 +156,7 @@ function PlotHighlight({ selected }: { selected: boolean }) {
       ))}
     </group>
   );
-}
+});
 
 const WATER_SHALLOW_COLOR = new THREE.Color("#7ff2ea");
 const WATER_MID_COLOR = new THREE.Color("#2a90c9");
@@ -188,7 +193,7 @@ function computeCityFitZoom(width: number, height: number): number {
   );
 }
 
-function WaterSurface() {
+const WaterSurface = memo(function WaterSurface() {
   const geometryRef = useRef<THREE.PlaneGeometry>(null);
   const basePositionsRef = useRef<Float32Array | null>(null);
   const scratchColor = useRef(new THREE.Color());
@@ -246,7 +251,7 @@ function WaterSurface() {
       <meshStandardMaterial vertexColors map={waterTexture} roughness={0.2} metalness={0.1} fog />
     </mesh>
   );
-}
+});
 
 /** Three stacked retaining-wall tiers, each stepping further out and getting thicker.
  * Offsets reproduce the original hand-tuned per-block numbers exactly. */
@@ -257,7 +262,7 @@ const SHORELINE_TIERS = [
 ] as const;
 
 /** halfX / halfZ are the paved half-extents where the shoreline begins. */
-function IslandShoreline({ halfX, halfZ }: { halfX: number; halfZ: number }) {
+const IslandShoreline = memo(function IslandShoreline({ halfX, halfZ }: { halfX: number; halfZ: number }) {
   return (
     <group raycast={() => null}>
       {SHORELINE_TIERS.map((tier) => {
@@ -277,9 +282,9 @@ function IslandShoreline({ halfX, halfZ }: { halfX: number; halfZ: number }) {
       })}
     </group>
   );
-}
+});
 
-function CityAsset({
+const CityAsset = memo(function CityAsset({
   entity,
   selected,
   hovered,
@@ -321,7 +326,7 @@ function CityAsset({
       rotation={[0, entity.rotationY ?? 0, 0]}
       scale={scaleVector}
     >
-      <ModelInstance entity={entity} />
+      <ModelInstance assetId={entity.assetId} buildingColor={entity.buildingColor} />
       {selectable && entity.plotId && (
         <mesh
           position={[0, 0.2, 0]}
@@ -348,9 +353,9 @@ function CityAsset({
       {highlightable && (hovered || selected) && <PlotHighlight selected={selected} />}
     </group>
   );
-}
+});
 
-function ConstructionEffect({ position }: { position: [number, number, number] }) {
+const ConstructionEffect = memo(function ConstructionEffect({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
       <Html position={[0, 2.8, 0]} center style={{ pointerEvents: "none" }}>
@@ -358,9 +363,19 @@ function ConstructionEffect({ position }: { position: [number, number, number] }
       </Html>
     </group>
   );
-}
+});
 
-function Scene({
+const SceneReadySignal = memo(function SceneReadySignal({ onReady }: { onReady: () => void }) {
+  const reportedRef = useRef(false);
+  useFrame(() => {
+    if (reportedRef.current) return;
+    reportedRef.current = true;
+    onReady();
+  });
+  return null;
+});
+
+const Scene = memo(function Scene({
   entities,
   selectedPlotId,
   hoveredPlotId,
@@ -464,7 +479,7 @@ function Scene({
       )}
     </>
   );
-}
+});
 
 export function CityMap3D({
   district,
@@ -474,7 +489,14 @@ export function CityMap3D({
   initialAuthError,
 }: CityMap3DProps) {
   const { user, isAuthenticated, isLoading: isAuthLoading, signInWithGoogle } = useAuth();
-  const { developments, applyDevelopment, refresh, hasRefreshError } = useCityDevelopments(
+  const {
+    developments,
+    applyDevelopment,
+    refresh,
+    hasRefreshError,
+    hasPendingUpdates,
+    isRefreshing,
+  } = useCityDevelopments(
     initialDevelopments,
     initialDevelopmentLoadError,
   );
@@ -499,6 +521,11 @@ export function CityMap3D({
   const [construction, setConstruction] = useState<ConstructionState | null>(null);
   const [completedProject, setCompletedProject] = useState<{ plotId: string; name: string } | null>(null);
   const [focusedPlotId, setFocusedPlotId] = useState<string | null>(null);
+  const [sceneReady, setSceneReady] = useState(false);
+  const [loadingComplete, setLoadingComplete] = useState(false);
+  const [assetError, setAssetError] = useState<Error | null>(null);
+  const [assetBoundaryResetKey] = useState(0);
+  const [isClaimLimitAlertOpen, setIsClaimLimitAlertOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState(
     initialDevelopmentLoadError
       ? "The city could not refresh its developments. You can still explore."
@@ -513,7 +540,28 @@ export function CityMap3D({
   const constructionTimersRef = useRef<number[]>([]);
   const focusTimerRef = useRef<number | null>(null);
   const viewBuildingButtonRef = useRef<HTMLButtonElement>(null);
+  const claimLimitButtonRef = useRef<HTMLButtonElement>(null);
   const initialReturnConsumedRef = useRef(false);
+  const handlePlotInteractionRef = useRef<(plotId: string) => void>(() => undefined);
+  const handleScenePlotInteraction = useCallback((plotId: string) => {
+    handlePlotInteractionRef.current(plotId);
+  }, []);
+  const handleSceneReady = useCallback(() => setSceneReady(true), []);
+  const handleAssetError = useCallback((error: Error) => setAssetError(error), []);
+  const handleLoadingComplete = useCallback(() => {
+    setLoadingComplete(true);
+    if (document.activeElement === document.body) shellRef.current?.focus();
+  }, []);
+  const retryAssetLoading = useCallback(() => window.location.reload(), []);
+
+  const closeClaimLimitAlert = useCallback(() => {
+    setIsClaimLimitAlertOpen(false);
+    shellRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (isClaimLimitAlertOpen) claimLimitButtonRef.current?.focus();
+  }, [isClaimLimitAlertOpen]);
 
   const plotEntities = useMemo(
     () => district.entities.filter((entity) => entity.plotId),
@@ -556,15 +604,13 @@ export function CityMap3D({
   const xHandleError = xHandleTouched && !xHandleIsValid ? "Use 1–15 letters, numbers, or underscores." : null;
   const canContinue = Boolean(fullName.trim()) && xHandleIsValid;
   const canClaimPlot = Boolean(projectName.trim() && normalizedWebsite);
-  const constructionPlotEntity = construction
-    ? plotEntities.find((entity) => entity.plotId === construction.plotId)
-    : undefined;
-  const constructionPosition: [number, number, number] | null = constructionPlotEntity
-    ? (() => {
-        const { position } = getBuildingPlacement(constructionPlotEntity);
-        return [position.x, 0, position.z];
-      })()
-    : null;
+  const constructionPosition = useMemo<[number, number, number] | null>(() => {
+    if (!construction) return null;
+    const plotEntity = plotEntities.find((entity) => entity.plotId === construction.plotId);
+    if (!plotEntity) return null;
+    const { position } = getBuildingPlacement(plotEntity);
+    return [position.x, 0, position.z];
+  }, [construction, plotEntities]);
 
   function focusOnBuilding(project: { plotId: string; name: string }) {
     const plotEntity = plotEntities.find((entity) => entity.plotId === project.plotId);
@@ -599,9 +645,7 @@ export function CityMap3D({
   }
 
   useEffect(() => {
-    useGLTF.preload(CITY_ASSET_PATHS["startup-building-level-1"]);
-    useGLTF.preload(CITY_ASSET_PATHS["corner-studio-level-1"]);
-    useGLTF.preload(CITY_ASSET_PATHS["palm-tree"]);
+    Object.values(CITY_ASSET_PATHS).forEach((path) => useGLTF.preload(path));
     useTexture.preload("/assets/city/v3/water-surface-tile.png");
     return () => {
       document.body.style.cursor = "auto";
@@ -723,12 +767,17 @@ export function CityMap3D({
     }
     if (ownerDevelopment) {
       setHoveredPlotId(null);
-      focusOnBuilding({ plotId: ownerDevelopment.plotId, name: ownerDevelopment.project.name });
-      setStatusMessage(`Each founder receives one city plot. Here is yours: ${ownerDevelopment.project.name}.`);
+      document.body.style.cursor = "auto";
+      setIsClaimLimitAlertOpen(true);
+      setStatusMessage("Only one plot can be claimed per founder.");
       return;
     }
     openPlot(plotId);
   }
+
+  useEffect(() => {
+    handlePlotInteractionRef.current = handlePlotInteraction;
+  });
 
   async function beginGoogleSignIn() {
     if (!selectedPlotId || isStartingAuth || isAuthLoading) return;
@@ -894,43 +943,98 @@ export function CityMap3D({
   }
 
   return (
-    <main ref={shellRef} className={styles.shell} tabIndex={-1}>
+    <main ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>{district.name}</p>
         <h1>Indie Hackers City</h1>
         <p>Choose a plot and found your first startup.</p>
       </header>
       <AccountMenu />
-      <Canvas
-        className={styles.canvas}
-        shadows
-        orthographic
-        camera={{ position: [600, 600, 600], zoom: 14, near: 0.1, far: 1900 }}
-        dpr={[1, 2]}
-      >
-        <Suspense fallback={null}>
-          <Scene
-            entities={sceneEntities}
-            selectedPlotId={selectedPlotId}
-            hoveredPlotId={hoveredPlotId}
-            selectablePlotIds={selectablePlotIds}
-            highlightablePlotIds={highlightablePlotIds}
-            onSelect={handlePlotInteraction}
-            onHover={setHoveredPlotId}
-            controlsRef={controlsRef}
-            construction={selectedPlotId ? null : construction}
-            constructionPosition={constructionPosition}
-            focusedPlotId={focusedPlotId}
-          />
-        </Suspense>
-      </Canvas>
+      <CityAssetErrorBoundary onError={handleAssetError} resetKey={assetBoundaryResetKey}>
+        <Canvas
+          className={styles.canvas}
+          shadows
+          orthographic
+          camera={{ position: [600, 600, 600], zoom: 14, near: 0.1, far: 1900 }}
+          dpr={[1, 2]}
+        >
+          <Suspense fallback={null}>
+            <Scene
+              entities={sceneEntities}
+              selectedPlotId={selectedPlotId}
+              hoveredPlotId={hoveredPlotId}
+              selectablePlotIds={selectablePlotIds}
+              highlightablePlotIds={highlightablePlotIds}
+              onSelect={handleScenePlotInteraction}
+              onHover={setHoveredPlotId}
+              controlsRef={controlsRef}
+              construction={selectedPlotId ? null : construction}
+              constructionPosition={constructionPosition}
+              focusedPlotId={focusedPlotId}
+            />
+            <Preload all />
+            <SceneReadySignal onReady={handleSceneReady} />
+          </Suspense>
+        </Canvas>
+      </CityAssetErrorBoundary>
       <div className={styles.controls} aria-label="Camera controls">
         <button className={styles.controlButton} type="button" aria-label="Zoom out" onClick={() => zoomBy(-3)}>−</button>
         <button className={styles.controlButton} type="button" aria-label="Zoom in" onClick={() => zoomBy(3)}>+</button>
         <button className={styles.controlButton} type="button" aria-label="Reset camera" onClick={resetCamera}>⌂</button>
       </div>
+      {hasPendingUpdates ? (
+        <aside className={styles.cityUpdateNotice} aria-live="polite" aria-label="City updates available">
+          <span className={styles.cityUpdateMarker} aria-hidden="true">◆</span>
+          <div>
+            <strong>New city activity</strong>
+            <span>Refresh when you’re ready to see it.</span>
+          </div>
+          <button type="button" disabled={isRefreshing} onClick={() => void refresh()}>
+            {isRefreshing ? "Refreshing…" : "Refresh city"}
+          </button>
+        </aside>
+      ) : null}
       <p className={styles.hint}>Tap a plot to build · Drag to pan · Right-drag to rotate · Scroll to zoom where you point</p>
       <p className={styles.buildStatus} aria-live="polite">{hasRefreshError ? "Live city updates are temporarily unavailable. Showing the last known city state." : statusMessage}</p>
+      {!loadingComplete ? (
+        <CityLoadingScreen
+          sceneReady={sceneReady}
+          assetError={assetError}
+          onComplete={handleLoadingComplete}
+          onRetry={retryAssetLoading}
+        />
+      ) : null}
+      {isClaimLimitAlertOpen ? (
+        <div
+          className={styles.claimLimitOverlay}
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) closeClaimLimitAlert();
+          }}
+        >
+          <section
+            className={styles.claimLimitModal}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="claim-limit-title"
+            aria-describedby="claim-limit-description"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeClaimLimitAlert();
+              if (event.key === "Tab") {
+                event.preventDefault();
+                claimLimitButtonRef.current?.focus();
+              }
+            }}
+          >
+            <span className={styles.claimLimitPermit}>Founder permit</span>
+            <span className={styles.claimLimitMarker} aria-hidden="true">◆</span>
+            <h2 id="claim-limit-title">Your plot is already claimed</h2>
+            <p id="claim-limit-description">
+              Only one plot can be claimed per founder. You can still explore every building in the city.
+            </p>
+            <button ref={claimLimitButtonRef} type="button" onClick={closeClaimLimitAlert}>Got it</button>
+          </section>
+        </div>
+      ) : null}
       {selectedPlot && (
         <div
           className={styles.modalBackdrop}

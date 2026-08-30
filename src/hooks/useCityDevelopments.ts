@@ -12,33 +12,32 @@ export function useCityDevelopments(
 ) {
   const [developments, setDevelopments] = useState(initialDevelopments);
   const [hasRefreshError, setHasRefreshError] = useState(initialLoadError);
+  const [hasPendingUpdates, setHasPendingUpdates] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const requestSequence = useRef(0);
-  const coalesceTimer = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured()) return null;
     const requestId = ++requestSequence.current;
-    const { data, error } = await getSupabaseBrowserClient()
-      .from("city_developments")
-      .select("*");
-    if (requestId !== requestSequence.current) return null;
-    if (error) {
-      setHasRefreshError(true);
-      return null;
+    setIsRefreshing(true);
+    try {
+      const { data, error } = await getSupabaseBrowserClient()
+        .from("city_developments")
+        .select("*");
+      if (requestId !== requestSequence.current) return null;
+      if (error) {
+        setHasRefreshError(true);
+        return null;
+      }
+      const nextDevelopments = cityDevelopmentRecord(data);
+      setDevelopments(nextDevelopments);
+      setHasRefreshError(false);
+      setHasPendingUpdates(false);
+      return nextDevelopments;
+    } finally {
+      if (requestId === requestSequence.current) setIsRefreshing(false);
     }
-    const nextDevelopments = cityDevelopmentRecord(data);
-    setDevelopments(nextDevelopments);
-    setHasRefreshError(false);
-    return nextDevelopments;
   }, []);
-
-  const scheduleRefresh = useCallback(() => {
-    if (coalesceTimer.current) window.clearTimeout(coalesceTimer.current);
-    coalesceTimer.current = window.setTimeout(() => {
-      coalesceTimer.current = null;
-      void refresh();
-    }, 80);
-  }, [refresh]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
@@ -48,20 +47,26 @@ export function useCityDevelopments(
       channel = channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table },
-        scheduleRefresh,
+        () => setHasPendingUpdates(true),
       );
     }
     channel.subscribe();
     return () => {
-      if (coalesceTimer.current) window.clearTimeout(coalesceTimer.current);
       void supabase.removeChannel(channel);
     };
-  }, [scheduleRefresh]);
+  }, []);
 
   const applyDevelopment = useCallback((development: CityDevelopment) => {
     setDevelopments((current) => ({ ...current, [development.plotId]: development }));
     setHasRefreshError(false);
   }, []);
 
-  return { developments, applyDevelopment, refresh, hasRefreshError };
+  return {
+    developments,
+    applyDevelopment,
+    refresh,
+    hasRefreshError,
+    hasPendingUpdates,
+    isRefreshing,
+  };
 }

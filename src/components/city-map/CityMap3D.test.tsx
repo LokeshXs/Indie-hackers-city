@@ -28,7 +28,15 @@ vi.mock("@react-three/drei", () => {
   return {
     OrbitControls: () => null,
     Html: () => null,
+    Preload: () => null,
     useGLTF,
+    useProgress: (selector: (state: { active: boolean; progress: number; loaded: number; total: number; errors: unknown[] }) => unknown) => selector({
+      active: false,
+      progress: 100,
+      loaded: 12,
+      total: 12,
+      errors: [],
+    }),
     useTexture,
   };
 });

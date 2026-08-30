@@ -1,0 +1,292 @@
+.screen {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  background: radial-gradient(
+    circle at 50% 44%,
+    #21857f 0%,
+    #176d6c 34%,
+    #0c5559 64%,
+    #0a3a63 110%
+  );
+  color: #fff8dc;
+  font-family: ui-rounded, "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  isolation: isolate;
+}
+.content {
+  display: grid;
+  width: min(58rem, 100%);
+  justify-items: center;
+}
+.brand {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  animation: brandIn 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.brandDiamond {
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  place-items: center;
+  border: 0.14rem solid #ffe9a8;
+  border-radius: 0.72rem;
+  background: #e5a846;
+  box-shadow:
+    inset 0 0.13rem 0 rgb(255 255 255 / 32%),
+    0 0.3rem 0 #8a5a2f,
+    0 0.7rem 1.3rem rgb(6 39 45 / 28%);
+  color: #176d6c;
+  font-size: 0.9rem;
+  transform: rotate(-4deg);
+}
+.brand p {
+  margin: 0.9rem 0 0;
+  color: #b7ded5;
+  font-size: clamp(0.68rem, 1.3vw, 0.86rem);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.brand h1 {
+  position: relative;
+  max-width: 100%;
+  margin: 0.45rem 0 0;
+  padding: 0 0 1.15rem;
+  color: #fff8dc;
+  font-size: clamp(2.1rem, 7vw, 4.6rem);
+  font-weight: 900;
+  line-height: 0.98;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 0.18rem 0 rgb(10 58 99 / 34%);
+  animation: titleLock 850ms cubic-bezier(0.18, 0.82, 0.22, 1) both;
+}
+.brand h1::after {
+  position: absolute;
+  right: 7%;
+  bottom: 0.35rem;
+  left: 7%;
+  height: 0.16rem;
+  border-radius: 999px;
+  background: #e5a846;
+  box-shadow: 0 0 0.9rem rgb(229 168 70 / 58%);
+  content: "";
+  transform: scaleX(0);
+  animation: lockLine 340ms 720ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
+.loadingReadout {
+  display: grid;
+  width: min(30rem, 100%);
+  margin-top: clamp(3rem, 10vh, 6rem);
+}
+.stageRow {
+  display: flex;
+  min-height: 1.5rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.stageRow strong {
+  color: #fff8dc;
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+.stageRow span {
+  color: #ffe9a8;
+  font-size: 0.8rem;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+}
+.progressTrack {
+  height: 1.25rem;
+  overflow: hidden;
+  border: 0.14rem solid #d7c49a;
+  border-radius: 999px;
+  padding: 0.16rem;
+  background: rgb(8 48 57 / 56%);
+  box-shadow:
+    inset 0 0.18rem 0.4rem rgb(0 0 0 / 24%),
+    0 0.34rem 0 #5c3c1c;
+}
+.progressTrack span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    135deg,
+    #e5a846 0 0.6rem,
+    #f4c46e 0.6rem 1.2rem
+  );
+  box-shadow: 0 0 0.8rem rgb(229 168 70 / 48%);
+  transition: width 180ms ease-out;
+}
+.loadingReadout p {
+  margin: 1.05rem 0 0;
+  color: #c6e7df;
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-align: center;
+}
+.exiting {
+  pointer-events: none;
+  animation: screenExit 350ms cubic-bezier(0.4, 0, 0.8, 0.2) forwards;
+}
+.errorMark {
+  display: grid;
+  width: 4.5rem;
+  height: 4.5rem;
+  place-items: center;
+  border: 0.28rem solid #fff8dc;
+  border-radius: 1.25rem;
+  background: #e2775c;
+  box-shadow:
+    0 0.42rem 0 #8a5a2f,
+    0 1rem 2rem rgb(4 32 42 / 35%);
+  color: #fff8dc;
+  font-size: 2.2rem;
+  font-weight: 950;
+  transform: rotate(-3deg);
+}
+.screen > .kicker {
+  margin: 1.5rem 0 0.45rem;
+  color: #ffe9a8;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.screen > h1 {
+  max-width: 34rem;
+  margin: 0;
+  color: #fff8dc;
+  font-size: clamp(1.8rem, 6vw, 3rem);
+  line-height: 1;
+  text-align: center;
+}
+.errorCopy {
+  margin: 1rem 0 1.5rem;
+  color: #c6e7df;
+  text-align: center;
+}
+.retryButton {
+  min-width: 10rem;
+  border: 0.14rem solid #fff8dc;
+  border-radius: 0.85rem;
+  padding: 0.8rem 1.3rem;
+  background: #e5a846;
+  box-shadow:
+    0 0.3rem 0 #8a5a2f,
+    0 0.8rem 1.3rem rgb(4 32 42 / 28%);
+  color: #173e40;
+  font: inherit;
+  font-weight: 950;
+  cursor: pointer;
+}
+.retryButton:hover {
+  background: #f4c46e;
+}
+.retryButton:focus-visible {
+  outline: 3px solid #fff8dc;
+  outline-offset: 4px;
+}
+@keyframes brandIn {
+  from {
+    opacity: 0;
+    transform: translateY(-0.8rem);
+  }
+}
+@keyframes titleLock {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    letter-spacing: 0.42em;
+    transform: scale(1.06);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(0);
+    letter-spacing: 0.1em;
+    transform: scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    letter-spacing: 0.14em;
+    transform: scale(1);
+  }
+}
+@keyframes lockLine {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  65% {
+    opacity: 1;
+    transform: scaleX(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+@keyframes screenExit {
+  to {
+    opacity: 0;
+    transform: translateY(-1rem) scale(1.015);
+  }
+}
+@media (max-width: 520px) {
+  .screen {
+    padding: 1.25rem;
+  }
+  .brandDiamond {
+    width: 2.3rem;
+    height: 2.3rem;
+  }
+  .brand h1 {
+    font-size: clamp(2rem, 7vw, 2.4rem);
+    letter-spacing: 0.1em;
+  }
+  .loadingReadout {
+    width: min(25rem, 92vw);
+  }
+}
+@media (max-height: 580px) {
+  .brand p {
+    margin-top: 0.55rem;
+  }
+  .brand h1 {
+    margin-top: 0.25rem;
+    padding-bottom: 0.8rem;
+    font-size: clamp(1.8rem, 7vh, 3rem);
+  }
+  .loadingReadout {
+    margin-top: clamp(1.6rem, 6vh, 2.5rem);
+  }
+  .loadingReadout p {
+    margin-top: 0.75rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand,
+  .brand h1,
+  .brand h1::after,
+  .screen,
+  .progressTrack span {
+    animation: none;
+    transition: none;
+  }
+  .brand h1::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  .exiting {
+    opacity: 0;
+  }
+}
