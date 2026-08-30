@@ -34,6 +34,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      building_level_milestones: {
+        Row: {
+          created_at: string
+          level: number
+          required_xp: number
+        }
+        Insert: {
+          created_at?: string
+          level: number
+          required_xp: number
+        }
+        Update: {
+          created_at?: string
+          level?: number
+          required_xp?: number
+        }
+        Relationships: []
+      }
       plot_claims: {
         Row: {
           building_asset_id: string
@@ -44,6 +62,7 @@ export type Database = {
           plot_id: string
           project_id: string
           updated_at: string
+          xp_total: number
         }
         Insert: {
           building_asset_id: string
@@ -54,6 +73,7 @@ export type Database = {
           plot_id: string
           project_id: string
           updated_at?: string
+          xp_total?: number
         }
         Update: {
           building_asset_id?: string
@@ -64,6 +84,7 @@ export type Database = {
           plot_id?: string
           project_id?: string
           updated_at?: string
+          xp_total?: number
         }
         Relationships: [
           {
@@ -86,6 +107,57 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
+      plot_xp_events: {
+        Row: {
+          awarded_by: string
+          created_at: string
+          description: string | null
+          event_key: string
+          event_type: string
+          id: number
+          metadata: Json
+          owner_id: string
+          xp_delta: number
+        }
+        Insert: {
+          awarded_by: string
+          created_at?: string
+          description?: string | null
+          event_key: string
+          event_type: string
+          id?: never
+          metadata?: Json
+          owner_id: string
+          xp_delta: number
+        }
+        Update: {
+          awarded_by?: string
+          created_at?: string
+          description?: string | null
+          event_key?: string
+          event_type?: string
+          id?: never
+          metadata?: Json
+          owner_id?: string
+          xp_delta?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plot_xp_events_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "city_developments"
+            referencedColumns: ["owner_id"]
+          },
+          {
+            foreignKeyName: "plot_xp_events_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "plot_claims"
+            referencedColumns: ["owner_id"]
           },
         ]
       }
@@ -196,7 +268,9 @@ export type Database = {
           building_color: string | null
           building_level: number | null
           claimed_at: string | null
+          current_level_xp: number | null
           founder_name: string | null
+          next_level_xp: number | null
           owner_id: string | null
           plot_id: string | null
           project_id: string | null
@@ -205,6 +279,7 @@ export type Database = {
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
+          xp_total: number | null
         }
         Relationships: [
           {
@@ -225,6 +300,51 @@ export type Database = {
       }
     }
     Functions: {
+      apply_plot_xp: {
+        Args: {
+          requested_description?: string
+          requested_event_key: string
+          requested_event_type: string
+          requested_metadata?: Json
+          requested_xp_delta: number
+          target_owner_id: string
+        }
+        Returns: {
+          applied: boolean
+          building_level: number
+          event_key: string
+          level_changed: boolean
+          owner_id: string
+          plot_id: string
+          previous_building_level: number
+          previous_xp_total: number
+          xp_delta: number
+          xp_total: number
+        }[]
+      }
+      award_plot_xp: {
+        Args: {
+          requested_description?: string
+          requested_event_key: string
+          requested_event_type: string
+          requested_metadata?: Json
+          requested_xp_delta: number
+          target_owner_id: string
+        }
+        Returns: {
+          applied: boolean
+          building_level: number
+          event_key: string
+          level_changed: boolean
+          owner_id: string
+          plot_id: string
+          previous_building_level: number
+          previous_xp_total: number
+          xp_delta: number
+          xp_total: number
+        }[]
+      }
+      building_level_for_xp: { Args: { total_xp: number }; Returns: number }
       claim_plot: {
         Args: {
           founder_full_name: string
@@ -243,7 +363,9 @@ export type Database = {
           building_color: string | null
           building_level: number | null
           claimed_at: string | null
+          current_level_xp: number | null
           founder_name: string | null
+          next_level_xp: number | null
           owner_id: string | null
           plot_id: string | null
           project_id: string | null
@@ -252,6 +374,7 @@ export type Database = {
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
+          xp_total: number | null
         }[]
         SetofOptions: {
           from: "*"
@@ -268,7 +391,9 @@ export type Database = {
           building_color: string | null
           building_level: number | null
           claimed_at: string | null
+          current_level_xp: number | null
           founder_name: string | null
+          next_level_xp: number | null
           owner_id: string | null
           plot_id: string | null
           project_id: string | null
@@ -277,6 +402,7 @@ export type Database = {
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
+          xp_total: number | null
         }[]
         SetofOptions: {
           from: "*"
@@ -302,7 +428,9 @@ export type Database = {
           building_color: string | null
           building_level: number | null
           claimed_at: string | null
+          current_level_xp: number | null
           founder_name: string | null
+          next_level_xp: number | null
           owner_id: string | null
           plot_id: string | null
           project_id: string | null
@@ -311,6 +439,7 @@ export type Database = {
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
+          xp_total: number | null
         }[]
         SetofOptions: {
           from: "*"

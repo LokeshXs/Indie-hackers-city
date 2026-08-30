@@ -109,6 +109,11 @@ export function ProjectCard({ development, address, currentUserId, onClose, onUp
                 </a>
               ) : null}
             </div>
+            <div className={styles.progressionStamp} aria-label={`Building Level ${development.progression.buildingLevel}, ${development.progression.xp} city XP`}>
+              <span><small>Building level</small><strong>{development.progression.buildingLevel}</strong></span>
+              <i aria-hidden="true" />
+              <span><small>City XP</small><strong>{new Intl.NumberFormat("en-US").format(development.progression.xp)}</strong></span>
+            </div>
             <dl className={styles.details}>
               <div><dt>Building</dt><dd>{BUILDINGS.find((item) => item.value === development.building.assetId)?.label}</dd></div>
               <div><dt>Claimed</dt><dd>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(development.claimedAt))}</dd></div>
@@ -137,4 +142,3 @@ export function ProjectCard({ development, address, currentUserId, onClose, onUp
     </div>
   );
 }
-

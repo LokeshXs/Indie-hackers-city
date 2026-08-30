@@ -142,3 +142,106 @@ part of the normal daily workflow.
 
 Never run `supabase db reset --linked` against production. Unlike the local
 reset command, it destroys data in the linked hosted database.
+
+## XP rewards and building levels
+
+XP belongs to a founder's permanent plot claim, not to the project currently
+shown on that plot. Switching projects therefore keeps the same XP and building
+level. The initial cumulative milestones are:
+
+| Level | Required XP |
+| ---: | ---: |
+| 1 | 0 |
+| 2 | 100 |
+| 3 | 300 |
+| 4 | 700 |
+| 5 | 1,500 |
+
+Never edit `plot_claims.xp_total`, `plot_claims.building_level`, or rows in
+`plot_xp_events` directly. Use `award_plot_xp`; it locks the claim, records an
+immutable event, derives the level, and protects retries with a unique event
+key. The browser roles cannot call this function.
+
+Two functions write the ledger:
+
+- `award_plot_xp` is the entry point for manual and service-role awards. It
+  checks that the caller is `postgres` or `service_role`, then delegates.
+- `apply_plot_xp` does the actual work and carries **no** authorization check.
+  Execute is revoked from every role, so it is reachable only from inside a
+  `security definer` function that has already established the caller may award
+  XP. `claim_plot` uses it for the automatic claim reward below.
+
+Claiming a plot automatically awards **10 XP** in the same transaction as the
+claim, under the deterministic key `plot_claim:<owner-uuid>` with event type
+`plot_claimed`. A founder therefore starts at 10 XP and level one rather than
+zero. Because the award and the claim share a transaction, a failed award rolls
+the claim back, and the row `claim_plot` returns already carries the XP.
+
+Find a founder's owner ID locally:
+
+```bash
+npx supabase db query --local \
+  "select owner_id, founder_name, project_name, xp_total, building_level from public.city_developments order by founder_name;"
+```
+
+Award XP locally:
+
+```bash
+npx supabase db query --local \
+  "select * from public.award_plot_xp(
+    '<owner-uuid>',
+    100,
+    'manual:first-reward:<owner-uuid>',
+    'manual_award',
+    'Initial milestone reward',
+    '{\"campaign\":\"first-reward\"}'::jsonb
+  );"
+```
+
+After `npx supabase login` and linking the hosted project, award the same event
+remotely with:
+
+```bash
+npx supabase db query --linked \
+  "select * from public.award_plot_xp(
+    '<owner-uuid>',
+    100,
+    'manual:first-reward:<owner-uuid>',
+    'manual_award',
+    'Initial milestone reward',
+    '{\"campaign\":\"first-reward\"}'::jsonb
+  );"
+```
+
+Use a globally unique, stable `event_key` for each real-world reward. Retrying
+the exact command with the same owner, amount, type, and key is safe: it returns
+`applied = false` and does not add XP again. Reusing a key with different award
+data raises `xp_event_conflict`.
+
+Correct a mistaken award by adding a negative compensating event with a new
+key. History is never deleted:
+
+```bash
+npx supabase db query --local \
+  "select * from public.award_plot_xp(
+    '<owner-uuid>',
+    -100,
+    'correction:manual:first-reward:<owner-uuid>:1',
+    'correction',
+    'Correct duplicate manual reward',
+    '{\"corrects\":\"manual:first-reward:<owner-uuid>\"}'::jsonb
+  );"
+```
+
+Corrections cannot reduce total XP below zero and may downgrade the derived
+building level. Inspect the private ledger from an administrative CLI session:
+
+```bash
+npx supabase db query --local \
+  "select event_key, event_type, xp_delta, description, awarded_by, created_at from public.plot_xp_events where owner_id = '<owner-uuid>' order by created_at, id;"
+```
+
+Future automatic rewards must use their own deterministic event keys, calling
+`award_plot_xp` from an administrative session, or `apply_plot_xp` when already
+inside an authorized `security definer` function. They must not update the
+stored total directly.

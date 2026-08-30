@@ -1,9 +1,15 @@
 import type { Database } from "@/lib/supabase/database.types";
-import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId } from "./types";
+import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId, StartupBuildingLevel } from "./types";
 
 export type CityDevelopmentRow = Database["public"]["Views"]["city_developments"]["Row"];
 
+function startupBuildingLevel(value: number | null): StartupBuildingLevel {
+  if (value === 1 || value === 2 || value === 3 || value === 4 || value === 5) return value;
+  return 1;
+}
+
 export function serializeCityDevelopment(row: CityDevelopmentRow): CityDevelopment {
+  const buildingLevel = startupBuildingLevel(row.building_level);
   return {
     plotId: row.plot_id!,
     ownerId: row.owner_id!,
@@ -19,9 +25,15 @@ export function serializeCityDevelopment(row: CityDevelopmentRow): CityDevelopme
       avatarUrl: row.avatar_url,
     },
     building: {
-      level: row.building_level as 1,
+      level: buildingLevel,
       assetId: row.building_asset_id as StartupBuildingAssetId,
       color: row.building_color!,
+    },
+    progression: {
+      xp: row.xp_total ?? 0,
+      buildingLevel,
+      currentLevelXp: row.current_level_xp ?? 0,
+      nextLevelXp: row.next_level_xp,
     },
     claimedAt: row.claimed_at!,
     updatedAt: row.updated_at!,

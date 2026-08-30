@@ -18,7 +18,7 @@
     "db:migrate:remote": "node scripts/supabase-env.mjs remote migrate",
     "db:reset": "supabase db reset --local",
     "db:test": "supabase test db",
-    "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts"
+    "db:types": "supabase gen types typescript --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres > src/lib/supabase/database.types.ts"
   },
   "scriptsInfo": {
     "db:start": "Start the local Supabase Docker services. Run this before local development.",

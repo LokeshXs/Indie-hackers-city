@@ -51,8 +51,16 @@ const development = {
   project: { id: "123e4567-e89b-42d3-a456-426614174000", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "app" as const },
   founder: { fullName: "Lokesh Singh", xHandle: "lokesh_singh", avatarUrl: null },
   building: { level: 1 as const, assetId: "startup-building-level-1" as const, color: "#e2775c" },
+  progression: { xp: 0, buildingLevel: 1 as const, currentLevelXp: 0, nextLevelXp: 100 },
   claimedAt: "2026-08-30T00:00:00.000Z",
   updatedAt: "2026-08-30T00:00:00.000Z",
+};
+
+// claim_plot awards 10 XP inside the claim transaction, so the API response for a
+// fresh claim always carries it.
+const claimedDevelopment = {
+  ...development,
+  progression: { ...development.progression, xp: 10 },
 };
 
 describe("plot claim modal", () => {
@@ -61,7 +69,7 @@ describe("plot claim modal", () => {
     mockAuth.user = { id: "user-1", email: "founder@example.com", user_metadata: {} };
     mockAuth.isAuthenticated = true;
     mockAuth.isLoading = false;
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ development }), {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ development: claimedDevelopment }), {
       status: 201,
       headers: { "content-type": "application/json" },
     })));
@@ -105,18 +113,36 @@ describe("plot claim modal", () => {
 
     await user.click(screen.getByRole("button", { name: `${plotAddress}, occupied` }));
     expect(screen.getByRole("dialog", { name: "Xenith" })).toHaveTextContent("Founded by Lokesh Singh");
+    expect(screen.getByLabelText("Building Level 1, 0 city XP")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /visit project/i })).toHaveAttribute("href", "https://xenith.dev/");
     expect(screen.getByRole("button", { name: "Edit project" })).toBeInTheDocument();
   });
 
-  it("points a one-plot owner at their existing project without opening any modal", async () => {
+  it("opens the owner's project from the progression card and restores focus when closed", async () => {
+    const user = userEvent.setup();
+    const progressedDevelopment = {
+      ...development,
+      building: { ...development.building, level: 2 as const },
+      progression: { xp: 185, buildingLevel: 2 as const, currentLevelXp: 100, nextLevelXp: 300 },
+    };
+    render(<CityMap3D district={starterDistrict} initialDevelopments={{ [plotId]: progressedDevelopment }} />);
+
+    const progressCard = screen.getByRole("button", { name: "Level 2, 185 XP, 115 XP until Level 3. View my building." });
+    await user.click(progressCard);
+    expect(screen.getByRole("dialog", { name: "Xenith" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Building Level 2, 185 city XP")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close project card" }));
+    await waitFor(() => expect(progressCard).toHaveFocus());
+  });
+
+  it("shows the one-plot limit without moving to the existing project", async () => {
     const user = userEvent.setup();
     render(<CityMap3D district={starterDistrict} initialDevelopments={{ [plotId]: development }} />);
 
     await user.click(screen.getByRole("button", { name: "Pioneer District · Jobs Avenue · North Plot 02, available" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "Your plot is already claimed" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Full name" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Each founder receives one city plot\. Here is yours: Xenith\./)).toBeInTheDocument();
+    expect(screen.getByText("Only one plot can be claimed per founder.")).toBeInTheDocument();
   });
 
   it("completes both required steps and claims a plot", async () => {
@@ -171,5 +197,6 @@ describe("plot claim modal", () => {
     expect(successDialog).toHaveTextContent("Pioneer District");
     expect(screen.getByRole("button", { name: "View my building" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `${plotAddress}, occupied` })).toBeEnabled();
+    expect(screen.getByText("Xenith is now part of Pioneer District. +10 XP earned.")).toBeInTheDocument();
   }, 15_000);
 });

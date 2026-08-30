@@ -19,6 +19,7 @@ import {
 import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
+import { FounderProgressCard } from "./FounderProgressCard";
 import { ProjectCard } from "./ProjectCard";
 import styles from "./CityMap3D.module.css";
 
@@ -541,6 +542,8 @@ export function CityMap3D({
   const focusTimerRef = useRef<number | null>(null);
   const viewBuildingButtonRef = useRef<HTMLButtonElement>(null);
   const claimLimitButtonRef = useRef<HTMLButtonElement>(null);
+  const founderProgressButtonRef = useRef<HTMLButtonElement>(null);
+  const projectCardReturnFocusRef = useRef<HTMLElement | null>(null);
   const initialReturnConsumedRef = useRef(false);
   const handlePlotInteractionRef = useRef<(plotId: string) => void>(() => undefined);
   const handleScenePlotInteraction = useCallback((plotId: string) => {
@@ -761,6 +764,7 @@ export function CityMap3D({
     const development = developments[plotId];
     if (development) {
       setHoveredPlotId(null);
+      projectCardReturnFocusRef.current = null;
       setInspectedPlotId(plotId);
       setStatusMessage(`Viewing ${development.project.name}.`);
       return;
@@ -866,6 +870,7 @@ export function CityMap3D({
       }
 
       const development = payload.development;
+      const awardedXp = development.progression.xp;
       claimSucceeded = true;
       setSelectedPlotId(null);
       setIsReserving(false);
@@ -882,7 +887,10 @@ export function CityMap3D({
           setConstruction({ plotId, phase: "complete", assetId: buildingAssetId });
           setReservedPlotId(null);
           setCompletedProject({ plotId, name: normalizedProject });
-          setStatusMessage(`${normalizedProject} is now part of ${district.name}.`);
+          setStatusMessage(
+            `${normalizedProject} is now part of ${district.name}.`
+            + (awardedXp > 0 ? ` +${awardedXp} XP earned.` : ""),
+          );
         }, 1800),
       ];
     } catch (caught) {
@@ -896,6 +904,7 @@ export function CityMap3D({
 
   function viewCompletedBuilding() {
     if (!completedProject) return;
+    projectCardReturnFocusRef.current = null;
     focusOnBuilding(completedProject);
     setInspectedPlotId(completedProject.plotId);
     setCompletedProject(null);
@@ -942,6 +951,20 @@ export function CityMap3D({
     controls.update();
   }
 
+  function openOwnerProjectFromProgress() {
+    if (!ownerDevelopment) return;
+    projectCardReturnFocusRef.current = founderProgressButtonRef.current;
+    setInspectedPlotId(ownerDevelopment.plotId);
+    setStatusMessage(`Viewing ${ownerDevelopment.project.name}.`);
+  }
+
+  function closeInspectedProject() {
+    const returnFocus = projectCardReturnFocusRef.current;
+    projectCardReturnFocusRef.current = null;
+    setInspectedPlotId(null);
+    if (returnFocus) window.requestAnimationFrame(() => returnFocus.focus());
+  }
+
   return (
     <main ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete}>
       <header className={styles.header}>
@@ -982,8 +1005,15 @@ export function CityMap3D({
         <button className={styles.controlButton} type="button" aria-label="Zoom in" onClick={() => zoomBy(3)}>+</button>
         <button className={styles.controlButton} type="button" aria-label="Reset camera" onClick={resetCamera}>⌂</button>
       </div>
+      {!isAuthLoading && isAuthenticated && ownerDevelopment ? (
+        <FounderProgressCard
+          development={ownerDevelopment}
+          buttonRef={founderProgressButtonRef}
+          onViewBuilding={openOwnerProjectFromProgress}
+        />
+      ) : null}
       {hasPendingUpdates ? (
-        <aside className={styles.cityUpdateNotice} aria-live="polite" aria-label="City updates available">
+        <aside className={`${styles.cityUpdateNotice} ${!isAuthLoading && isAuthenticated && ownerDevelopment ? styles.cityUpdateNoticeWithProgress : ""}`} aria-live="polite" aria-label="City updates available">
           <span className={styles.cityUpdateMarker} aria-hidden="true">◆</span>
           <div>
             <strong>New city activity</strong>
@@ -1193,7 +1223,7 @@ export function CityMap3D({
           development={inspectedDevelopment}
           address={inspectedPlot.label}
           currentUserId={user?.id}
-          onClose={() => setInspectedPlotId(null)}
+          onClose={closeInspectedProject}
           onUpdated={(development) => {
             applyDevelopment(development);
             setStatusMessage(`${development.project.name} has been updated.`);

@@ -204,6 +204,7 @@
   .header p:last-child, .hint { display: none; }
   .controls { top: auto; right: 50%; bottom: 0.75rem; transform: translateX(50%); }
   .cityUpdateNotice { top: 6rem; width: calc(100% - 1.5rem); min-width: 0; }
+  .cityUpdateNoticeWithProgress { top: 13.2rem; }
   .cityUpdateNotice div span { display: none; }
   .buildStatus { right: auto; bottom: 4.6rem; left: 50%; transform: translateX(-50%); white-space: nowrap; }
   .modalBackdrop { padding: 0.65rem; }
