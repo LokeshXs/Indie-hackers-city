@@ -11,11 +11,29 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:start": "node scripts/supabase-env.mjs local start",
+    "db:stop": "node scripts/supabase-env.mjs local stop",
+    "db:migrate": "node scripts/supabase-env.mjs local migrate",
+    "db:migrate:remote": "node scripts/supabase-env.mjs remote migrate",
+    "db:reset": "supabase db reset --local",
+    "db:test": "supabase test db",
+    "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts"
+  },
+  "scriptsInfo": {
+    "db:start": "Start the local Supabase Docker services. Run this before local development.",
+    "db:stop": "Stop the local Supabase services while preserving local database data.",
+    "db:migrate": "Apply pending migration files to local Supabase without deleting existing local data.",
+    "db:migrate:remote": "Apply pending migration files to the hosted Supabase project configured in .env.",
+    "db:reset": "Delete local database data, then rebuild it from all migrations and supabase/seed.sql.",
+    "db:test": "Run the SQL database tests in supabase/tests against local Supabase.",
+    "db:types": "Regenerate src/lib/supabase/database.types.ts from the local database schema."
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
+    "@supabase/ssr": "^0.12.5",
+    "@supabase/supabase-js": "^2.112.4",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -32,6 +50,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "jsdom": "^30.0.1",
+    "supabase": "2.116.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"

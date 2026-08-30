@@ -19,6 +19,10 @@ describe("3D city asset kit", () => {
       "artwork/3d/v3/sidewalk-straight.blend",
       "artwork/3d/v3/grass-plot.blend",
       "artwork/3d/v3/driveway-straight.blend",
+      "artwork/3d/v3/roundabout.blend",
+      "artwork/3d/v3/road-link.blend",
+      "artwork/3d/v3/landmarks/launch-monument.blend",
+      "artwork/3d/v3/trees/palm-tree.blend",
       "artwork/3d/v3/startup-building-level-1.blend",
       "artwork/3d/v3/corner-studio-level-1.blend",
     ]) {

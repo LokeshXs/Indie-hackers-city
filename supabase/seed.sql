@@ -1,0 +1,4 @@
+-- Local-only sample data belongs here. This file runs after migrations during
+-- `supabase start` and every `supabase db reset --local`.
+--
+-- Keep it deterministic and never copy production users or private data here.

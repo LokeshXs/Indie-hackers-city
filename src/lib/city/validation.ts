@@ -1,0 +1,79 @@
+import {
+  BUILDING_COLORS,
+  PROJECT_TYPES,
+  STARTUP_BUILDING_ASSET_IDS,
+  X_HANDLE_PATTERN,
+} from "./constants";
+import type { ProjectType, StartupBuildingAssetId } from "./types";
+
+export interface ValidatedProjectFields {
+  fullName: string;
+  xHandle: string;
+  projectName: string;
+  websiteUrl: string;
+  projectType: ProjectType;
+  buildingAssetId: StartupBuildingAssetId;
+  buildingColor: string;
+}
+
+export interface ValidationResult<T> {
+  data?: T;
+  error?: string;
+}
+
+function formString(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function normalizeWebsite(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    return (url.protocol === "http:" || url.protocol === "https:")
+      && Boolean(url.hostname)
+      && !url.username
+      && !url.password
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function validateProjectFormData(formData: FormData): ValidationResult<ValidatedProjectFields> {
+  const fullName = formString(formData, "fullName");
+  const rawHandle = formString(formData, "xHandle");
+  const xHandle = rawHandle.replace(/^@/, "").toLowerCase();
+  const projectName = formString(formData, "projectName");
+  const websiteUrl = normalizeWebsite(formString(formData, "websiteUrl"));
+  const projectType = formString(formData, "projectType");
+  const buildingAssetId = formString(formData, "buildingAssetId");
+  const buildingColor = formString(formData, "buildingColor").toLowerCase();
+
+  if (!fullName || fullName.length > 60) return { error: "Enter a founder name of 60 characters or fewer." };
+  if (!X_HANDLE_PATTERN.test(xHandle)) return { error: "Enter a valid X handle." };
+  if (!projectName || projectName.length > 40) return { error: "Enter a project name of 40 characters or fewer." };
+  if (!websiteUrl || websiteUrl.length > 2048) return { error: "Enter a valid HTTP or HTTPS project URL." };
+  if (!(PROJECT_TYPES as readonly string[]).includes(projectType)) return { error: "Choose a valid project type." };
+  if (!(STARTUP_BUILDING_ASSET_IDS as readonly string[]).includes(buildingAssetId)) return { error: "Choose a valid building." };
+  if (!(BUILDING_COLORS as readonly string[]).includes(buildingColor)) return { error: "Choose a valid building color." };
+
+  return {
+    data: {
+      fullName,
+      xHandle,
+      projectName,
+      websiteUrl,
+      projectType: projectType as ProjectType,
+      buildingAssetId: buildingAssetId as StartupBuildingAssetId,
+      buildingColor,
+    },
+  };
+}
+
+export function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+

@@ -1,23 +1,7 @@
 import type { CityEntity, WorldPosition } from "./map-types";
+import type { CityDevelopment } from "@/lib/city/types";
 
-export type StartupBuildingLevel = 1;
-export type StartupBuildingAssetId = "startup-building-level-1" | "corner-studio-level-1";
-
-export interface PlotDevelopment {
-  level: StartupBuildingLevel;
-  assetId?: StartupBuildingAssetId;
-  founder?: {
-    fullName: string;
-    xHandle: string;
-  };
-  project?: {
-    name: string;
-    url: string;
-    type: "website" | "app" | "chrome-extension";
-    logo: File;
-  };
-  buildingColor?: string;
-}
+export type { StartupBuildingAssetId } from "@/lib/city/types";
 
 // Facing is derived from the plot's own rotationY (not z-sign) so this generalizes to any
 // row regardless of which side of the map it's on — only supports rotationY in {0, Math.PI}
@@ -32,11 +16,11 @@ export function getBuildingPlacement(plotEntity: CityEntity): { position: WorldP
 
 export function createPlotDevelopmentEntities(
   plotEntity: CityEntity,
-  development: PlotDevelopment,
+  development: Pick<CityDevelopment, "plotId" | "building">,
 ): CityEntity[] {
   if (!plotEntity.plotId) return [];
 
-  const assetId = development.assetId ?? "startup-building-level-1";
+  const assetId = development.building.assetId;
   const placement = getBuildingPlacement(plotEntity);
   return [{
     id: `${plotEntity.plotId}-${assetId}`,
@@ -44,6 +28,8 @@ export function createPlotDevelopmentEntities(
     position: placement.position,
     rotationY: placement.rotationY,
     scale: 1.4,
-    buildingColor: development.buildingColor,
+    buildingColor: development.building.color,
+    plotId: development.plotId,
+    interactive: true,
   }];
 }

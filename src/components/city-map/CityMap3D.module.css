@@ -88,8 +88,18 @@
 .permitTag { display: inline-flex; width: fit-content; border: 0.12rem dashed rgb(255 230 160 / 70%); border-radius: 0.4rem; padding: 0.24rem 0.6rem; background: rgb(9 38 38 / 30%); color: #ffe6a0; font-size: 0.68rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; transform: rotate(-1.6deg); }
 .claimHeading h2 { margin: 0; color: #204e4e; font-size: 0.9rem; font-weight: 850; }
 .formStep { display: grid; gap: 1.05rem; }
+.authStep { position: relative; gap: 1.25rem; }
+.authPermit { display: flex; width: fit-content; align-items: center; gap: 0.5rem; border: 0.12rem dashed #b97731; border-radius: 0.45rem; padding: 0.35rem 0.6rem; background: #fff2ce; color: #8a5a2f; font-size: 0.64rem; font-weight: 950; letter-spacing: 0.12em; text-transform: uppercase; transform: rotate(-1.4deg); }
+.authPermit b { color: #2ca89e; transform: rotate(45deg); }
+.googleButton { display: flex; min-height: 3.8rem; align-items: center; justify-content: center; gap: 0.8rem; border: 0.14rem solid #d7c49a; border-radius: 0.85rem; padding: 0.8rem 1.25rem; background: #fffdf6; box-shadow: 0 0.3rem 0 #c5ae7d, 0 0.8rem 1.5rem rgb(32 78 78 / 12%); color: #204e4e; font: inherit; font-size: 0.92rem; font-weight: 900; cursor: pointer; transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease; }
+.googleButton svg { width: 1.45rem; height: 1.45rem; flex: none; }
+.googleButton:hover { border-color: #42c4b7; transform: translateY(-2px); box-shadow: 0 0.38rem 0 #55a69e, 0 0.9rem 1.7rem rgb(32 78 78 / 16%); }
+.googleButton:focus-visible { outline: 3px solid #42c4b7; outline-offset: 4px; }
+.googleButton:disabled { opacity: 0.65; cursor: wait; transform: none; }
+.authError { margin: -0.25rem 0 0; border-left: 0.2rem solid #d55777; padding: 0.55rem 0.7rem; background: rgb(213 87 119 / 8%); color: #a92f51; font-size: 0.72rem; font-weight: 750; line-height: 1.45; }
+.authNote { margin: 0; color: #78908c; font-size: 0.7rem; line-height: 1.5; text-align: center; }
 .stepIntro { display: grid; gap: 0.18rem; }
-.stepIntro strong { color: #204e4e; font-size: 2rem; }
+.stepIntro strong, .stepIntro h2 { margin: 0; color: #204e4e; font-size: 2rem; }
 .stepIntro span { color: #78908c; font-size: 0.78rem; }
 .claimField { display: grid; gap: 0.55rem; }
 .claimField label { color: #204e4e; font-size: 0.9rem; font-weight: 850; }
@@ -107,11 +117,6 @@
 .projectTypes span { display: grid; min-height: 2.75rem; place-items: center; border: 0.12rem solid #d7c49a; border-radius: 0.72rem; background: #fffdf6; color: #7a6a4a; font-size: 0.7rem; font-weight: 800; text-align: center; transition: 140ms ease; }
 .projectTypes input:checked + span { border-color: #2ca89e; background: #e6f4ed; box-shadow: inset 0 -0.18rem 0 #b8ddd2; color: #176d6c; }
 .projectTypes input:focus-visible + span { outline: 3px solid #efb566; outline-offset: 2px; }
-.fileInput { position: absolute; width: 1px !important; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
-.logoUpload { display: grid; min-height: 4rem; place-content: center; gap: 0.15rem; border: 1px dashed #55a69e; border-radius: 0.8rem; background: #edf7ef; color: #176d6c !important; cursor: pointer; text-align: center; }
-.logoUpload strong { max-width: 18rem; overflow: hidden; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
-.logoUpload span { color: #9a8cac; font-size: 0.66rem; font-weight: 650; }
-.fileInput:focus-visible + small, .logoUpload:focus-within { outline: 3px solid #efb566; outline-offset: 2px; }
 .colorSwatches { display: flex; flex-wrap: wrap; gap: 0.7rem; padding-top: 0.2rem; }
 .colorSwatch { width: 2.7rem; height: 2.7rem; border: 0.16rem solid rgb(32 78 78 / 18%); border-radius: 50%; box-shadow: inset 0 0.1rem 0.2rem rgb(255 255 255 / 35%), 0 0.18rem 0.4rem rgb(32 78 78 / 18%); cursor: pointer; transition: transform 120ms ease, box-shadow 120ms ease; }
 .colorSwatch:hover { transform: translateY(-2px); }
@@ -191,4 +196,8 @@
   .successOverlay { padding: 1rem; }
   .successCard { padding: 2.5rem 1.2rem 1.6rem; border-width: 0.35rem; border-radius: 1.5rem; transform: rotate(0deg); }
   .successBadge { width: 4.2rem; height: 4.2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modalBackdrop, .plotModal, .successCard, .constructionLabel, .constructionLabel i, .confetti i { animation: none; }
+  .googleButton { transition: none; }
 }

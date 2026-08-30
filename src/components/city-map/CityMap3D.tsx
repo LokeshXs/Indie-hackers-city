@@ -5,18 +5,31 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
+import { AccountMenu } from "@/components/auth/AccountMenu";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { getUserDisplayName } from "@/lib/auth/user-metadata";
+import { BUILDING_COLOR_OPTIONS, X_HANDLE_PATTERN } from "@/lib/city/constants";
+import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId } from "@/lib/city/types";
+import { useCityDevelopments } from "@/hooks/useCityDevelopments";
 import { BUILDING_WALL_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
 import {
   createPlotDevelopmentEntities,
   getBuildingPlacement,
-  type PlotDevelopment,
-  type StartupBuildingAssetId,
 } from "./plot-builds";
-import type { CityDistrict, CityEntity } from "./map-types";
+import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
+import { ProjectCard } from "./ProjectCard";
 import styles from "./CityMap3D.module.css";
 
-interface CityMap3DProps {
+/** Assets that skip the shadow pass. Palms are numerous and each is 3 meshes, so casting would
+ * roughly double their draw calls for no gain — the shadow frustum doesn't reach them anyway. */
+const NON_SHADOW_CASTING_ASSETS = new Set<CityAssetId>(["startup-building-level-1", "palm-tree"]);
+
+export interface CityMap3DProps {
   district: CityDistrict;
+  initialDevelopments: CityDevelopmentRecord;
+  initialDevelopmentLoadError?: boolean;
+  initialClaimPlotId?: string;
+  initialAuthError?: "oauth";
 }
 
 const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: string }> = [
@@ -24,19 +37,8 @@ const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: 
   { assetId: "corner-studio-level-1", label: "Corner Studio" },
 ];
 
-const BUILDING_COLOR_OPTIONS: ReadonlyArray<{ id: string; label: string; hex: string }> = [
-  { id: "cream", label: "Classic Cream", hex: "#d1ad6e" },
-  { id: "coral", label: "Coral", hex: "#e2775c" },
-  { id: "sky", label: "Sky Blue", hex: "#5fa8d3" },
-  { id: "sage", label: "Sage Green", hex: "#7fa87a" },
-  { id: "sun", label: "Sunny Yellow", hex: "#f0c94b" },
-  { id: "lavender", label: "Lavender", hex: "#9b8ac4" },
-  { id: "blush", label: "Blush Pink", hex: "#e8a0b4" },
-  { id: "charcoal", label: "Charcoal", hex: "#5b6670" },
-];
-
-const X_HANDLE_PATTERN = /^@?[A-Za-z0-9_]{1,15}$/;
 type ConstructionPhase = "blueprint" | "reveal" | "complete";
+type ClaimStep = "auth" | "founder" | "project" | "colors";
 interface ConstructionState {
   plotId: string;
   phase: ConstructionPhase;
@@ -65,7 +67,7 @@ function ModelInstance({ entity }: { entity: Pick<CityEntity, "assetId" | "build
     const wallMaterialName = BUILDING_WALL_MATERIAL[entity.assetId];
     scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      object.castShadow = entity.assetId !== "startup-building-level-1";
+      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(entity.assetId);
       object.receiveShadow = true;
       if (
         entity.buildingColor
@@ -157,25 +159,19 @@ const WATER_DEEP_COLOR = new THREE.Color("#1c5f96");
 const WATER_HIGHLIGHT_COLOR = new THREE.Color("#f4fffd");
 const WHITE_COLOR = new THREE.Color("#ffffff");
 const WATER_TINT_STRENGTH = 0.6;
-// Distances below are calibrated per-block (each block's own shoreline reaches ~29-30 units
-// from ITS center), not from the world origin — see CITY_BLOCK_CENTERS, used to find the
-// nearest block so the gradient hugs whichever shore is actually closest.
-const WATER_SHORE_START = 28;
-const WATER_MID_DISTANCE = 100;
-const WATER_DEEP_DISTANCE = 270;
-const CITY_BLOCK_CENTERS: ReadonlyArray<{ x: number; z: number }> = [
-  { x: -40, z: -40 },
-  { x: 40, z: -40 },
-  { x: -40, z: 40 },
-  { x: 40, z: 40 },
-];
+// Water depth is measured as distance OUTSIDE the island rectangle (0 exactly at the shore),
+// so the shallow band hugs all four edges and the corners evenly. A radial-from-origin metric
+// would break up at the corners, which sit ~97 units out versus ~69 at the edge midpoints.
+const WATER_SHORE_START = 0;
+const WATER_MID_DISTANCE = 70;
+const WATER_DEEP_DISTANCE = 240;
 
-// Outermost shoreline faces of a single block (IslandShoreline's lower lip), used to derive the
-// whole city's footprint so the zoom-to-fit stays correct if blocks are moved or added.
-const CITY_BLOCK_HALF_EXTENT_X = 30.16;
-const CITY_BLOCK_HALF_EXTENT_Z = 29.51;
-const CITY_HALF_EXTENT_X = Math.max(...CITY_BLOCK_CENTERS.map((center) => Math.abs(center.x))) + CITY_BLOCK_HALF_EXTENT_X;
-const CITY_HALF_EXTENT_Z = Math.max(...CITY_BLOCK_CENTERS.map((center) => Math.abs(center.z))) + CITY_BLOCK_HALF_EXTENT_Z;
+/** Paved half-extents of the merged island (block offset + a block's outermost pathway). */
+const CITY_PAVED_HALF_X = 69.2;
+const CITY_PAVED_HALF_Z = 68.55;
+/** Outermost shoreline face — the paved edge plus the lower lip's 0.96 overhang. */
+const CITY_HALF_EXTENT_X = CITY_PAVED_HALF_X + 0.96;
+const CITY_HALF_EXTENT_Z = CITY_PAVED_HALF_Z + 0.96;
 /** Fraction of the viewport the whole city spans when fully zoomed out. */
 const CITY_FIT_FRACTION = 0.6;
 // At the default camera orientation the screen axes are right = (1,0,-1)/√2 and up = (-1,2,-1)/√6,
@@ -221,13 +217,10 @@ function WaterSurface() {
       const offset = index * 3;
       const x = base[offset];
       const y = base[offset + 1];
-      let distance = Infinity;
-      for (const center of CITY_BLOCK_CENTERS) {
-        const dx = x - center.x;
-        const dz = y - center.z;
-        const centerDistance = Math.sqrt(dx * dx + dz * dz);
-        if (centerDistance < distance) distance = centerDistance;
-      }
+      // Distance outside the island rectangle — 0 anywhere on/inside the shore.
+      const dx = Math.max(Math.abs(x) - CITY_HALF_EXTENT_X, 0);
+      const dz = Math.max(Math.abs(y) - CITY_HALF_EXTENT_Z, 0);
+      const distance = Math.sqrt(dx * dx + dz * dz);
       const wave = Math.sin(distance * 0.11 - time * 0.6) * 0.11 + Math.sin(distance * 0.07 + time * 0.35) * 0.07;
       positions.setZ(index, wave);
 
@@ -255,26 +248,33 @@ function WaterSurface() {
   );
 }
 
-function IslandShoreline({ offsetX = 0, offsetZ = 0 }: { offsetX?: number; offsetZ?: number }) {
-  const copingMaterial = <meshStandardMaterial color="#b9b7ac" roughness={0.88} />;
-  const wallMaterial = <meshStandardMaterial color="#515957" roughness={0.92} />;
-  const lowerLipMaterial = <meshStandardMaterial color="#858d89" roughness={0.9} />;
+/** Three stacked retaining-wall tiers, each stepping further out and getting thicker.
+ * Offsets reproduce the original hand-tuned per-block numbers exactly. */
+const SHORELINE_TIERS = [
+  { offset: 0.26, thickness: 0.52, y: -0.06, height: 0.1, color: "#b9b7ac", roughness: 0.88 },
+  { offset: 0.38, thickness: 0.72, y: -0.24, height: 0.3, color: "#515957", roughness: 0.92 },
+  { offset: 0.50, thickness: 0.92, y: -0.43, height: 0.1, color: "#858d89", roughness: 0.9 },
+] as const;
+
+/** halfX / halfZ are the paved half-extents where the shoreline begins. */
+function IslandShoreline({ halfX, halfZ }: { halfX: number; halfZ: number }) {
   return (
-    <group raycast={() => null} position={[offsetX, 0, offsetZ]}>
-      <mesh position={[0, -0.06, -28.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
-      <mesh position={[0, -0.06, 28.81]} receiveShadow><boxGeometry args={[59.20, 0.1, 0.52]} />{copingMaterial}</mesh>
-      <mesh position={[-29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 57.86]} />{copingMaterial}</mesh>
-      <mesh position={[29.46, -0.06, 0]} receiveShadow><boxGeometry args={[0.52, 0.1, 57.86]} />{copingMaterial}</mesh>
-
-      <mesh position={[0, -0.24, -28.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
-      <mesh position={[0, -0.24, 28.93]} receiveShadow><boxGeometry args={[59.60, 0.3, 0.72]} />{wallMaterial}</mesh>
-      <mesh position={[-29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 58.18]} />{wallMaterial}</mesh>
-      <mesh position={[29.58, -0.24, 0]} receiveShadow><boxGeometry args={[0.72, 0.3, 58.18]} />{wallMaterial}</mesh>
-
-      <mesh position={[0, -0.43, -29.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
-      <mesh position={[0, -0.43, 29.05]} receiveShadow><boxGeometry args={[59.97, 0.1, 0.92]} />{lowerLipMaterial}</mesh>
-      <mesh position={[-29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 58.47]} />{lowerLipMaterial}</mesh>
-      <mesh position={[29.70, -0.43, 0]} receiveShadow><boxGeometry args={[0.92, 0.1, 58.47]} />{lowerLipMaterial}</mesh>
+    <group raycast={() => null}>
+      {SHORELINE_TIERS.map((tier) => {
+        const x = halfX + tier.offset;
+        const z = halfZ + tier.offset;
+        // Bars run full corner-to-corner so the four corners are always covered.
+        const alongX = 2 * x + tier.thickness;
+        const alongZ = 2 * z + tier.thickness;
+        return (
+          <group key={tier.color}>
+            <mesh position={[0, tier.y, -z]} receiveShadow><boxGeometry args={[alongX, tier.height, tier.thickness]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
+            <mesh position={[0, tier.y, z]} receiveShadow><boxGeometry args={[alongX, tier.height, tier.thickness]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
+            <mesh position={[-x, tier.y, 0]} receiveShadow><boxGeometry args={[tier.thickness, tier.height, alongZ]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
+            <mesh position={[x, tier.y, 0]} receiveShadow><boxGeometry args={[tier.thickness, tier.height, alongZ]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -284,6 +284,7 @@ function CityAsset({
   selected,
   hovered,
   selectable,
+  highlightable,
   onSelect,
   onHover,
   revealing,
@@ -292,6 +293,7 @@ function CityAsset({
   selected: boolean;
   hovered: boolean;
   selectable: boolean;
+  highlightable: boolean;
   onSelect: (plotId: string) => void;
   onHover: (plotId: string | null) => void;
   revealing?: boolean;
@@ -343,7 +345,7 @@ function CityAsset({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       )}
-      {(hovered || selected) && <PlotHighlight selected={selected} />}
+      {highlightable && (hovered || selected) && <PlotHighlight selected={selected} />}
     </group>
   );
 }
@@ -363,6 +365,7 @@ function Scene({
   selectedPlotId,
   hoveredPlotId,
   selectablePlotIds,
+  highlightablePlotIds,
   onSelect,
   onHover,
   controlsRef,
@@ -374,6 +377,7 @@ function Scene({
   selectedPlotId: string | null;
   hoveredPlotId: string | null;
   selectablePlotIds: Set<string>;
+  highlightablePlotIds: Set<string>;
   onSelect: (plotId: string) => void;
   onHover: (plotId: string | null) => void;
   controlsRef: RefObject<OrbitControlsImpl | null>;
@@ -426,9 +430,7 @@ function Scene({
       <hemisphereLight args={["#fff3c8", "#174544", 1.35]} />
       <directionalLight position={[-16, 24, 12]} intensity={2.65} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0004} />
       <WaterSurface />
-      {CITY_BLOCK_CENTERS.map((center) => (
-        <IslandShoreline key={`${center.x}-${center.z}`} offsetX={center.x} offsetZ={center.z} />
-      ))}
+      <IslandShoreline halfX={CITY_PAVED_HALF_X} halfZ={CITY_PAVED_HALF_Z} />
       <OrbitControls
         ref={controlsRef}
         target={[0, 0, 0]}
@@ -450,6 +452,7 @@ function Scene({
             selected={Boolean(entity.plotId && (entity.plotId === selectedPlotId || entity.plotId === focusedPlotId))}
             hovered={Boolean(entity.plotId && entity.plotId === hoveredPlotId)}
             selectable={Boolean(entity.plotId && selectablePlotIds.has(entity.plotId))}
+            highlightable={Boolean(entity.plotId && highlightablePlotIds.has(entity.plotId))}
             onSelect={onSelect}
             onHover={onHover}
             revealing={construction?.phase === "reveal" && entity.id.startsWith(`${construction.plotId}-`)}
@@ -463,44 +466,74 @@ function Scene({
   );
 }
 
-export function CityMap3D({ district }: CityMap3DProps) {
+export function CityMap3D({
+  district,
+  initialDevelopments,
+  initialDevelopmentLoadError,
+  initialClaimPlotId,
+  initialAuthError,
+}: CityMap3DProps) {
+  const { user, isAuthenticated, isLoading: isAuthLoading, signInWithGoogle } = useAuth();
+  const { developments, applyDevelopment, refresh, hasRefreshError } = useCityDevelopments(
+    initialDevelopments,
+    initialDevelopmentLoadError,
+  );
   const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
+  const [inspectedPlotId, setInspectedPlotId] = useState<string | null>(null);
   const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
-  const [developments, setDevelopments] = useState<Record<string, PlotDevelopment>>({});
   const [selectedBuildingAssetId, setSelectedBuildingAssetId] = useState<StartupBuildingAssetId>(BUILDING_OPTIONS[0].assetId);
   const [selectedBuildingColor, setSelectedBuildingColor] = useState<string>(BUILDING_COLOR_OPTIONS[0].hex);
-  const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
+  const [formStep, setFormStep] = useState<ClaimStep>("auth");
   const [fullName, setFullName] = useState("");
   const [xHandle, setXHandle] = useState("");
   const [xHandleTouched, setXHandleTouched] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [projectUrl, setProjectUrl] = useState("");
-  const [projectType, setProjectType] = useState<"website" | "app" | "chrome-extension">("website");
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoError, setLogoError] = useState<string | null>(null);
+  const [projectType, setProjectType] = useState<ProjectType>("website");
   const [websiteTouched, setWebsiteTouched] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [isStartingAuth, setIsStartingAuth] = useState(false);
   const [isReserving, setIsReserving] = useState(false);
   const [reservedPlotId, setReservedPlotId] = useState<string | null>(null);
   const [construction, setConstruction] = useState<ConstructionState | null>(null);
   const [completedProject, setCompletedProject] = useState<{ plotId: string; name: string } | null>(null);
   const [focusedPlotId, setFocusedPlotId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState("Choose an empty plot to found a startup.");
+  const [statusMessage, setStatusMessage] = useState(
+    initialDevelopmentLoadError
+      ? "The city could not refresh its developments. You can still explore."
+      : "Choose an empty plot to found a startup.",
+  );
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const shellRef = useRef<HTMLElement>(null);
   const modalRef = useRef<HTMLElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const firstSwatchRef = useRef<HTMLButtonElement>(null);
+  const googleButtonRef = useRef<HTMLButtonElement>(null);
   const constructionTimersRef = useRef<number[]>([]);
   const focusTimerRef = useRef<number | null>(null);
   const viewBuildingButtonRef = useRef<HTMLButtonElement>(null);
+  const initialReturnConsumedRef = useRef(false);
 
   const plotEntities = useMemo(
     () => district.entities.filter((entity) => entity.plotId),
     [district.entities],
   );
+  const ownerDevelopment = useMemo(
+    () => user ? Object.values(developments).find((development) => development.ownerId === user.id) : undefined,
+    [developments, user],
+  );
   const selectablePlotIds = useMemo(
-    () => new Set(plotEntities.flatMap((entity) => entity.plotId && entity.plotId !== reservedPlotId && !developments[entity.plotId] ? [entity.plotId] : [])),
-    [developments, plotEntities, reservedPlotId],
+    () => new Set(plotEntities.flatMap((entity) => entity.plotId ? [entity.plotId] : [])),
+    [plotEntities],
+  );
+  const highlightablePlotIds = useMemo(
+    () => new Set(plotEntities.flatMap((entity) => {
+      if (!entity.plotId) return [];
+      if (developments[entity.plotId]) return [entity.plotId];
+      return ownerDevelopment || entity.plotId === reservedPlotId ? [] : [entity.plotId];
+    })),
+    [developments, ownerDevelopment, plotEntities, reservedPlotId],
   );
   const dynamicEntities = useMemo(
     () => plotEntities.flatMap((plotEntity) => {
@@ -514,13 +547,15 @@ export function CityMap3D({ district }: CityMap3DProps) {
     [district.entities, dynamicEntities],
   );
   const selectedPlot = district.plots.find((plot) => plot.id === selectedPlotId);
+  const inspectedDevelopment = inspectedPlotId ? developments[inspectedPlotId] : undefined;
+  const inspectedPlot = inspectedPlotId ? district.plots.find((plot) => plot.id === inspectedPlotId) : undefined;
   const selectedBuildingIndex = BUILDING_OPTIONS.findIndex((option) => option.assetId === selectedBuildingAssetId);
   const normalizedWebsite = normalizeWebsite(projectUrl);
   const websiteError = websiteTouched && !normalizedWebsite ? "Enter a valid project URL." : null;
   const xHandleIsValid = X_HANDLE_PATTERN.test(xHandle.trim());
   const xHandleError = xHandleTouched && !xHandleIsValid ? "Use 1–15 letters, numbers, or underscores." : null;
   const canContinue = Boolean(fullName.trim()) && xHandleIsValid;
-  const canClaimPlot = Boolean(projectName.trim() && normalizedWebsite && logoFile && !logoError);
+  const canClaimPlot = Boolean(projectName.trim() && normalizedWebsite);
   const constructionPlotEntity = construction
     ? plotEntities.find((entity) => entity.plotId === construction.plotId)
     : undefined;
@@ -566,6 +601,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
   useEffect(() => {
     useGLTF.preload(CITY_ASSET_PATHS["startup-building-level-1"]);
     useGLTF.preload(CITY_ASSET_PATHS["corner-studio-level-1"]);
+    useGLTF.preload(CITY_ASSET_PATHS["palm-tree"]);
     useTexture.preload("/assets/city/v3/water-surface-tile.png");
     return () => {
       document.body.style.cursor = "auto";
@@ -576,9 +612,50 @@ export function CityMap3D({ district }: CityMap3DProps) {
 
   useEffect(() => {
     if (!selectedPlotId) return;
-    const frame = window.requestAnimationFrame(() => (firstFieldRef.current ?? firstSwatchRef.current)?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      if (formStep === "auth") googleButtonRef.current?.focus();
+      else (firstFieldRef.current ?? firstSwatchRef.current)?.focus();
+    });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedPlotId, formStep]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("claimPlot") && !url.searchParams.has("authError")) return;
+    url.searchParams.delete("claimPlot");
+    url.searchParams.delete("authError");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
+  useEffect(() => {
+    if (!initialClaimPlotId || initialReturnConsumedRef.current || isAuthLoading) return;
+    initialReturnConsumedRef.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      const claimedDevelopment = developments[initialClaimPlotId];
+      if (claimedDevelopment) {
+        setInspectedPlotId(initialClaimPlotId);
+        setStatusMessage(initialAuthError === "oauth"
+          ? "Google sign-in was not completed. This plot has since been claimed."
+          : "This plot was claimed while you were away. Here is its project.");
+        return;
+      }
+      if (ownerDevelopment) {
+        setInspectedPlotId(ownerDevelopment.plotId);
+        focusOnBuilding({ plotId: ownerDevelopment.plotId, name: ownerDevelopment.project.name });
+        setStatusMessage("Each founder receives one city plot. Showing your existing project.");
+        return;
+      }
+      openPlot(initialClaimPlotId);
+      if (initialAuthError === "oauth") {
+        setAuthError("We couldn’t complete Google sign-in. Please try again.");
+        setStatusMessage("Google sign-in was not completed. You can try again.");
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+    // This one-shot effect consumes server-validated OAuth return state. The ref prevents
+    // later development/auth changes from reopening a modal the visitor already handled.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [developments, initialAuthError, initialClaimPlotId, isAuthLoading, ownerDevelopment]);
 
   useEffect(() => {
     if (!completedProject) return;
@@ -590,17 +667,18 @@ export function CityMap3D({ district }: CityMap3DProps) {
   }, [completedProject]);
 
   function resetClaimForm() {
-    setFormStep(1);
+    setFormStep("auth");
     setFullName("");
     setXHandle("");
     setXHandleTouched(false);
     setProjectName("");
     setProjectUrl("");
     setProjectType("website");
-    setLogoFile(null);
-    setLogoError(null);
     setWebsiteTouched(false);
     setSelectedBuildingColor(BUILDING_COLOR_OPTIONS[0].hex);
+    setAuthError(null);
+    setClaimError(null);
+    setIsStartingAuth(false);
   }
 
   function restorePlotFocus(plotId: string | null) {
@@ -622,54 +700,155 @@ export function CityMap3D({ district }: CityMap3DProps) {
     setHoveredPlotId(null);
     setSelectedPlotId(plotId);
     document.body.style.cursor = "auto";
-    setStatusMessage("Plot selected.");
+    if (isAuthLoading) {
+      setFormStep("auth");
+      setStatusMessage("Checking your sign-in…");
+    } else if (isAuthenticated) {
+      setFormStep("founder");
+      setFullName(getUserDisplayName(user));
+      setStatusMessage("Plot selected.");
+    } else {
+      setFormStep("auth");
+      setStatusMessage("Sign in to claim this plot.");
+    }
   }
 
-  function addBuilding(event: FormEvent<HTMLFormElement>) {
+  function handlePlotInteraction(plotId: string) {
+    const development = developments[plotId];
+    if (development) {
+      setHoveredPlotId(null);
+      setInspectedPlotId(plotId);
+      setStatusMessage(`Viewing ${development.project.name}.`);
+      return;
+    }
+    if (ownerDevelopment) {
+      setHoveredPlotId(null);
+      focusOnBuilding({ plotId: ownerDevelopment.plotId, name: ownerDevelopment.project.name });
+      setStatusMessage(`Each founder receives one city plot. Here is yours: ${ownerDevelopment.project.name}.`);
+      return;
+    }
+    openPlot(plotId);
+  }
+
+  async function beginGoogleSignIn() {
+    if (!selectedPlotId || isStartingAuth || isAuthLoading) return;
+    setIsStartingAuth(true);
+    setAuthError(null);
+    try {
+      await signInWithGoogle(`/?claimPlot=${encodeURIComponent(selectedPlotId)}`);
+    } catch {
+      setAuthError("We couldn’t complete Google sign-in. Please try again.");
+      setIsStartingAuth(false);
+    }
+  }
+
+  async function addBuilding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedPlotId || developments[selectedPlotId] || isReserving) return;
+    if (!isAuthenticated) {
+      setFormStep("auth");
+      setAuthError("Your session expired. Sign in again to continue.");
+      setStatusMessage("Sign in again to finish claiming this plot.");
+      return;
+    }
     const normalizedProject = projectName.trim();
-    if (!canContinue || !normalizedProject || !normalizedWebsite || !logoFile || logoError) {
+    if (!canContinue || !normalizedProject || !normalizedWebsite) {
       setWebsiteTouched(true);
       return;
     }
     const plotId = selectedPlotId;
-    const development: PlotDevelopment = {
-      level: 1,
-      assetId: selectedBuildingAssetId,
-      founder: { fullName: fullName.trim(), xHandle: xHandle.trim() },
-      project: { name: normalizedProject, url: normalizedWebsite, type: projectType, logo: logoFile },
-      buildingColor: selectedBuildingColor,
-    };
+    const buildingAssetId = selectedBuildingAssetId;
+    const formData = new FormData();
+    formData.set("plotId", plotId);
+    formData.set("fullName", fullName.trim());
+    formData.set("xHandle", xHandle.trim());
+    formData.set("projectName", normalizedProject);
+    formData.set("websiteUrl", normalizedWebsite);
+    formData.set("projectType", projectType);
+    formData.set("buildingAssetId", buildingAssetId);
+    formData.set("buildingColor", selectedBuildingColor);
+
     setIsReserving(true);
     setReservedPlotId(plotId);
     setHoveredPlotId(null);
-    setStatusMessage("Reserving plot…");
-    constructionTimersRef.current = [
-      window.setTimeout(() => {
-        setSelectedPlotId(null);
-        setIsReserving(false);
-        resetClaimForm();
-        setConstruction({ plotId, phase: "blueprint", assetId: selectedBuildingAssetId });
-        setStatusMessage("Preparing your foundation…");
-      }, 500),
-      window.setTimeout(() => {
-        setDevelopments((current) => ({ ...current, [plotId]: development }));
-        setConstruction({ plotId, phase: "reveal", assetId: selectedBuildingAssetId });
-        setStatusMessage(`Building ${normalizedProject}…`);
-      }, 2000),
-      window.setTimeout(() => {
-        setConstruction({ plotId, phase: "complete", assetId: selectedBuildingAssetId });
-        setReservedPlotId(null);
-        setCompletedProject({ plotId, name: normalizedProject });
-        setStatusMessage(`${normalizedProject} is now part of ${district.name}.`);
-      }, 3000),
-    ];
+    setClaimError(null);
+    setStatusMessage("Reserving your plot…");
+    let claimSucceeded = false;
+
+    try {
+      const response = await fetch("/api/plot-claims", { method: "POST", body: formData });
+      const payload = await response.json() as {
+        development?: CityDevelopment;
+        error?: { code?: string; message?: string };
+      };
+      if (!response.ok || !payload.development) {
+        const code = payload.error?.code;
+        if (code === "plot_taken") {
+          const latest = await refresh();
+          setSelectedPlotId(null);
+          resetClaimForm();
+          setReservedPlotId(null);
+          if (latest?.[plotId]) setInspectedPlotId(plotId);
+          setStatusMessage("That plot was just claimed. Showing the winning project.");
+          return;
+        }
+        if (code === "user_already_has_plot") {
+          const latest = await refresh();
+          const existing = latest && user
+            ? Object.values(latest).find((development) => development.ownerId === user.id)
+            : undefined;
+          setSelectedPlotId(null);
+          resetClaimForm();
+          setReservedPlotId(null);
+          if (existing) {
+            setInspectedPlotId(existing.plotId);
+            focusOnBuilding({ plotId: existing.plotId, name: existing.project.name });
+          }
+          setStatusMessage("Each founder receives one city plot. Showing your existing project.");
+          return;
+        }
+        if (code === "not_authenticated") {
+          setFormStep("auth");
+          setAuthError("Your session expired. Sign in again to continue.");
+          setStatusMessage("Sign in again to finish claiming this plot.");
+          return;
+        }
+        throw new Error(payload.error?.message || "The plot could not be claimed. Please try again.");
+      }
+
+      const development = payload.development;
+      claimSucceeded = true;
+      setSelectedPlotId(null);
+      setIsReserving(false);
+      resetClaimForm();
+      setConstruction({ plotId, phase: "blueprint", assetId: buildingAssetId });
+      setStatusMessage("Preparing your foundation…");
+      constructionTimersRef.current = [
+        window.setTimeout(() => {
+          applyDevelopment(development);
+          setConstruction({ plotId, phase: "reveal", assetId: buildingAssetId });
+          setStatusMessage(`Building ${normalizedProject}…`);
+        }, 800),
+        window.setTimeout(() => {
+          setConstruction({ plotId, phase: "complete", assetId: buildingAssetId });
+          setReservedPlotId(null);
+          setCompletedProject({ plotId, name: normalizedProject });
+          setStatusMessage(`${normalizedProject} is now part of ${district.name}.`);
+        }, 1800),
+      ];
+    } catch (caught) {
+      setClaimError(caught instanceof Error ? caught.message : "The plot could not be claimed. Please try again.");
+      setStatusMessage("Your build permit was not submitted. Your details are still here.");
+    } finally {
+      setIsReserving(false);
+      if (!claimSucceeded) setReservedPlotId(null);
+    }
   }
 
   function viewCompletedBuilding() {
     if (!completedProject) return;
     focusOnBuilding(completedProject);
+    setInspectedPlotId(completedProject.plotId);
     setCompletedProject(null);
   }
 
@@ -721,6 +900,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
         <h1>Indie Hackers City</h1>
         <p>Choose a plot and found your first startup.</p>
       </header>
+      <AccountMenu />
       <Canvas
         className={styles.canvas}
         shadows
@@ -734,7 +914,8 @@ export function CityMap3D({ district }: CityMap3DProps) {
             selectedPlotId={selectedPlotId}
             hoveredPlotId={hoveredPlotId}
             selectablePlotIds={selectablePlotIds}
-            onSelect={openPlot}
+            highlightablePlotIds={highlightablePlotIds}
+            onSelect={handlePlotInteraction}
             onHover={setHoveredPlotId}
             controlsRef={controlsRef}
             construction={selectedPlotId ? null : construction}
@@ -749,7 +930,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
         <button className={styles.controlButton} type="button" aria-label="Reset camera" onClick={resetCamera}>⌂</button>
       </div>
       <p className={styles.hint}>Tap a plot to build · Drag to pan · Right-drag to rotate · Scroll to zoom where you point</p>
-      <p className={styles.buildStatus} aria-live="polite">{statusMessage}</p>
+      <p className={styles.buildStatus} aria-live="polite">{hasRefreshError ? "Live city updates are temporarily unavailable. Showing the last known city state." : statusMessage}</p>
       {selectedPlot && (
         <div
           className={styles.modalBackdrop}
@@ -764,7 +945,7 @@ export function CityMap3D({ district }: CityMap3DProps) {
           
                 <div className={styles.previewInfo}>
                   <span className={styles.permitTag} aria-hidden="true">Build Permit</span>
-                  <p className={styles.previewAddress}><span aria-hidden="true">◆</span>{district.name} <b>·</b> {selectedPlot.label}</p>
+                  <p className={styles.previewAddress}><span aria-hidden="true">◆</span>{selectedPlot.label}</p>
                 </div>
                 <Canvas
                   className={styles.previewCanvas}
@@ -789,7 +970,35 @@ export function CityMap3D({ district }: CityMap3DProps) {
               <div className={styles.actionPane}>
                 <form className={styles.startupForm} noValidate aria-busy={isReserving} onSubmit={addBuilding}>
               
-                  {formStep === 1 ? (
+                  {formStep === "auth" ? (
+                    <div className={`${styles.formStep} ${styles.authStep}`}>
+                      <div className={styles.authPermit} aria-hidden="true">
+                        <span>Permit checkpoint</span>
+                        <b>◆</b>
+                      </div>
+                      <div className={styles.stepIntro}>
+                        <h2>{isAuthLoading ? "Checking your sign-in…" : "Sign in to claim this plot"}</h2>
+                        <span>Your account keeps this build permit connected to you.</span>
+                      </div>
+                      <button
+                        ref={googleButtonRef}
+                        className={styles.googleButton}
+                        type="button"
+                        disabled={isAuthLoading || isStartingAuth}
+                        onClick={beginGoogleSignIn}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.41Z" />
+                          <path fill="#34a853" d="M12 22c2.7 0 4.98-.9 6.63-2.36l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.77-5.61-4.14H3.04v2.62A10 10 0 0 0 12 22Z" />
+                          <path fill="#fbbc05" d="M6.39 13.92A6 6 0 0 1 6.07 12c0-.67.12-1.32.32-1.92V7.46H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.54l3.35-2.62Z" />
+                          <path fill="#ea4335" d="M12 5.94c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.96 5.46l3.35 2.62C7.18 7.71 9.39 5.94 12 5.94Z" />
+                        </svg>
+                        {isStartingAuth ? "Opening Google…" : "Continue with Google"}
+                      </button>
+                      {authError ? <p className={styles.authError} role="alert">{authError}</p> : null}
+                      <p className={styles.authNote}>The city stays open to explore. Sign-in is only required when you build.</p>
+                    </div>
+                  ) : formStep === "founder" ? (
                     <div className={styles.formStep}>
                       <div className={styles.stepIntro}><strong>Meet the founder</strong><span>Tell the city who is building here.</span></div>
                       <div className={styles.claimField}>
@@ -801,9 +1010,9 @@ export function CityMap3D({ district }: CityMap3DProps) {
                         <input id="x-handle" value={xHandle} required maxLength={16} autoCapitalize="none" spellCheck={false} placeholder="@yourhandle" pattern="@?[A-Za-z0-9_]{1,15}" aria-invalid={Boolean(xHandleError)} aria-describedby={xHandleError ? "x-handle-error" : undefined} onBlur={() => setXHandleTouched(true)} onChange={(event) => setXHandle(event.target.value)} />
                         {xHandleError && <small id="x-handle-error" className={styles.claimError}>{xHandleError}</small>}
                       </div>
-                      <button className={styles.addBuildingButton} type="button" disabled={!canContinue} onClick={() => setFormStep(2)}>Continue <span aria-hidden="true">→</span></button>
+                      <button className={styles.addBuildingButton} type="button" disabled={!canContinue} onClick={() => setFormStep("project")}>Continue <span aria-hidden="true">→</span></button>
                     </div>
-                  ) : formStep === 2 ? (
+                  ) : formStep === "project" ? (
                     <div className={styles.formStep}>
                       <div className={styles.stepIntro}><strong>Build your billboard</strong><span>Add the identity visitors will discover.</span></div>
                       <div className={styles.claimField}>
@@ -821,25 +1030,9 @@ export function CityMap3D({ district }: CityMap3DProps) {
                           <label key={value}><input type="radio" name="project-type" value={value} checked={projectType === value} onChange={() => setProjectType(value)} /><span>{label}</span></label>
                         ))}
                       </fieldset>
-                      <div className={styles.claimField}>
-                        <label htmlFor="project-logo">Logo</label>
-                        <label className={styles.logoUpload} htmlFor="project-logo"><strong>{logoFile?.name ?? "Upload PNG or JPG"}</strong><span>{logoFile ? "Choose a different file" : "Select your project logo"}</span></label>
-                        <input className={styles.fileInput} id="project-logo" type="file" required accept="image/png,image/jpeg" onChange={(event) => {
-                          const file = event.target.files?.[0] ?? null;
-                          if (file && !["image/png", "image/jpeg"].includes(file.type)) {
-                            setLogoFile(null);
-                            setLogoError("Only PNG and JPG logos are supported.");
-                            event.target.value = "";
-                          } else {
-                            setLogoFile(file);
-                            setLogoError(null);
-                          }
-                        }} />
-                        {logoError && <small className={styles.claimError}>{logoError}</small>}
-                      </div>
                       <div className={styles.formActions}>
-                        <button className={styles.backButton} type="button" onClick={() => setFormStep(1)}>← Back</button>
-                        <button className={styles.addBuildingButton} type="button" disabled={!canClaimPlot} onClick={() => setFormStep(3)}>Continue <span aria-hidden="true">→</span></button>
+                        <button className={styles.backButton} type="button" onClick={() => setFormStep("founder")}>← Back</button>
+                        <button className={styles.addBuildingButton} type="button" disabled={!canClaimPlot} onClick={() => setFormStep("colors")}>Continue <span aria-hidden="true">→</span></button>
                       </div>
                     </div>
                   ) : (
@@ -864,9 +1057,10 @@ export function CityMap3D({ district }: CityMap3DProps) {
                         </div>
                       </div>
                       <div className={styles.formActions}>
-                        <button className={styles.backButton} type="button" onClick={() => setFormStep(2)}>← Back</button>
+                        <button className={styles.backButton} type="button" onClick={() => setFormStep("project")}>← Back</button>
                         <button className={styles.addBuildingButton} type="submit" disabled={!canClaimPlot || isReserving}>{isReserving ? "Reserving plot…" : "Claim my plot"}</button>
                       </div>
+                      {claimError ? <p className={styles.authError} role="alert">{claimError}</p> : null}
                     </div>
                   )}
                 </form>
@@ -890,10 +1084,22 @@ export function CityMap3D({ district }: CityMap3DProps) {
           </aside>
         </div>
       )}
+      {inspectedDevelopment && inspectedPlot ? (
+        <ProjectCard
+          development={inspectedDevelopment}
+          address={inspectedPlot.label}
+          currentUserId={user?.id}
+          onClose={() => setInspectedPlotId(null)}
+          onUpdated={(development) => {
+            applyDevelopment(development);
+            setStatusMessage(`${development.project.name} has been updated.`);
+          }}
+        />
+      ) : null}
       <div className={styles.srOnly} aria-label="Empty buildable plots">
         {district.plots.map((plot) => (
-          <button id={`plot-control-${plot.id}`} key={plot.id} type="button" disabled={!selectablePlotIds.has(plot.id)} onClick={() => openPlot(plot.id)}>
-            {plot.label}, {selectablePlotIds.has(plot.id) ? "available" : "occupied"}
+          <button id={`plot-control-${plot.id}`} key={plot.id} type="button" onClick={() => handlePlotInteraction(plot.id)}>
+            {plot.label}, {developments[plot.id] ? "occupied" : "available"}
           </button>
         ))}
       </div>

@@ -1,11 +1,13 @@
-export type PlotStatus = "available" | "reserved" | "occupied";
-
 export type CityAssetId =
   | "map-base"
   | "road-straight"
   | "sidewalk-straight"
   | "grass-plot"
   | "driveway-straight"
+  | "roundabout"
+  | "road-link"
+  | "palm-tree"
+  | "launch-monument"
   | "startup-building-level-1"
   | "corner-studio-level-1";
 
@@ -18,9 +20,6 @@ export interface WorldPosition {
 export interface CityPlot {
   id: string;
   label: string;
-  status: PlotStatus;
-  buildingId?: string;
-  projectId?: string;
 }
 
 export interface CityDistrict {
