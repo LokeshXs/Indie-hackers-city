@@ -4,6 +4,7 @@ export const PROJECT_TYPES = ["website", "app", "chrome-extension"] as const sat
 export const STARTUP_BUILDING_ASSET_IDS = [
   "startup-building-level-1",
   "corner-studio-level-1",
+  "indie-garage-level-1",
 ] as const satisfies readonly StartupBuildingAssetId[];
 
 export const BUILDING_COLORS = [
@@ -29,4 +30,3 @@ export const BUILDING_COLOR_OPTIONS: ReadonlyArray<{ id: string; label: string; 
 ];
 
 export const X_HANDLE_PATTERN = /^@?[A-Za-z0-9_]{1,15}$/;
-

@@ -38,6 +38,7 @@ export interface CityMap3DProps {
 const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: string }> = [
   { assetId: "startup-building-level-1", label: "Startup Shop" },
   { assetId: "corner-studio-level-1", label: "Corner Studio" },
+  { assetId: "indie-garage-level-1", label: "Garage" },
 ];
 
 type ConstructionPhase = "blueprint" | "reveal" | "complete";
@@ -1079,6 +1080,7 @@ export function CityMap3D({
           
                 <div className={styles.previewInfo}>
                   <span className={styles.permitTag} aria-hidden="true">Build Permit</span>
+                  <strong className={styles.previewBuildingName}>{BUILDING_OPTIONS[selectedBuildingIndex].label}</strong>
                   <p className={styles.previewAddress}><span aria-hidden="true">◆</span>{selectedPlot.label}</p>
                 </div>
                 <Canvas
@@ -1148,7 +1150,7 @@ export function CityMap3D({
                     </div>
                   ) : formStep === "project" ? (
                     <div className={styles.formStep}>
-                      <div className={styles.stepIntro}><strong>Build your billboard</strong><span>Add the identity visitors will discover.</span></div>
+                      <div className={styles.stepIntro}><strong>Introduce your project</strong><span>Add the identity visitors will discover.</span></div>
                       <div className={styles.claimField}>
                         <label htmlFor="project-name">Project name</label>
                         <input ref={firstFieldRef} id="project-name" value={projectName} required maxLength={40} placeholder="Your project name" onChange={(event) => setProjectName(event.target.value)} />

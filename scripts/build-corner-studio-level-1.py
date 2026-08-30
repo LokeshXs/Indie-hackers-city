@@ -90,7 +90,6 @@ def main():
     )
     shadow = material("Contact shadow recess", (0.012, 0.045, 0.075), roughness=0.56)
     planter = material("Blue ceramic planter", (0.04, 0.25, 0.42))
-    dynamic_sign_face = material("Dynamic billboard face", (1.0, 1.0, 1.0), roughness=0.74)
     leaf_dark = material("Deep leaf", (0.025, 0.25, 0.13))
     leaf_mid = material("Fresh leaf", (0.06, 0.48, 0.22))
     leaf_light = material("Leaf highlight", (0.22, 0.69, 0.31))
@@ -137,14 +136,6 @@ def main():
     # Wraparound tower windows make the silhouette read from a full 360-degree orbit.
     side_window(0.80, 0.70, 3.66, glass, navy, shadow)
     side_window(-0.85, 0.64, 3.66, glass, navy, shadow)
-
-    # Tall freestanding plot sign on the grass beside the driveway, facing the road.
-    sign_x = -2.62
-    for x in (sign_x - 0.86, sign_x + 0.86):
-        cylinder("billboard support post", (x, 3.08, 0.74), 0.10, 1.28, navy, 14)
-        cylinder("billboard post foot", (x, 3.08, 0.13), 0.18, 0.15, concrete, 16)
-    cube("freestanding billboard frame", (sign_x, 3.08, 1.66), (1.34, 0.18, 1.06), navy, 0.13)
-    cube("Billboard Dynamic Face", (sign_x, 3.28, 1.66), (1.16, 0.035, 0.88), dynamic_sign_face, 0.08)
 
     # A small rooftop utility cluster and antenna add startup-workshop personality.
     cube("roof utility box", (-1.35, -0.70, 3.78), (0.52, 0.40, 0.22), turquoise, 0.07)

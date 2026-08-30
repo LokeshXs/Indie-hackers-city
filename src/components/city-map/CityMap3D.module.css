@@ -72,6 +72,7 @@
 .previewCornerTopLeft { top: 1.3rem; left: 1.3rem; border-width: 0.16rem 0 0 0.16rem; }
 .previewCornerTopRight { top: 1.3rem; right: 1.3rem; border-width: 0.16rem 0.16rem 0 0; }
 .previewInfo { position: absolute; z-index: 2; top: 2rem; left: 1.6rem; display: grid; gap: 0.55rem; max-width: 75%; }
+.previewBuildingName { color: #fff8dc; font-family: var(--font-serif, Georgia), serif; font-size: clamp(1.35rem, 2.4vw, 2rem); line-height: 1; text-shadow: 0 0.16rem 0.35rem rgb(3 24 25 / 55%); }
 .previewAddress { display: flex; align-items: center; gap: 0.55rem; margin: 0; color: rgb(255 248 220 / 82%); font-size: 0.86rem; font-weight: 650; }
 .previewAddress span { color: #ffe6a0; font-size: 0.78rem; transform: rotate(45deg); }
 .previewAddress b { color: rgb(255 248 220 / 45%); }

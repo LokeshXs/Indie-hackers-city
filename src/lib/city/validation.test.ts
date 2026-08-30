@@ -25,5 +25,12 @@ describe("city project validation", () => {
     expect(result.error).toBeUndefined();
     expect(result.data?.xHandle).toBe("ada_builds");
   });
-});
 
+  it("accepts the Indie Garage building", () => {
+    const formData = validFormData();
+    formData.set("buildingAssetId", "indie-garage-level-1");
+    const result = validateProjectFormData(formData);
+    expect(result.error).toBeUndefined();
+    expect(result.data?.buildingAssetId).toBe("indie-garage-level-1");
+  });
+});

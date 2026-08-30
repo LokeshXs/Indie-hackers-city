@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { StartupBuildingAssetId } from "./plot-builds";
 import type { CityEntity } from "./map-types";
 import { createPlotDevelopmentEntities } from "./plot-builds";
 
@@ -10,7 +11,7 @@ const plot = (z: number, rotationY: number | undefined): CityEntity => ({
   plotId: z < 0 ? "plot-north-1" : "plot-south-1",
   interactive: true,
 });
-const development = (plotId: string, assetId: "startup-building-level-1" | "corner-studio-level-1" = "startup-building-level-1") => ({
+const development = (plotId: string, assetId: StartupBuildingAssetId = "startup-building-level-1") => ({
   plotId,
   building: { level: 1 as const, assetId, color: "#d1ad6e" },
 });
@@ -45,6 +46,19 @@ describe("Level 1 plot development", () => {
     expect(createPlotDevelopmentEntities(plot(-7.90, undefined), development("plot-north-1", "corner-studio-level-1"))).toEqual([{
       id: "plot-north-1-corner-studio-level-1",
       assetId: "corner-studio-level-1",
+      position: { x: -18, y: 0, z: -9.14 },
+      rotationY: Math.PI,
+      scale: 1.4,
+      buildingColor: "#d1ad6e",
+      plotId: "plot-north-1",
+      interactive: true,
+    }]);
+  });
+
+  it("places the selected Indie Garage variant", () => {
+    expect(createPlotDevelopmentEntities(plot(-7.90, undefined), development("plot-north-1", "indie-garage-level-1"))).toEqual([{
+      id: "plot-north-1-indie-garage-level-1",
+      assetId: "indie-garage-level-1",
       position: { x: -18, y: 0, z: -9.14 },
       rotationY: Math.PI,
       scale: 1.4,

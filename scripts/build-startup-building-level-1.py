@@ -61,7 +61,6 @@ def main():
     yellow_light = material("Awning highlight", (1.0, 0.76, 0.25))
     glass = material("Warm blue glass", (0.08, 0.36, 0.48), roughness=0.22, metallic=0.08, emission=(0.05, 0.22, 0.30))
     dark = material("Recess shadow", (0.025, 0.07, 0.085), roughness=0.58)
-    dynamic_sign_face = material("Dynamic billboard face", (1.0, 1.0, 1.0), roughness=0.74)
     planter = material("Terracotta planter", (0.62, 0.20, 0.10))
     leaf_dark = material("Shrub deep green", (0.05, 0.29, 0.12))
     leaf_mid = material("Shrub green", (0.08, 0.48, 0.18))
@@ -105,10 +104,6 @@ def main():
             0.08,
             rotation=(radians(10), 0, 0),
         )
-
-    # Integrated facade billboard. Runtime paints the logo and name on this face.
-    cube("integrated billboard frame", (0, 2.48, 3.18), (2.52, 0.14, 0.50), teal, 0.12)
-    cube("Billboard Dynamic Face", (0, 2.65, 3.18), (2.30, 0.045, 0.34), dynamic_sign_face, 0.07)
 
     # Minimal starter landscaping: exactly one planter and one small shrub.
     cylinder("single starter planter", (3.20, 2.82, 0.48), 0.38, 0.68, planter, vertices=18)

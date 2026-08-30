@@ -8,6 +8,7 @@ import styles from "./ProjectCard.module.css";
 const BUILDINGS: ReadonlyArray<{ value: StartupBuildingAssetId; label: string }> = [
   { value: "startup-building-level-1", label: "Startup Shop" },
   { value: "corner-studio-level-1", label: "Corner Studio" },
+  { value: "indie-garage-level-1", label: "Garage" },
 ];
 
 const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {

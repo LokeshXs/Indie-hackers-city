@@ -9,7 +9,8 @@ export type CityAssetId =
   | "palm-tree"
   | "launch-monument"
   | "startup-building-level-1"
-  | "corner-studio-level-1";
+  | "corner-studio-level-1"
+  | "indie-garage-level-1";
 
 export interface WorldPosition {
   x: number;

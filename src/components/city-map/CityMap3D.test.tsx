@@ -188,8 +188,15 @@ describe("plot claim modal", () => {
 
     const claimButton = screen.getByRole("button", { name: /claim my plot/i });
     expect(claimButton).toBeEnabled();
+    expect(screen.getByText("Startup Shop")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Previous building" }));
+    expect(screen.getByText("Garage")).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "Coral" }));
     await user.click(claimButton);
+
+    const claimRequest = vi.mocked(fetch).mock.calls.at(-1);
+    expect(claimRequest?.[0]).toBe("/api/plot-claims");
+    expect((claimRequest?.[1]?.body as FormData).get("buildingAssetId")).toBe("indie-garage-level-1");
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: `${plotAddress} setup` })).not.toBeInTheDocument(), { timeout: 1200 });
     const successDialog = await screen.findByRole("dialog", { name: "Plot claimed successfully" }, { timeout: 3000 });

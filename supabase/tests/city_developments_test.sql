@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(63);
+select plan(66);
 
 select has_table('public', 'plots', 'plots table exists');
 select has_table('public', 'projects', 'projects table exists');
@@ -74,10 +74,15 @@ select lives_ok(
     'First Project',
     'https://one.example/',
     'website',
-    'startup-building-level-1',
+    'indie-garage-level-1',
     '#d1ad6e'
   ) $$,
   'first claim atomically creates its project and claim'
+);
+select results_eq(
+  $$ select building_asset_id from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
+  array['indie-garage-level-1'::text],
+  'a founder can claim a plot with the Indie Garage'
 );
 select results_eq(
   $$ select count(*) from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
@@ -120,6 +125,16 @@ select throws_ok(
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000003', true);
 select throws_ok(
   $$ select * from public.claim_plot(
+    '30000000-0000-4000-8000-000000000099', 'pioneer:jobs:north:03', 'Founder Three',
+    'Founder_Three', 'Unknown Building', 'https://unknown.example/', 'website',
+    'unknown-building-level-1', '#7fa87a'
+  ) $$,
+  'P0001',
+  'invalid_building',
+  'unknown building assets remain rejected'
+);
+select throws_ok(
+  $$ select * from public.claim_plot(
     '30000000-0000-4000-8000-000000000001', 'pioneer:hopper:south-outer:04', 'Founder Three',
     'Founder_Three', 'Inactive Project', 'https://inactive.example/', 'website',
     'startup-building-level-1', '#7fa87a'
@@ -145,9 +160,14 @@ select lives_ok(
   $$ select * from public.update_showcased_project(
     '10000000-0000-4000-8000-000000000001', 'Founder One Updated', 'Founder_One',
     'First Project Updated', 'https://updated.example/', 'chrome-extension',
-    'corner-studio-level-1', '#9b8ac4'
+    'indie-garage-level-1', '#9b8ac4'
   ) $$,
   'an owner can update the currently showcased project'
+);
+select results_eq(
+  $$ select building_asset_id from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
+  array['indie-garage-level-1'::text],
+  'an owner can update the showcased building to the Indie Garage'
 );
 select results_eq(
   $$ select project_name from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,

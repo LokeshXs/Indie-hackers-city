@@ -1,6 +1,6 @@
 export type ProjectType = "website" | "app" | "chrome-extension";
 export type StartupBuildingLevel = 1 | 2 | 3 | 4 | 5;
-export type StartupBuildingAssetId = "startup-building-level-1" | "corner-studio-level-1";
+export type StartupBuildingAssetId = "startup-building-level-1" | "corner-studio-level-1" | "indie-garage-level-1";
 
 export interface ClaimPlotDraft {
   plotId: string;
