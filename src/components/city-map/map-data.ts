@@ -345,6 +345,9 @@ const cityCentre: CityDistrict["entities"] = [
   { id: "roundabout", assetId: "roundabout", position: { x: 0, y: 0, z: 0 } },
   // Seated 0.01 into the island's 0.19 grass surface so the pad has no floating gap.
   { id: "launch-monument", assetId: "launch-monument", position: { x: 0, y: 0.18, z: 0 } },
+  // Authored in world coordinates around the origin: its pillars land in the four diagonal
+  // pockets between the ring and the avenue arms, so it must not be moved, scaled or rotated.
+  { id: "district-sign-gantry", assetId: "district-sign-gantry", position: { x: 0, y: 0, z: 0 } },
   ...createAvenueArm("west", true, -1),
   ...createAvenueArm("east", true, 1),
   ...createAvenueArm("north", false, -1),
