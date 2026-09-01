@@ -23,13 +23,16 @@ import { FounderProgressCard } from "./FounderProgressCard";
 import { ProjectCard } from "./ProjectCard";
 import styles from "./CityMap3D.module.css";
 
-/** Assets that skip the shadow pass. Palms are numerous and each is 3 meshes, so casting would
- * roughly double their draw calls for no gain — the shadow frustum doesn't reach them anyway.
- * The sign gantry is out of that frustum's reach too: it stands at ±7.6 while the light uses
- * three's default ±5 shadow camera, and toggling its castShadow changes nothing on screen. */
+/** Assets that skip the shadow pass. The avenue trees and lamps are numerous and multi-mesh, so
+ * casting would roughly double their draw calls for no gain — the shadow frustum doesn't reach
+ * them anyway, which is why each carries its own soil ring or paving pad for ground contact
+ * instead. The sign gantry is out of that frustum's reach too: it stands at ±7.6 while the light
+ * uses three's default ±5 shadow camera, and toggling its castShadow changes nothing on screen. */
 const NON_SHADOW_CASTING_ASSETS = new Set<CityAssetId>([
   "startup-building-level-1",
   "palm-tree",
+  "canopy-tree",
+  "street-lamp",
   "district-sign-gantry",
 ]);
 

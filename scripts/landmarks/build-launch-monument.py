@@ -104,8 +104,6 @@ def main():
     cream_light = material("Sunlit wall trim", (0.96, 0.84, 0.58))
     teal = material("Deep creator teal", (0.035, 0.24, 0.28))
     teal_mid = material("Storefront teal", (0.055, 0.39, 0.44))
-    yellow = material("Startup gold", (0.95, 0.55, 0.10))
-    glass = material("Warm blue glass", (0.08, 0.36, 0.48), roughness=0.22, metallic=0.08, emission=(0.05, 0.22, 0.30))
     # The rocket itself is the classic red-and-white toy scheme rather than the city's cream and
     # teal — a landmark should read as its own object. Still built with the same bevelled,
     # smooth-shaded kit so it sits in the same world.
@@ -165,7 +163,9 @@ def main():
             rotation=(0, 0, heading),
         )
 
-    # Hedge ring, benches and lamps — same shrub pattern as the building planters.
+    # Hedge ring and benches — same shrub pattern as the building planters. The island's lamps are
+    # not built here: they are street-lamp entities placed from map-data, so the whole city shares
+    # one lamp design.
     for index in range(10):
         angle = 2 * pi * index / 10
         cylinder_tone = (leaf_mid, leaf_dark, leaf_light)[index % 3]
@@ -203,13 +203,6 @@ def main():
                 0.03,
                 rotation=(0, 0, facing),
             )
-
-    for angle in (radians(140), radians(320)):
-        lx, ly = cos(angle) * 4.05, sin(angle) * 4.05
-        cylinder("lamp base", (lx, ly, 0.16), 0.20, 0.32, concrete, vertices=12)
-        cylinder("lamp post", (lx, ly, 1.20), 0.09, 2.10, teal, vertices=12)
-        cube("lamp head", (lx, ly, 2.38), (0.20, 0.20, 0.16), yellow, 0.06)
-        cube("lamp glow", (lx, ly, 2.24), (0.15, 0.15, 0.05), glass, 0.03)
 
     # The soft, rounded read of the whole kit comes from this pass.
     for obj in bpy.context.scene.objects:

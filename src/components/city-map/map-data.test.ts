@@ -9,11 +9,11 @@ describe("starter district", () => {
     expect(starterDistrict.plots).toHaveLength(64);
     expect(new Set(starterDistrict.plots.map((plot) => plot.id)).size).toBe(64);
     expect(starterDistrict.plots.every((plot) => /^pioneer:(jobs|lovelace|turing|hopper):(north|south|north-outer|south-outer):0[1-4]$/.test(plot.id))).toBe(true);
-    expect(starterDistrict.entities).toHaveLength(300);
+    expect(starterDistrict.entities).toHaveLength(318);
     expect(starterDistrict.entities.filter((entity) => entity.plotId)).toHaveLength(64);
     expect(starterDistrict.entities.filter((entity) => entity.interactive)).toHaveLength(64);
     expect(new Set(starterDistrict.entities.map((entity) => entity.assetId))).toEqual(
-      new Set(["map-base", "road-straight", "sidewalk-straight", "grass-plot", "driveway-straight", "roundabout", "palm-tree", "road-link", "launch-monument", "district-sign-gantry"]),
+      new Set(["map-base", "road-straight", "sidewalk-straight", "grass-plot", "driveway-straight", "roundabout", "palm-tree", "canopy-tree", "street-lamp", "road-link", "launch-monument", "district-sign-gantry"]),
     );
   });
 

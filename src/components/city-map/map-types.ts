@@ -7,6 +7,8 @@ export type CityAssetId =
   | "roundabout"
   | "road-link"
   | "palm-tree"
+  | "canopy-tree"
+  | "street-lamp"
   | "launch-monument"
   | "district-sign-gantry"
   | "startup-building-level-1"

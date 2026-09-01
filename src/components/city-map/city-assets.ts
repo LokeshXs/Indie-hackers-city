@@ -9,6 +9,8 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "roundabout": "/assets/city/v3/roundabout.glb",
   "road-link": "/assets/city/v3/road-link.glb",
   "palm-tree": "/assets/city/v3/trees/palm-tree.glb",
+  "canopy-tree": "/assets/city/v3/trees/canopy-tree.glb",
+  "street-lamp": "/assets/city/v3/props/street-lamp.glb",
   "launch-monument": "/assets/city/v3/landmarks/launch-monument.glb",
   "district-sign-gantry": "/assets/city/v3/landmarks/district-sign-gantry.glb",
   "startup-building-level-1": "/assets/city/v3/startup-building-level-1.glb",

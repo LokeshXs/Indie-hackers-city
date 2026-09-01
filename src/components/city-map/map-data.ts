@@ -225,13 +225,16 @@ const ROUNDABOUT_ARM_START = 8.4;
 const CITY_PAVED_HALF_X = 69.2;
 const CITY_PAVED_HALF_Z = 68.55;
 
-/** Palms are planted along each verge's centreline. Spacing leaves a gap between the ~3.2-radius
+/** Trees are planted along each verge's centreline. Spacing leaves a gap between the ~2.1-radius
  * crowns, and the offsets keep them clear of the roundabout and the block edges. */
-const PALM_SPACING = 18;
-const PALM_START_OFFSET = 4.5;
-const PALM_END_MARGIN = 2.3;
+const TREE_SPACING = 18;
+const TREE_START_OFFSET = 4.5;
+const TREE_END_MARGIN = 2.3;
 /** Verge grass tops out at ~0.107 (Y is never scaled), so this seats the trunk base in it. */
-const PALM_GROUND_Y = 0.10;
+const TREE_GROUND_Y = 0.10;
+/** Index from which an arm's trees switch to palms. The inner positions get canopy trees, and the
+ * outer ones running down to the shoreline stay palms so the island still reads as coastal. */
+const FIRST_PALM_INDEX = 2;
 
 /** Deterministic 0..1 from an integer seed. Integer math only — no Math.sin — so the value is
  * bit-identical on the server and in every browser, which matters because this module is
@@ -240,8 +243,8 @@ function seededUnit(seed: number): number {
   return ((Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0) % 1000) / 1000;
 }
 
-/** Spins and sizes each palm slightly so a row does not read as clones. */
-function palmVariation(seed: number): { rotationY: number; scale: number } {
+/** Spins and sizes each tree slightly so a row does not read as clones. */
+function treeVariation(seed: number): { rotationY: number; scale: number } {
   return {
     rotationY: seededUnit(seed) * Math.PI * 2,
     scale: 0.9 + seededUnit(seed + 101) * 0.2,
@@ -320,23 +323,49 @@ function createAvenueArm(
       // Pick a count from the target spacing, then distribute evenly across the span. Arms differ
       // slightly in length, so even distribution keeps every arm's end margin matching (and avoids
       // accumulating float drift that could drop the last palm).
-      const firstAlong = ROUNDABOUT_ARM_START + PALM_START_OFFSET;
-      const lastAlong = farEdge - PALM_END_MARGIN;
-      const gaps = Math.max(1, Math.round((lastAlong - firstAlong) / PALM_SPACING));
+      const firstAlong = ROUNDABOUT_ARM_START + TREE_START_OFFSET;
+      const lastAlong = farEdge - TREE_END_MARGIN;
+      const gaps = Math.max(1, Math.round((lastAlong - firstAlong) / TREE_SPACING));
       return Array.from({ length: gaps + 1 }, (_, index) => {
         const along = firstAlong + ((lastAlong - firstAlong) * index) / gaps;
-        const { rotationY: spin, scale } = palmVariation(armId.charCodeAt(0) * 1000 + (side + 1) * 100 + index);
+        const { rotationY: spin, scale } = treeVariation(armId.charCodeAt(0) * 1000 + (side + 1) * 100 + index);
+        const palm = index >= FIRST_PALM_INDEX;
         return {
-          id: `avenue-${armId}-palm-${side < 0 ? "a" : "b"}-${index}`,
-          assetId: "palm-tree" as const,
-          position: { ...at(direction * along, side * vergeCentre), y: PALM_GROUND_Y },
+          id: `avenue-${armId}-${palm ? "palm" : "tree"}-${side < 0 ? "a" : "b"}-${index}`,
+          assetId: palm ? ("palm-tree" as const) : ("canopy-tree" as const),
+          position: { ...at(direction * along, side * vergeCentre), y: TREE_GROUND_Y },
           rotationY: spin,
           scale,
         };
       });
     }),
+    // Lamps sit at the midpoints between consecutive trees, paired across both verges so each one
+    // faces a partner on the far side of the avenue. No spin or scale jitter, unlike the trees:
+    // street furniture should read as manufactured and identical, and the lamp is radially
+    // symmetric so a yaw would do nothing anyway.
+    ...[-1, 1].flatMap((side) => {
+      const firstAlong = ROUNDABOUT_ARM_START + TREE_START_OFFSET;
+      const lastAlong = farEdge - TREE_END_MARGIN;
+      const gaps = Math.max(1, Math.round((lastAlong - firstAlong) / TREE_SPACING));
+      const step = (lastAlong - firstAlong) / gaps;
+      return Array.from({ length: gaps }, (_, gap) => gap)
+        // The middle gap straddles the block connector: the verge grass is cut there and the link
+        // road runs straight down the verge centreline, so a lamp at that midpoint would stand in
+        // the asphalt with nothing under its pad. Filtering by distance rather than by index keeps
+        // this correct if the arm lengths or tree spacing ever change.
+        .filter((gap) => Math.abs(firstAlong + step * (gap + 0.5) - BLOCK_OFFSET) > LINK_GAP_HALF_WIDTH + 0.9)
+        .map((gap) => ({
+          id: `avenue-${armId}-lamp-${side < 0 ? "a" : "b"}-${gap}`,
+          assetId: "street-lamp" as const,
+          position: { ...at(direction * (firstAlong + step * (gap + 0.5)), side * vergeCentre), y: TREE_GROUND_Y },
+        }));
+    }),
   ];
 }
+
+/** The island lamps stand where the monument used to build its own, opposite the benches. */
+const ISLAND_LAMP_ANGLES = [140, 320];
+const ISLAND_LAMP_RADIUS = 3.70;
 
 const cityCentre: CityDistrict["entities"] = [
   // Single merged ground plate (native 50 x 30), sized so the shoreline overhangs its edge
@@ -348,6 +377,19 @@ const cityCentre: CityDistrict["entities"] = [
   // Authored in world coordinates around the origin: its pillars land in the four diagonal
   // pockets between the ring and the avenue arms, so it must not be moved, scaled or rotated.
   { id: "district-sign-gantry", assetId: "district-sign-gantry", position: { x: 0, y: 0, z: 0 } },
+  // The island's pair of lamps, opposite its benches. Pulled in from the benches' 4.05 to 3.70:
+  // the lamp's paving pad is wider than the post it replaced and would otherwise bite into the
+  // hedge ring, whose spheres reach 4.10 at their inner edge.
+  ...ISLAND_LAMP_ANGLES.map((degrees, index) => ({
+    id: `roundabout-lamp-${index + 1}`,
+    assetId: "street-lamp" as const,
+    position: {
+      x: Math.cos((degrees * Math.PI) / 180) * ISLAND_LAMP_RADIUS,
+      // Seated 0.01 into the island's 0.19 grass, matching the monument pad above it.
+      y: 0.18,
+      z: Math.sin((degrees * Math.PI) / 180) * ISLAND_LAMP_RADIUS,
+    },
+  })),
   ...createAvenueArm("west", true, -1),
   ...createAvenueArm("east", true, 1),
   ...createAvenueArm("north", false, -1),
