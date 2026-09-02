@@ -54,6 +54,8 @@ export type Database = {
       }
       plot_claims: {
         Row: {
+          billboard_background_color: string
+          billboard_text_color: string
           building_asset_id: string
           building_color: string
           building_level: number
@@ -65,6 +67,8 @@ export type Database = {
           xp_total: number
         }
         Insert: {
+          billboard_background_color?: string
+          billboard_text_color?: string
           building_asset_id: string
           building_color: string
           building_level?: number
@@ -76,6 +80,8 @@ export type Database = {
           xp_total?: number
         }
         Update: {
+          billboard_background_color?: string
+          billboard_text_color?: string
           building_asset_id?: string
           building_color?: string
           building_level?: number
@@ -264,6 +270,8 @@ export type Database = {
       city_developments: {
         Row: {
           avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
           building_asset_id: string | null
           building_color: string | null
           building_level: number | null
@@ -352,6 +360,8 @@ export type Database = {
           project_name: string
           project_uuid: string
           project_website_url: string
+          requested_billboard_background_color: string
+          requested_billboard_text_color: string
           requested_building_asset_id: string
           requested_building_color: string
           requested_plot_id: string
@@ -359,6 +369,8 @@ export type Database = {
         }
         Returns: {
           avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
           building_asset_id: string | null
           building_color: string | null
           building_level: number | null
@@ -387,6 +399,8 @@ export type Database = {
         Args: { requested_project_id: string }
         Returns: {
           avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
           building_asset_id: string | null
           building_color: string | null
           building_level: number | null
@@ -417,6 +431,8 @@ export type Database = {
           founder_x_handle: string
           project_name: string
           project_website_url: string
+          requested_billboard_background_color: string
+          requested_billboard_text_color: string
           requested_building_asset_id: string
           requested_building_color: string
           requested_project_id: string
@@ -424,6 +440,8 @@ export type Database = {
         }
         Returns: {
           avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
           building_asset_id: string | null
           building_color: string | null
           building_level: number | null

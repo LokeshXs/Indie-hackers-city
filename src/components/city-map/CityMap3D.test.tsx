@@ -51,6 +51,7 @@ const development = {
   project: { id: "123e4567-e89b-42d3-a456-426614174000", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "app" as const },
   founder: { fullName: "Lokesh Singh", xHandle: "lokesh_singh", avatarUrl: null },
   building: { level: 1 as const, assetId: "startup-building-level-1" as const, color: "#e2775c" },
+  billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
   progression: { xp: 0, buildingLevel: 1 as const, currentLevelXp: 0, nextLevelXp: 100 },
   claimedAt: "2026-08-30T00:00:00.000Z",
   updatedAt: "2026-08-30T00:00:00.000Z",
@@ -185,6 +186,10 @@ describe("plot claim modal", () => {
     await user.click(screen.getByRole("radio", { name: "App" }));
     expect(continueToColorButton).toBeEnabled();
     await user.click(continueToColorButton);
+
+    // Billboard step: the colors carry defaults, so it only has to be stepped through.
+    expect(screen.getByText("Design your billboard")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /continue/i }));
 
     const claimButton = screen.getByRole("button", { name: /claim my plot/i });
     expect(claimButton).toBeEnabled();

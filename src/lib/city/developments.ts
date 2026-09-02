@@ -1,4 +1,5 @@
 import type { Database } from "@/lib/supabase/database.types";
+import { DEFAULT_BILLBOARD_BACKGROUND_COLOR, DEFAULT_BILLBOARD_TEXT_COLOR } from "./constants";
 import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId, StartupBuildingLevel } from "./types";
 
 export type CityDevelopmentRow = Database["public"]["Views"]["city_developments"]["Row"];
@@ -28,6 +29,10 @@ export function serializeCityDevelopment(row: CityDevelopmentRow): CityDevelopme
       level: buildingLevel,
       assetId: row.building_asset_id as StartupBuildingAssetId,
       color: row.building_color!,
+    },
+    billboard: {
+      textColor: row.billboard_text_color ?? DEFAULT_BILLBOARD_TEXT_COLOR,
+      backgroundColor: row.billboard_background_color ?? DEFAULT_BILLBOARD_BACKGROUND_COLOR,
     },
     progression: {
       xp: row.xp_total ?? 0,

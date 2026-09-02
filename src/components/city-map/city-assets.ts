@@ -11,6 +11,7 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "palm-tree": "/assets/city/v3/trees/palm-tree.glb",
   "canopy-tree": "/assets/city/v3/trees/canopy-tree.glb",
   "street-lamp": "/assets/city/v3/props/street-lamp.glb",
+  "billboard": "/assets/city/v3/props/billboard.glb",
   "launch-monument": "/assets/city/v3/landmarks/launch-monument.glb",
   "district-sign-gantry": "/assets/city/v3/landmarks/district-sign-gantry.glb",
   "startup-building-level-1": "/assets/city/v3/startup-building-level-1.glb",
@@ -20,6 +21,10 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
 
 // Name of the mesh material representing each building's main wall surface,
 // verified against the exported glb material names — used to recolor buildings at runtime.
+/** Mesh material on the billboard whose map the runtime replaces with the painted product card.
+ * Verified against the exported glb material names. */
+export const BILLBOARD_FACE_MATERIAL = "Billboard Dynamic Face";
+
 export const BUILDING_WALL_MATERIAL: Partial<Record<CityAssetId, string>> = {
   "startup-building-level-1": "Warm cream walls",
   "corner-studio-level-1": "Warm studio cream",

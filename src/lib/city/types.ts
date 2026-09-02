@@ -39,6 +39,10 @@ export interface CityDevelopment {
     assetId: StartupBuildingAssetId;
     color: string;
   };
+  billboard: {
+    textColor: string;
+    backgroundColor: string;
+  };
   progression: {
     xp: number;
     buildingLevel: StartupBuildingLevel;

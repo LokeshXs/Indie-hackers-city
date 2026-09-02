@@ -34,6 +34,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     requested_project_type: validation.data.projectType,
     requested_building_asset_id: validation.data.buildingAssetId,
     requested_building_color: validation.data.buildingColor,
+    requested_billboard_text_color: validation.data.billboardTextColor,
+    requested_billboard_background_color: validation.data.billboardBackgroundColor,
   });
 
   if (result.error || !result.data?.[0]) {

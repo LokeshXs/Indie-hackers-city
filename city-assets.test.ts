@@ -26,6 +26,7 @@ describe("3D city asset kit", () => {
       "artwork/3d/v3/trees/palm-tree.blend",
       "artwork/3d/v3/trees/canopy-tree.blend",
       "artwork/3d/v3/props/street-lamp.blend",
+      "artwork/3d/v3/props/billboard.blend",
       "artwork/3d/v3/startup-building-level-1.blend",
       "artwork/3d/v3/corner-studio-level-1.blend",
       "artwork/3d/v3/indie-garage-level-1.blend",
