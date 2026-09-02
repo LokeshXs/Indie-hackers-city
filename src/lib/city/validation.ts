@@ -1,5 +1,6 @@
 import {
   BUILDING_COLORS,
+  HEX_COLOR_PATTERN,
   PROJECT_TYPES,
   STARTUP_BUILDING_ASSET_IDS,
   X_HANDLE_PATTERN,
@@ -14,6 +15,8 @@ export interface ValidatedProjectFields {
   projectType: ProjectType;
   buildingAssetId: StartupBuildingAssetId;
   buildingColor: string;
+  billboardTextColor: string;
+  billboardBackgroundColor: string;
 }
 
 export interface ValidationResult<T> {
@@ -51,6 +54,8 @@ export function validateProjectFormData(formData: FormData): ValidationResult<Va
   const projectType = formString(formData, "projectType");
   const buildingAssetId = formString(formData, "buildingAssetId");
   const buildingColor = formString(formData, "buildingColor").toLowerCase();
+  const billboardTextColor = formString(formData, "billboardTextColor").toLowerCase();
+  const billboardBackgroundColor = formString(formData, "billboardBackgroundColor").toLowerCase();
 
   if (!fullName || fullName.length > 60) return { error: "Enter a founder name of 60 characters or fewer." };
   if (!X_HANDLE_PATTERN.test(xHandle)) return { error: "Enter a valid X handle." };
@@ -59,6 +64,8 @@ export function validateProjectFormData(formData: FormData): ValidationResult<Va
   if (!(PROJECT_TYPES as readonly string[]).includes(projectType)) return { error: "Choose a valid project type." };
   if (!(STARTUP_BUILDING_ASSET_IDS as readonly string[]).includes(buildingAssetId)) return { error: "Choose a valid building." };
   if (!(BUILDING_COLORS as readonly string[]).includes(buildingColor)) return { error: "Choose a valid building color." };
+  if (!HEX_COLOR_PATTERN.test(billboardTextColor)) return { error: "Choose a valid billboard text color." };
+  if (!HEX_COLOR_PATTERN.test(billboardBackgroundColor)) return { error: "Choose a valid billboard background color." };
 
   return {
     data: {
@@ -69,6 +76,8 @@ export function validateProjectFormData(formData: FormData): ValidationResult<Va
       projectType: projectType as ProjectType,
       buildingAssetId: buildingAssetId as StartupBuildingAssetId,
       buildingColor,
+      billboardTextColor,
+      billboardBackgroundColor,
     },
   };
 }

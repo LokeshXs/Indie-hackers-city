@@ -10,10 +10,22 @@ function validFormData() {
   formData.set("projectType", "website");
   formData.set("buildingAssetId", "startup-building-level-1");
   formData.set("buildingColor", "#d1ad6e");
+  formData.set("billboardTextColor", "#f7e0a6");
+  formData.set("billboardBackgroundColor", "#1b3a4b");
   return formData;
 }
 
 describe("city project validation", () => {
+  it("requires both billboard colors to be six-digit hex", () => {
+    const formData = validFormData();
+    formData.set("billboardTextColor", "wheat");
+    expect(validateProjectFormData(formData).error).toBe("Choose a valid billboard text color.");
+
+    const uppercase = validFormData();
+    uppercase.set("billboardBackgroundColor", "#1B3A4B");
+    expect(validateProjectFormData(uppercase).data?.billboardBackgroundColor).toBe("#1b3a4b");
+  });
+
   it("normalizes valid HTTP URLs and rejects other protocols or credentials", () => {
     expect(normalizeWebsite("https://example.com/project")).toBe("https://example.com/project");
     expect(normalizeWebsite("ftp://example.com/project")).toBeNull();

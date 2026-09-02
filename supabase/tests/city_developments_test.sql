@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(66);
+select plan(68);
 
 select has_table('public', 'plots', 'plots table exists');
 select has_table('public', 'projects', 'projects table exists');
@@ -47,8 +47,8 @@ select ok(not has_table_privilege('anon', 'public.plot_xp_events', 'SELECT'), 'a
 select ok(not has_table_privilege('authenticated', 'public.plot_xp_events', 'INSERT'), 'authenticated clients cannot insert XP events');
 select ok(not has_table_privilege('authenticated', 'public.plot_xp_events', 'UPDATE'), 'authenticated clients cannot edit XP events');
 select ok(not has_table_privilege('authenticated', 'public.plot_xp_events', 'DELETE'), 'authenticated clients cannot delete XP events');
-select ok(has_function_privilege('authenticated', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'authenticated users can call claim RPC');
-select ok(not has_function_privilege('anon', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'anonymous users cannot call claim RPC');
+select ok(has_function_privilege('authenticated', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'authenticated users can call claim RPC');
+select ok(not has_function_privilege('anon', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'anonymous users cannot call claim RPC');
 select ok(not has_function_privilege('authenticated', 'public.award_plot_xp(uuid,integer,text,text,text,jsonb)', 'EXECUTE'), 'authenticated clients cannot award XP');
 select ok(not has_function_privilege('anon', 'public.award_plot_xp(uuid,integer,text,text,text,jsonb)', 'EXECUTE'), 'anonymous visitors cannot award XP');
 select ok(not has_function_privilege('authenticated', 'public.apply_plot_xp(uuid,integer,text,text,text,jsonb)', 'EXECUTE'), 'authenticated clients cannot apply XP directly');
@@ -75,7 +75,8 @@ select lives_ok(
     'https://one.example/',
     'website',
     'indie-garage-level-1',
-    '#d1ad6e'
+    '#d1ad6e',
+    '#f7e0a6', '#1b3a4b'
   ) $$,
   'first claim atomically creates its project and claim'
 );
@@ -103,7 +104,8 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '10000000-0000-4000-8000-000000000002', 'pioneer:jobs:north:02', 'Founder One',
     'Founder_One', 'Second Project', 'https://two.example/', 'app',
-    'corner-studio-level-1', '#e2775c'
+    'corner-studio-level-1', '#e2775c',
+    '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
   'user_already_has_plot',
@@ -115,7 +117,8 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '20000000-0000-4000-8000-000000000001', 'pioneer:jobs:north:01', 'Founder Two',
     'Founder_Two', 'Race Project', 'https://race.example/', 'website',
-    'startup-building-level-1', '#5fa8d3'
+    'startup-building-level-1', '#5fa8d3',
+    '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
   'plot_taken',
@@ -127,7 +130,8 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '30000000-0000-4000-8000-000000000099', 'pioneer:jobs:north:03', 'Founder Three',
     'Founder_Three', 'Unknown Building', 'https://unknown.example/', 'website',
-    'unknown-building-level-1', '#7fa87a'
+    'unknown-building-level-1', '#7fa87a',
+    '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
   'invalid_building',
@@ -135,9 +139,21 @@ select throws_ok(
 );
 select throws_ok(
   $$ select * from public.claim_plot(
+    '30000000-0000-4000-8000-000000000098', 'pioneer:jobs:north:03', 'Founder Three',
+    'Founder_Three', 'Bad Billboard', 'https://badboard.example/', 'website',
+    'startup-building-level-1', '#7fa87a',
+    'wheat', '#1b3a4b'
+  ) $$,
+  'P0001',
+  'invalid_building',
+  'billboard colors outside the hex format are rejected'
+);
+select throws_ok(
+  $$ select * from public.claim_plot(
     '30000000-0000-4000-8000-000000000001', 'pioneer:hopper:south-outer:04', 'Founder Three',
     'Founder_Three', 'Inactive Project', 'https://inactive.example/', 'website',
-    'startup-building-level-1', '#7fa87a'
+    'startup-building-level-1', '#7fa87a',
+    '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
   'inactive_plot',
@@ -160,7 +176,8 @@ select lives_ok(
   $$ select * from public.update_showcased_project(
     '10000000-0000-4000-8000-000000000001', 'Founder One Updated', 'Founder_One',
     'First Project Updated', 'https://updated.example/', 'chrome-extension',
-    'indie-garage-level-1', '#9b8ac4'
+    'indie-garage-level-1', '#9b8ac4',
+    '#f7e0a6', '#1b3a4b'
   ) $$,
   'an owner can update the currently showcased project'
 );
@@ -168,6 +185,12 @@ select results_eq(
   $$ select building_asset_id from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
   array['indie-garage-level-1'::text],
   'an owner can update the showcased building to the Indie Garage'
+);
+select results_eq(
+  $$ select billboard_text_color, billboard_background_color from public.city_developments
+     where owner_id = '00000000-0000-4000-8000-000000000001' $$,
+  $$ values ('#f7e0a6'::text, '#1b3a4b'::text) $$,
+  'billboard colors are exposed on the public projection'
 );
 select results_eq(
   $$ select project_name from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
@@ -189,7 +212,8 @@ select throws_ok(
   $$ select * from public.update_showcased_project(
     '10000000-0000-4000-8000-000000000099', 'Intruder', 'Founder_Two',
     'Stolen Project', 'https://stolen.example/', 'website',
-    'startup-building-level-1', '#d1ad6e'
+    'startup-building-level-1', '#d1ad6e',
+    '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
   'project_not_owned',

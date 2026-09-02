@@ -72,7 +72,7 @@
 .previewCornerTopLeft { top: 1.3rem; left: 1.3rem; border-width: 0.16rem 0 0 0.16rem; }
 .previewCornerTopRight { top: 1.3rem; right: 1.3rem; border-width: 0.16rem 0.16rem 0 0; }
 .previewInfo { position: absolute; z-index: 2; top: 2rem; left: 1.6rem; display: grid; gap: 0.55rem; max-width: 75%; }
-.previewBuildingName { color: #fff8dc; font-family: var(--font-serif, Georgia), serif; font-size: clamp(1.35rem, 2.4vw, 2rem); line-height: 1; text-shadow: 0 0.16rem 0.35rem rgb(3 24 25 / 55%); }
+.previewBuildingName { color: #fff8dc; font-size: clamp(1.35rem, 2.4vw, 2rem); font-weight: 800; line-height: 1; text-shadow: 0 0.16rem 0.35rem rgb(3 24 25 / 55%); }
 .previewAddress { display: flex; align-items: center; gap: 0.55rem; margin: 0; color: rgb(255 248 220 / 82%); font-size: 0.86rem; font-weight: 650; }
 .previewAddress span { color: #ffe6a0; font-size: 0.78rem; transform: rotate(45deg); }
 .previewAddress b { color: rgb(255 248 220 / 45%); }
@@ -127,6 +127,23 @@
 .projectTypes span { display: grid; min-height: 2.75rem; place-items: center; border: 0.12rem solid #d7c49a; border-radius: 0.72rem; background: #fffdf6; color: #7a6a4a; font-size: 0.7rem; font-weight: 800; text-align: center; transition: 140ms ease; }
 .projectTypes input:checked + span { border-color: #2ca89e; background: #e6f4ed; box-shadow: inset 0 -0.18rem 0 #b8ddd2; color: #176d6c; }
 .projectTypes input:focus-visible + span { outline: 3px solid #efb566; outline-offset: 2px; }
+.colorInput {
+  width: 100%;
+  min-height: 3.55rem;
+  border: 0.12rem solid #d7c49a;
+  border-radius: 0.65rem;
+  padding: 0.35rem;
+  background: #fffdf6;
+  box-shadow: inset 0 0.1rem 0.3rem rgb(139 90 47 / 10%);
+  cursor: pointer;
+}
+
+.colorInput:focus-visible {
+  border-color: #2ca89e;
+  outline: 3px solid #54b9af;
+  outline-offset: 2px;
+}
+
 .colorSwatches { display: flex; flex-wrap: wrap; gap: 0.7rem; padding-top: 0.2rem; }
 .colorSwatch { width: 2.7rem; height: 2.7rem; border: 0.16rem solid rgb(32 78 78 / 18%); border-radius: 50%; box-shadow: inset 0 0.1rem 0.2rem rgb(255 255 255 / 35%), 0 0.18rem 0.4rem rgb(32 78 78 / 18%); cursor: pointer; transition: transform 120ms ease, box-shadow 120ms ease; }
 .colorSwatch:hover { transform: translateY(-2px); }

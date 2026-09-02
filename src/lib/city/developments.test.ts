@@ -5,6 +5,8 @@ import { cityDevelopmentRecord, serializeCityDevelopment } from "./developments"
 function developmentRow(overrides: Partial<CityDevelopmentRow> = {}): CityDevelopmentRow {
   return {
     avatar_url: null,
+    billboard_background_color: "#1b3a4b",
+    billboard_text_color: "#f7e0a6",
     building_asset_id: "startup-building-level-1",
     building_color: "#d1ad6e",
     building_level: 1,

@@ -30,3 +30,9 @@ export const BUILDING_COLOR_OPTIONS: ReadonlyArray<{ id: string; label: string; 
 ];
 
 export const X_HANDLE_PATTERN = /^@?[A-Za-z0-9_]{1,15}$/;
+
+/** Billboard colours are free-form rather than a palette, so the whole stack agrees on a format
+ * instead of an allow-list. Mirrors the `^#[0-9a-f]{6}$` check on plot_claims. */
+export const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
+export const DEFAULT_BILLBOARD_TEXT_COLOR = "#f7e0a6";
+export const DEFAULT_BILLBOARD_BACKGROUND_COLOR = "#1b3a4b";

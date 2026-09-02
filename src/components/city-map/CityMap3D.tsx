@@ -8,33 +8,27 @@ import * as THREE from "three";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getUserDisplayName } from "@/lib/auth/user-metadata";
-import { BUILDING_COLOR_OPTIONS, X_HANDLE_PATTERN } from "@/lib/city/constants";
+import {
+  BUILDING_COLOR_OPTIONS,
+  DEFAULT_BILLBOARD_BACKGROUND_COLOR,
+  DEFAULT_BILLBOARD_TEXT_COLOR,
+  X_HANDLE_PATTERN,
+} from "@/lib/city/constants";
 import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId } from "@/lib/city/types";
 import { useCityDevelopments } from "@/hooks/useCityDevelopments";
-import { BUILDING_WALL_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
+import { CITY_ASSET_PATHS } from "./city-assets";
+import { contrastRatio } from "./billboard-texture";
+import { BillboardPreview, BuildingPreview, ModelInstance, PreviewStage } from "./ModelPreview";
 import {
   createPlotDevelopmentEntities,
   getBuildingPlacement,
 } from "./plot-builds";
-import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
+import type { CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
 import { FounderProgressCard } from "./FounderProgressCard";
 import { ProjectCard } from "./ProjectCard";
 import styles from "./CityMap3D.module.css";
-
-/** Assets that skip the shadow pass. The avenue trees and lamps are numerous and multi-mesh, so
- * casting would roughly double their draw calls for no gain — the shadow frustum doesn't reach
- * them anyway, which is why each carries its own soil ring or paving pad for ground contact
- * instead. The sign gantry is out of that frustum's reach too: it stands at ±7.6 while the light
- * uses three's default ±5 shadow camera, and toggling its castShadow changes nothing on screen. */
-const NON_SHADOW_CASTING_ASSETS = new Set<CityAssetId>([
-  "startup-building-level-1",
-  "palm-tree",
-  "canopy-tree",
-  "street-lamp",
-  "district-sign-gantry",
-]);
 
 export interface CityMap3DProps {
   district: CityDistrict;
@@ -51,7 +45,7 @@ const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: 
 ];
 
 type ConstructionPhase = "blueprint" | "reveal" | "complete";
-type ClaimStep = "auth" | "founder" | "project" | "colors";
+type ClaimStep = "auth" | "founder" | "project" | "billboard" | "colors";
 interface ConstructionState {
   plotId: string;
   phase: ConstructionPhase;
@@ -72,55 +66,6 @@ function normalizeWebsite(value: string): string | null {
     return null;
   }
 }
-
-const ModelInstance = memo(function ModelInstance({
-  assetId,
-  buildingColor,
-}: Pick<CityEntity, "assetId" | "buildingColor">) {
-  const model = useGLTF(CITY_ASSET_PATHS[assetId]);
-  const instance = useMemo(() => {
-    const scene = model.scene.clone(true);
-    const wallMaterialName = BUILDING_WALL_MATERIAL[assetId];
-    scene.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(assetId);
-      object.receiveShadow = true;
-      if (
-        buildingColor
-        && wallMaterialName
-        && !Array.isArray(object.material)
-        && object.material.name === wallMaterialName
-      ) {
-        const material = object.material.clone();
-        if (material instanceof THREE.MeshStandardMaterial) material.color.set(buildingColor);
-        object.material = material;
-      }
-    });
-    return scene;
-  }, [assetId, buildingColor, model.scene]);
-
-  return <primitive object={instance} />;
-});
-
-const BuildingPreview = memo(function BuildingPreview({ assetId, buildingColor }: { assetId: StartupBuildingAssetId; buildingColor: string }) {
-  const buildingRef = useRef<THREE.Group>(null);
-
-  useFrame((_, delta) => {
-    if (buildingRef.current) buildingRef.current.rotation.y += delta * 0.24;
-  });
-
-  return (
-    <>
-      <mesh position={[0, -1.72, 0]} receiveShadow>
-        <cylinderGeometry args={[5.1, 5.35, 0.28, 48]} />
-        <meshStandardMaterial color="#c9e4df" roughness={0.78} />
-      </mesh>
-      <group ref={buildingRef} position={[0, -1.58, 0]} rotation={[0, -0.55, 0]}>
-        <ModelInstance assetId={assetId} buildingColor={buildingColor} />
-      </group>
-    </>
-  );
-});
 
 const PlotHighlight = memo(function PlotHighlight({ selected }: { selected: boolean }) {
   const materialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -337,7 +282,7 @@ const CityAsset = memo(function CityAsset({
       rotation={[0, entity.rotationY ?? 0, 0]}
       scale={scaleVector}
     >
-      <ModelInstance assetId={entity.assetId} buildingColor={entity.buildingColor} />
+      <ModelInstance assetId={entity.assetId} buildingColor={entity.buildingColor} billboard={entity.billboard} />
       {selectable && entity.plotId && (
         <mesh
           position={[0, 0.2, 0]}
@@ -361,7 +306,7 @@ const CityAsset = memo(function CityAsset({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       )}
-      {highlightable && (hovered || selected) && <PlotHighlight selected={selected} />}
+      {highlightable && !entity.suppressPlotHighlight && (hovered || selected) && <PlotHighlight selected={selected} />}
     </group>
   );
 });
@@ -517,6 +462,8 @@ export function CityMap3D({
   const [selectedBuildingAssetId, setSelectedBuildingAssetId] = useState<StartupBuildingAssetId>(BUILDING_OPTIONS[0].assetId);
   const [selectedBuildingColor, setSelectedBuildingColor] = useState<string>(BUILDING_COLOR_OPTIONS[0].hex);
   const [formStep, setFormStep] = useState<ClaimStep>("auth");
+  const [billboardTextColor, setBillboardTextColor] = useState(DEFAULT_BILLBOARD_TEXT_COLOR);
+  const [billboardBackgroundColor, setBillboardBackgroundColor] = useState(DEFAULT_BILLBOARD_BACKGROUND_COLOR);
   const [fullName, setFullName] = useState("");
   const [xHandle, setXHandle] = useState("");
   const [xHandleTouched, setXHandleTouched] = useState(false);
@@ -617,6 +564,15 @@ export function CityMap3D({
   const xHandleError = xHandleTouched && !xHandleIsValid ? "Use 1–15 letters, numbers, or underscores." : null;
   const canContinue = Boolean(fullName.trim()) && xHandleIsValid;
   const canClaimPlot = Boolean(projectName.trim() && normalizedWebsite);
+  const billboardCard = useMemo(
+    () => ({ name: projectName.trim() || "Your project", textColor: billboardTextColor, backgroundColor: billboardBackgroundColor }),
+    [projectName, billboardTextColor, billboardBackgroundColor],
+  );
+  // Free colours make an unreadable board possible. The 3D preview shows it immediately, so this
+  // nudges rather than blocks — it is their brand, after all.
+  const billboardContrastWarning = contrastRatio(billboardTextColor, billboardBackgroundColor) < 3
+    ? "These colors are close together — the name may be hard to read."
+    : null;
   const constructionPosition = useMemo<[number, number, number] | null>(() => {
     if (!construction) return null;
     const plotEntity = plotEntities.find((entity) => entity.plotId === construction.plotId);
@@ -733,6 +689,10 @@ export function CityMap3D({
     setProjectType("website");
     setWebsiteTouched(false);
     setSelectedBuildingColor(BUILDING_COLOR_OPTIONS[0].hex);
+    // Pre-existing gap: the building choice used to survive between claims.
+    setSelectedBuildingAssetId(BUILDING_OPTIONS[0].assetId);
+    setBillboardTextColor(DEFAULT_BILLBOARD_TEXT_COLOR);
+    setBillboardBackgroundColor(DEFAULT_BILLBOARD_BACKGROUND_COLOR);
     setAuthError(null);
     setClaimError(null);
     setIsStartingAuth(false);
@@ -830,6 +790,8 @@ export function CityMap3D({
     formData.set("projectType", projectType);
     formData.set("buildingAssetId", buildingAssetId);
     formData.set("buildingColor", selectedBuildingColor);
+    formData.set("billboardTextColor", billboardTextColor);
+    formData.set("billboardBackgroundColor", billboardBackgroundColor);
 
     setIsReserving(true);
     setReservedPlotId(plotId);
@@ -1092,18 +1054,13 @@ export function CityMap3D({
                   <strong className={styles.previewBuildingName}>{BUILDING_OPTIONS[selectedBuildingIndex].label}</strong>
                   <p className={styles.previewAddress}><span aria-hidden="true">◆</span>{selectedPlot.label}</p>
                 </div>
-                <Canvas
-                  className={styles.previewCanvas}
-                  shadows
-                  orthographic
-                  camera={{ position: [8, 6, 8], zoom: 48, near: 0.1, far: 100 }}
-                  dpr={[1, 1.5]}
-                >
-                  <ambientLight intensity={1.5} />
-                  <hemisphereLight args={["#fffdf2", "#91b9b2", 1.8]} />
-                  <directionalLight position={[-6, 9, 7]} intensity={2.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-                  <Suspense fallback={null}><BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} buildingColor={selectedBuildingColor} /></Suspense>
-                </Canvas>
+                <PreviewStage className={styles.previewCanvas}>
+                  {formStep === "billboard"
+                    ? <BillboardPreview card={billboardCard} />
+                    : <BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} buildingColor={selectedBuildingColor} />}
+                </PreviewStage>
+{formStep !== "billboard" && (
+                  <>
                 <button className={`${styles.previewArrow} ${styles.previewArrowLeft}`} type="button" aria-label="Previous building" onClick={() => browseBuilding(-1)}>‹</button>
                 <button className={`${styles.previewArrow} ${styles.previewArrowRight}`} type="button" aria-label="Next building" onClick={() => browseBuilding(1)}>›</button>
                 <div className={styles.previewDots} aria-label={`${selectedBuildingIndex + 1} of ${BUILDING_OPTIONS.length}`}>
@@ -1111,6 +1068,8 @@ export function CityMap3D({
                     <span key={option.assetId} className={option.assetId === selectedBuildingAssetId ? styles.previewDotActive : undefined} />
                   ))}
                 </div>
+                  </>
+                )}
               </div>
               <div className={styles.actionPane}>
                 <form className={styles.startupForm} noValidate aria-busy={isReserving} onSubmit={addBuilding}>
@@ -1177,7 +1136,24 @@ export function CityMap3D({
                       </fieldset>
                       <div className={styles.formActions}>
                         <button className={styles.backButton} type="button" onClick={() => setFormStep("founder")}>← Back</button>
-                        <button className={styles.addBuildingButton} type="button" disabled={!canClaimPlot} onClick={() => setFormStep("colors")}>Continue <span aria-hidden="true">→</span></button>
+                        <button className={styles.addBuildingButton} type="button" disabled={!canClaimPlot} onClick={() => setFormStep("billboard")}>Continue <span aria-hidden="true">→</span></button>
+                      </div>
+                    </div>
+                  ) : formStep === "billboard" ? (
+                    <div className={styles.formStep}>
+                      <div className={styles.stepIntro}><strong>Design your billboard</strong><span>It stands on your lawn showing your product name.</span></div>
+                      <div className={styles.claimField}>
+                        <label htmlFor="billboard-background">Billboard background</label>
+                        <input ref={firstFieldRef} id="billboard-background" type="color" className={styles.colorInput} value={billboardBackgroundColor} onChange={(event) => setBillboardBackgroundColor(event.target.value.toLowerCase())} />
+                      </div>
+                      <div className={styles.claimField}>
+                        <label htmlFor="billboard-text">Product name color</label>
+                        <input id="billboard-text" type="color" className={styles.colorInput} value={billboardTextColor} onChange={(event) => setBillboardTextColor(event.target.value.toLowerCase())} />
+                        {billboardContrastWarning && <small className={styles.claimError}>{billboardContrastWarning}</small>}
+                      </div>
+                      <div className={styles.formActions}>
+                        <button className={styles.backButton} type="button" onClick={() => setFormStep("project")}>← Back</button>
+                        <button className={styles.addBuildingButton} type="button" onClick={() => setFormStep("colors")}>Continue <span aria-hidden="true">→</span></button>
                       </div>
                     </div>
                   ) : (
@@ -1202,7 +1178,7 @@ export function CityMap3D({
                         </div>
                       </div>
                       <div className={styles.formActions}>
-                        <button className={styles.backButton} type="button" onClick={() => setFormStep("project")}>← Back</button>
+                        <button className={styles.backButton} type="button" onClick={() => setFormStep("billboard")}>← Back</button>
                         <button className={styles.addBuildingButton} type="submit" disabled={!canClaimPlot || isReserving}>{isReserving ? "Reserving plot…" : "Claim my plot"}</button>
                       </div>
                       {claimError ? <p className={styles.authError} role="alert">{claimError}</p> : null}
