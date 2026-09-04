@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAchievementType } from "@/lib/city/achievements";
+import { isAchievementType, loadFounderPortfolio } from "@/lib/city/achievements";
 import { errorResponse, rpcErrorCode } from "@/lib/city/api";
 import { serializeCityDevelopment } from "@/lib/city/developments";
 import type { StartupBuildingLevel } from "@/lib/city/types";
@@ -21,13 +21,16 @@ export async function POST(request: Request) {
   if (!isAchievementType(payload.achievementType)) {
     return errorResponse("invalid_request", "Choose a valid achievement.");
   }
-  if (typeof payload.projectId !== "string" || !isUuid(payload.projectId)) {
+  // Founder-scoped types carry no project, so an absent projectId is valid. record_achievement
+  // decides which types require one and raises invalid_achievement if it is missing.
+  const projectId = payload.projectId ?? null;
+  if (projectId !== null && (typeof projectId !== "string" || !isUuid(projectId))) {
     return errorResponse("invalid_request", "Choose a valid project.");
   }
 
   const result = await supabase.rpc("record_achievement", {
     requested_achievement_type: payload.achievementType,
-    requested_project_id: payload.projectId,
+    requested_project_id: projectId ?? undefined,
   });
 
   if (result.error || !result.data?.[0]) {
@@ -56,6 +59,8 @@ export async function POST(request: Request) {
     return errorResponse("unexpected_error", "The updated city record could not be loaded.");
   }
 
+  const serialized = serializeCityDevelopment(development.data);
+
   return NextResponse.json({
     achievement: {
       achievementType: awarded.achievement_type,
@@ -65,6 +70,8 @@ export async function POST(request: Request) {
       buildingLevel: awarded.building_level as StartupBuildingLevel,
       levelChanged: awarded.level_changed,
     },
-    development: serializeCityDevelopment(development.data),
+    development: serialized,
+    // Returned so the card can grey out the rungs it just claimed without waiting for a refetch.
+    ...(await loadFounderPortfolio(supabase, user.id, serialized.project.id)),
   });
 }

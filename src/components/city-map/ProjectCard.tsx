@@ -16,6 +16,8 @@ import {
 import { useFounderProjects } from "@/hooks/useFounderProjects";
 import { BUILDING_COLOR_OPTIONS, X_HANDLE_PATTERN } from "@/lib/city/constants";
 import type {
+  AchievementDefinition,
+  AchievementGroup,
   AchievementType,
   CityDevelopment,
   FounderProject,
@@ -32,19 +34,50 @@ const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   "chrome-extension": "Chrome extension",
 };
 
-/** Mirrors public.achievement_definitions. The XP values are display-only — the database reads its
- * own catalog when awarding, so a drift here cannot inflate anyone's score. */
-const ACHIEVEMENTS: ReadonlyArray<{
-  type: AchievementType;
+/** The three things a founder can log. Users and revenue are graded, so their entries open a rung
+ * picker; launching opens the new-project form instead. Labels and XP come from the database. */
+const ACHIEVEMENT_GROUPS: ReadonlyArray<{
+  group: AchievementGroup;
   label: string;
   description: string;
-  xp: number;
 }> = [
-  { type: "product_launched", label: "Launched a new product", description: "Add it to your portfolio.", xp: 50 },
-  { type: "gained_users", label: "Gained users", description: "Real people are using it.", xp: 25 },
-  { type: "first_dollar", label: "Earned first dollar", description: "It made money.", xp: 75 },
-  { type: "mrr_100", label: "Reached $100 MRR", description: "Recurring revenue, every month.", xp: 150 },
+  { group: "launch", label: "Launched a new product", description: "Add it to your portfolio." },
+  { group: "users", label: "Gained users", description: "Real people are using it." },
+  { group: "revenue", label: "Earned revenue", description: "It made money." },
 ];
+
+const XP_FORMATTER = new Intl.NumberFormat("en-US");
+
+/** The lowest rung that would still award something, for preselecting the picker. */
+function firstGrantableRung(
+  rungs: readonly AchievementDefinition[],
+  held: readonly AchievementType[],
+): AchievementType | null {
+  return rungs.find((rung) => !held.includes(rung.type))?.type ?? null;
+}
+
+/** Whether a group is claimed once per founder rather than once per project. */
+function isFounderScoped(catalog: readonly AchievementDefinition[], group: AchievementGroup) {
+  return catalog.some((entry) => entry.group === group && entry.scope === "founder");
+}
+
+/** Rungs of a group, lowest first. */
+function rungsOf(catalog: readonly AchievementDefinition[], group: AchievementGroup) {
+  return catalog.filter((entry) => entry.group === group).sort((a, b) => a.tier - b.tier);
+}
+
+/** What claiming `rung` would actually award: itself plus every rung below it the project does not
+ * already hold. Zero means there is nothing left to grant. */
+function grantableXp(
+  catalog: readonly AchievementDefinition[],
+  group: AchievementGroup,
+  tier: number,
+  held: readonly AchievementType[],
+): number {
+  return rungsOf(catalog, group)
+    .filter((entry) => entry.tier <= tier && !held.includes(entry.type))
+    .reduce((total, entry) => total + entry.xpReward, 0);
+}
 
 /** The screens the card swaps between. All of them share one shell and one preview pane. */
 type CardMode =
@@ -52,6 +85,7 @@ type CardMode =
   | "achievements"
   | "launch-form"
   | "pick-project"
+  | "achievement-tier"
   | "projects"
   | "project-edit"
   | "customise"
@@ -67,6 +101,7 @@ const PREVIEW_BY_MODE: Record<CardMode, PreviewKind> = {
   achievements: "plot",
   "launch-form": "plot",
   "pick-project": "plot",
+  "achievement-tier": "plot",
   projects: "plot",
   "project-edit": "plot",
   customise: "plot",
@@ -97,13 +132,15 @@ export function ProjectCard({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { projects, applyProjects } = useFounderProjects(
+  const { projects, catalog, founderAchievements, applyProjects } = useFounderProjects(
     isOwner ? development.ownerId : undefined,
     development.project.id,
   );
 
-  // Which achievement the pick-project screen is attaching, and which project project-edit is on.
-  const [pendingAchievement, setPendingAchievement] = useState<AchievementType | null>(null);
+  // The group being logged, the project it is being logged against, and the rung selected for it.
+  const [pendingGroup, setPendingGroup] = useState<AchievementGroup | null>(null);
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const [pendingTier, setPendingTier] = useState<AchievementType | null>(null);
   const [editingProject, setEditingProject] = useState<FounderProject | null>(null);
 
   const [fullName, setFullName] = useState(development.founder.fullName);
@@ -146,13 +183,14 @@ export function ProjectCard({
       const payload = await response.json() as {
         development?: CityDevelopment;
         projects?: FounderProject[];
+        founderAchievements?: AchievementType[];
         error?: { message?: string };
       };
       if (!response.ok || !payload.development) {
         throw new Error(payload.error?.message || "That didn’t work. Try again.");
       }
       onUpdated(payload.development);
-      if (payload.projects) applyProjects(payload.projects);
+      if (payload.projects) applyProjects(payload.projects, payload.founderAchievements);
       return payload as Record<string, unknown>;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "That didn’t work. Try again.");
@@ -187,15 +225,18 @@ export function ProjectCard({
     if (result) goTo("projects");
   }
 
-  async function logAchievement(projectId: string) {
-    if (!pendingAchievement) return;
+  async function logAchievement() {
+    if (!pendingTier) return;
     const result = await send("/api/achievements", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ achievementType: pendingAchievement, projectId }),
+      // Omitted entirely for founder-scoped rungs; the RPC decides which types need one.
+      body: JSON.stringify({ achievementType: pendingTier, projectId: pendingProjectId ?? undefined }),
     });
     if (result) {
-      setPendingAchievement(null);
+      setPendingGroup(null);
+      setPendingProjectId(null);
+      setPendingTier(null);
       goTo("view");
     }
   }
@@ -227,7 +268,7 @@ export function ProjectCard({
     setWebsiteUrl("");
     setProjectType("website");
     setShowcase(false);
-    setPendingAchievement("product_launched");
+    setPendingGroup("launch");
     goTo("launch-form");
   }
 
@@ -240,13 +281,31 @@ export function ProjectCard({
     goTo("project-edit");
   }
 
-  function chooseAchievement(type: AchievementType) {
-    if (type === "product_launched") {
+  function chooseGroup(group: AchievementGroup) {
+    if (group === "launch") {
       startLaunch();
       return;
     }
-    setPendingAchievement(type);
+    setPendingGroup(group);
+    setPendingProjectId(null);
+    setPendingTier(null);
+
+    if (isFounderScoped(catalog, group)) {
+      // Nothing to attach it to — revenue belongs to the founder, so skip straight to the rungs.
+      setPendingTier(firstGrantableRung(rungsOf(catalog, group), founderAchievements));
+      goTo("achievement-tier");
+      return;
+    }
+
     goTo("pick-project");
+  }
+
+  function chooseProject(projectId: string) {
+    const rungs = pendingGroup ? rungsOf(catalog, pendingGroup) : [];
+    const held = projects.find((project) => project.id === projectId)?.achievements ?? [];
+    setPendingProjectId(projectId);
+    setPendingTier(firstGrantableRung(rungs, held));
+    goTo("achievement-tier");
   }
 
   const previewKind = PREVIEW_BY_MODE[mode];
@@ -344,20 +403,30 @@ export function ProjectCard({
               </div>
               <ChoiceList
                 legend="Achievements"
-                items={ACHIEVEMENTS.map((achievement) => {
-                  // product_launched is claimed by adding a project, so it is never exhausted.
-                  const exhausted = achievement.type !== "product_launched"
-                    && projects.length > 0
-                    && projects.every((project) => project.achievements.includes(achievement.type));
+                items={ACHIEVEMENT_GROUPS.map((entry) => {
+                  const rungs = rungsOf(catalog, entry.group);
+                  const total = rungs.reduce((sum, rung) => sum + rung.xpReward, 0);
+                  // Launch is never exhausted — it is claimed by adding a project, not picking one.
+                  const exhausted = entry.group === "launch"
+                    ? false
+                    : isFounderScoped(catalog, entry.group)
+                      // Founder-scoped: held once and it is done, whatever the portfolio looks like.
+                      ? rungs.every((rung) => founderAchievements.includes(rung.type))
+                      : projects.length > 0
+                        && projects.every((project) => rungs.every((rung) => project.achievements.includes(rung.type)));
                   return {
-                    id: achievement.type,
-                    title: achievement.label,
-                    description: achievement.description,
-                    meta: exhausted ? "All logged" : `+${achievement.xp} XP`,
+                    id: entry.group,
+                    title: entry.label,
+                    description: entry.description,
+                    meta: exhausted
+                      ? "All logged"
+                      : rungs.length > 1
+                        ? `up to +${XP_FORMATTER.format(total)} XP`
+                        : `+${XP_FORMATTER.format(total)} XP`,
                     disabled: exhausted,
                   };
                 })}
-                onSelect={(id) => chooseAchievement(id as AchievementType)}
+                onSelect={(id) => chooseGroup(id as AchievementGroup)}
               />
               {error ? <Alert>{error}</Alert> : null}
               <div className={styles.formActions}>
@@ -369,7 +438,7 @@ export function ProjectCard({
             <form className={styles.pane} onSubmit={launchProduct} aria-busy={isSaving}>
               <div className={styles.stepIntro}>
                 <strong id="project-card-title">Launched a new product</strong>
-                <span>It joins your portfolio and earns 50 XP.</span>
+                <span>It joins your portfolio and earns {XP_FORMATTER.format(rungsOf(catalog, "launch")[0]?.xpReward ?? 0)} XP.</span>
               </div>
               <Field label="Product name" htmlFor="launch-name">
                 {(field) => <input {...field} ref={firstFieldRef} className={fieldControlClass} value={projectName} maxLength={40} required onChange={(event) => setProjectName(event.target.value)} />}
@@ -400,27 +469,88 @@ export function ProjectCard({
             <div className={styles.pane}>
               <div className={styles.stepIntro}>
                 <strong id="project-card-title">Which project?</strong>
-                <span>{ACHIEVEMENTS.find((item) => item.type === pendingAchievement)?.label}</span>
+                <span>{ACHIEVEMENT_GROUPS.find((item) => item.group === pendingGroup)?.label}</span>
               </div>
               <ChoiceList
                 legend="Your projects"
                 items={projects.map((project) => {
-                  const already = pendingAchievement !== null && project.achievements.includes(pendingAchievement);
+                  // Exhausted means every rung in the group is held, not just one type.
+                  const rungs = pendingGroup ? rungsOf(catalog, pendingGroup) : [];
+                  const already = rungs.length > 0
+                    && rungs.every((rung) => project.achievements.includes(rung.type));
                   return {
                     id: project.id,
                     title: project.name,
                     description: PROJECT_TYPE_LABELS[project.type],
-                    meta: already ? "Already logged" : undefined,
+                    meta: already ? "All logged" : undefined,
                     disabled: already || isSaving,
                   };
                 })}
-                onSelect={(id) => void logAchievement(id)}
+                onSelect={chooseProject}
               />
               {error ? <Alert>{error}</Alert> : null}
               <div className={styles.formActions}>
                 <Button variant="tertiary" disabled={isSaving} onClick={() => goTo("achievements")}>← Back</Button>
                 <span />
               </div>
+            </div>
+          ) : mode === "achievement-tier" ? (
+            <div className={styles.pane}>
+              <div className={styles.stepIntro}>
+                <strong id="project-card-title">How far has it got?</strong>
+                <span>
+                  {pendingGroup && isFounderScoped(catalog, pendingGroup)
+                    ? "Across everything you have built"
+                    : projects.find((project) => project.id === pendingProjectId)?.name}
+                </span>
+              </div>
+              {(() => {
+                const rungs = pendingGroup ? rungsOf(catalog, pendingGroup) : [];
+                const held = pendingGroup && isFounderScoped(catalog, pendingGroup)
+                  ? founderAchievements
+                  : projects.find((project) => project.id === pendingProjectId)?.achievements ?? [];
+                const selectable = rungs.filter(
+                  (rung) => grantableXp(catalog, rung.group, rung.tier, held) > 0,
+                );
+                return (
+                  <>
+                    <ChoiceList
+                      legend="Milestone"
+                      selectedId={pendingTier ?? ""}
+                      items={rungs.map((rung) => {
+                        // What this rung would grant right now: itself plus any rung below it that
+                        // the project does not already hold. Shrinks as lower rungs get logged.
+                        const grant = grantableXp(catalog, rung.group, rung.tier, held);
+                        return {
+                          id: rung.type,
+                          title: rung.label,
+                          description: rung.description,
+                          meta: grant > 0 ? `+${XP_FORMATTER.format(grant)} XP` : "Already logged",
+                          disabled: grant === 0 || isSaving,
+                        };
+                      })}
+                      onSelect={(id) => setPendingTier(id as AchievementType)}
+                    />
+                    {error ? <Alert>{error}</Alert> : null}
+                    <div className={styles.formActions}>
+                      <Button
+                        variant="tertiary"
+                        disabled={isSaving}
+                        onClick={() => goTo(pendingGroup && isFounderScoped(catalog, pendingGroup) ? "achievements" : "pick-project")}
+                      >
+                        ← Back
+                      </Button>
+                      <Button
+                        size="lg"
+                        disabled={isSaving || !pendingTier || selectable.length === 0}
+                        onClick={() => void logAchievement()}
+                      >
+                        {isSaving ? "Logging…" : "Log achievement"}
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           ) : mode === "projects" ? (
             <div className={styles.pane}>

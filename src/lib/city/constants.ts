@@ -39,9 +39,11 @@ export const DEFAULT_BILLBOARD_BACKGROUND_COLOR = "#1b3a4b";
 
 export const ACHIEVEMENT_TYPES = [
   "product_launched",
-  "gained_users",
-  "first_dollar",
-  "mrr_100",
+  "users_10",
+  "users_50",
+  "users_100",
+  "revenue_10",
+  "revenue_100",
 ] as const satisfies readonly AchievementType[];
 
 /** Mirrors max_projects_per_founder in public.create_project. Until achievement approval exists,

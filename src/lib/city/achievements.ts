@@ -3,6 +3,8 @@ import type { Database } from "@/lib/supabase/database.types";
 import { ACHIEVEMENT_TYPES } from "./constants";
 import type {
   AchievementDefinition,
+  AchievementGroup,
+  AchievementScope,
   AchievementType,
   FounderProject,
   ProjectType,
@@ -26,6 +28,9 @@ export function serializeAchievementDefinition(row: AchievementDefinitionRow): A
     description: row.description,
     xpReward: row.xp_reward,
     sortOrder: row.sort_order,
+    group: row.group_key as AchievementGroup,
+    scope: row.scope as AchievementScope,
+    tier: row.tier,
     requiresNewProject: row.requires_new_project,
   };
 }
@@ -48,6 +53,8 @@ export function serializeFounderProjects(
   const byProject = new Map<string, AchievementType[]>();
   for (const row of achievementRows) {
     if (!isAchievementType(row.achievement_type)) continue;
+    // A null project_id marks a founder-scoped award; those belong to the portfolio, not a project.
+    if (row.project_id === null) continue;
     const existing = byProject.get(row.project_id);
     if (existing) existing.push(row.achievement_type);
     else byProject.set(row.project_id, [row.achievement_type]);
@@ -64,8 +71,30 @@ export function serializeFounderProjects(
   }));
 }
 
+/** The achievement catalog, straight from the table that awards read. The UI used to mirror this by
+ * hand; now that a rung's reward feeds an on-screen "+80 XP" preview, a drifted copy would misstate
+ * amounts rather than just labels. */
+export async function loadAchievementCatalog(
+  supabase: SupabaseClient<Database>,
+): Promise<AchievementDefinition[]> {
+  const { data, error } = await supabase
+    .from("achievement_definitions")
+    .select("achievement_type, label, description, xp_reward, sort_order, group_key, tier, scope, requires_new_project");
+  if (error || !data) return [];
+  return serializeAchievementDefinitions(data as AchievementDefinitionRow[]);
+}
+
 /** Reads the founder's portfolio. Both tables are publicly readable, so this works from a server
  * route or the browser with the same code. */
+/** Founder-scoped awards: the rows that carry no project. */
+export function serializeFounderAchievements(
+  achievementRows: Pick<ProjectAchievementRow, "project_id" | "achievement_type">[],
+): AchievementType[] {
+  return achievementRows
+    .filter((row) => row.project_id === null && isAchievementType(row.achievement_type))
+    .map((row) => row.achievement_type as AchievementType);
+}
+
 export async function loadFounderProjects(
   supabase: SupabaseClient<Database>,
   ownerId: string,
@@ -85,4 +114,32 @@ export async function loadFounderProjects(
 
   if (projects.error || !projects.data) return [];
   return serializeFounderProjects(projects.data, achievements.data ?? [], showcasedProjectId);
+}
+
+/** The portfolio in one read: per-project awards and the founder-scoped ones, which live in the
+ * same table separated only by whether project_id is set. */
+export async function loadFounderPortfolio(
+  supabase: SupabaseClient<Database>,
+  ownerId: string,
+  showcasedProjectId: string,
+): Promise<{ projects: FounderProject[]; founderAchievements: AchievementType[] }> {
+  const [projects, achievements] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id, owner_id, name, website_url, project_type, created_at, updated_at")
+      .eq("owner_id", ownerId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("project_achievements")
+      .select("project_id, achievement_type")
+      .eq("owner_id", ownerId),
+  ]);
+
+  const rows = achievements.data ?? [];
+  return {
+    projects: projects.error || !projects.data
+      ? []
+      : serializeFounderProjects(projects.data, rows, showcasedProjectId),
+    founderAchievements: serializeFounderAchievements(rows),
+  };
 }

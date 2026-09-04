@@ -55,7 +55,18 @@ export interface CityDevelopment {
 
 export type CityDevelopmentRecord = Record<string, CityDevelopment>;
 
-export type AchievementType = "product_launched" | "gained_users" | "first_dollar" | "mrr_100";
+export type AchievementGroup = "launch" | "users" | "revenue";
+
+/** Revenue is claimed once per founder; launch and users once per project. */
+export type AchievementScope = "project" | "founder";
+
+export type AchievementType =
+  | "product_launched"
+  | "users_10"
+  | "users_50"
+  | "users_100"
+  | "revenue_10"
+  | "revenue_100";
 
 export interface AchievementDefinition {
   type: AchievementType;
@@ -63,6 +74,10 @@ export interface AchievementDefinition {
   description: string;
   xpReward: number;
   sortOrder: number;
+  group: AchievementGroup;
+  scope: AchievementScope;
+  /** Rung within the group. Claiming a rung also grants every rung below it. */
+  tier: number;
   /** product_launched is claimed by creating a project, not by picking one. */
   requiresNewProject: boolean;
 }

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CityDevelopment } from "@/lib/city/types";
 
 // The card renders the shared PreviewStage, so the 3D stack has to be stubbed the same way
@@ -15,6 +15,41 @@ vi.mock("@react-three/fiber", () => ({
 vi.mock("@react-three/drei", () => ({
   useGLTF: Object.assign(vi.fn(), { preload: vi.fn() }),
 }));
+
+const { mockRows } = vi.hoisted(() => ({
+  mockRows: {
+    projects: [] as Record<string, unknown>[],
+    project_achievements: [] as Record<string, unknown>[],
+    achievement_definitions: [] as Record<string, unknown>[],
+  },
+}));
+
+// useFounderProjects reads projects, awarded achievements and the catalog directly. Each select
+// resolves from the table it names, so a test only has to set mockRows.
+vi.mock("@/lib/supabase/config", () => ({ isSupabaseConfigured: () => true }));
+vi.mock("@/lib/supabase/client", () => ({
+  getSupabaseBrowserClient: () => ({
+    from: (table: keyof typeof mockRows) => {
+      const result = Promise.resolve({ data: mockRows[table] ?? [], error: null });
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => result,
+        then: result.then.bind(result),
+      };
+      return builder;
+    },
+  }),
+}));
+
+const CATALOG = [
+  { achievement_type: "product_launched", label: "Launched a new product", description: "Shipped it.", xp_reward: 100, sort_order: 1, group_key: "launch", tier: 1, scope: "project", requires_new_project: true },
+  { achievement_type: "users_10", label: "10 users", description: "Ten people.", xp_reward: 5, sort_order: 2, group_key: "users", tier: 1, scope: "project", requires_new_project: false },
+  { achievement_type: "users_50", label: "50 users", description: "Fifty people.", xp_reward: 25, sort_order: 3, group_key: "users", tier: 2, scope: "project", requires_new_project: false },
+  { achievement_type: "users_100", label: "100+ users", description: "A hundred or more.", xp_reward: 50, sort_order: 4, group_key: "users", tier: 3, scope: "project", requires_new_project: false },
+  { achievement_type: "revenue_10", label: "$10 earned", description: "First money.", xp_reward: 50, sort_order: 5, group_key: "revenue", tier: 1, scope: "founder", requires_new_project: false },
+  { achievement_type: "revenue_100", label: "$100+ earned", description: "A hundred dollars.", xp_reward: 150, sort_order: 6, group_key: "revenue", tier: 2, scope: "founder", requires_new_project: false },
+];
 
 const { ProjectCard } = await import("./ProjectCard");
 
@@ -167,5 +202,145 @@ describe("ProjectCard billboard editing", () => {
 
     expect(screen.queryByRole("button", { name: "Edit billboard" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit project" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ProjectCard achievements", () => {
+  beforeEach(() => {
+    mockRows.achievement_definitions = CATALOG;
+    mockRows.projects = [{
+      id: development.project.id,
+      owner_id: "user-1",
+      name: "Garageware",
+      website_url: "https://garageware.example/",
+      project_type: "app",
+      created_at: "2026-08-30T00:00:00.000Z",
+      updated_at: "2026-08-30T00:00:00.000Z",
+    }];
+    mockRows.project_achievements = [];
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function renderCard() {
+    return render(
+      <ProjectCard
+        development={development}
+        address="Pioneer District · Jobs Avenue · North Plot 01"
+        currentUserId="user-1"
+        onClose={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
+    );
+  }
+
+  it("offers the three groups with what each is worth", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+
+    // Launch is a single rung so it reads as an exact amount; the graded ones read as a ceiling.
+    expect(await screen.findByRole("button", { name: /Launched a new product.*\+100 XP/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gained users.*up to \+80 XP/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Earned revenue.*up to \+200 XP/ })).toBeInTheDocument();
+  });
+
+  it("shows every rung and what it would grant on an unlogged project", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+
+    // Each rung carries its own reward plus every rung beneath it.
+    expect(await screen.findByRole("radio", { name: /10 users.*\+5 XP/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /50 users.*\+30 XP/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /100\+ users.*\+80 XP/ })).toBeInTheDocument();
+  });
+
+  it("shrinks the preview for rungs already held and disables exhausted ones", async () => {
+    mockRows.project_achievements = [
+      { project_id: development.project.id, achievement_type: "users_10" },
+    ];
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+
+    // 10 is held, so it grants nothing and 100+ drops from 80 to 75.
+    expect(await screen.findByRole("radio", { name: /10 users.*Already logged/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /50 users.*\+25 XP/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /100\+ users.*\+75 XP/ })).toBeInTheDocument();
+  });
+
+  it("posts the selected rung and returns to the card", async () => {
+    const user = userEvent.setup();
+    const onUpdated = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ development, achievement: { xpAwarded: 80 }, projects: [] }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )));
+
+    render(
+      <ProjectCard
+        development={development}
+        address="Pioneer District · Jobs Avenue · North Plot 01"
+        currentUserId="user-1"
+        onClose={vi.fn()}
+        onUpdated={onUpdated}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+    await user.click(await screen.findByRole("radio", { name: /100\+ users/ }));
+    await user.click(screen.getByRole("button", { name: "Log achievement" }));
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
+    const [url, request] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("/api/achievements");
+    expect(JSON.parse(String(request?.body))).toEqual({
+      achievementType: "users_100",
+      projectId: development.project.id,
+    });
+  });
+
+  it("skips the project picker for revenue, which belongs to the founder", async () => {
+    const user = userEvent.setup();
+    const onUpdated = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ development, achievement: { xpAwarded: 200 }, projects: [], founderAchievements: [] }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )));
+
+    render(
+      <ProjectCard
+        development={development}
+        address="Pioneer District · Jobs Avenue · North Plot 01"
+        currentUserId="user-1"
+        onClose={vi.fn()}
+        onUpdated={onUpdated}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Earned revenue/ }));
+
+    // Straight to the rungs — no project list in between.
+    expect(await screen.findByRole("radio", { name: /\$100\+ earned.*\+200 XP/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Garageware/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /\$100\+ earned/ }));
+    await user.click(screen.getByRole("button", { name: "Log achievement" }));
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
+    const [, request] = vi.mocked(fetch).mock.calls[0];
+    // No projectId at all: the RPC decides which types need one.
+    expect(JSON.parse(String(request?.body))).toEqual({ achievementType: "revenue_100" });
   });
 });

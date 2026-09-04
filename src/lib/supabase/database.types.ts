@@ -39,27 +39,36 @@ export type Database = {
           achievement_type: string
           created_at: string
           description: string
+          group_key: string
           label: string
           requires_new_project: boolean
+          scope: string
           sort_order: number
+          tier: number
           xp_reward: number
         }
         Insert: {
           achievement_type: string
           created_at?: string
           description: string
+          group_key: string
           label: string
           requires_new_project?: boolean
+          scope: string
           sort_order: number
+          tier: number
           xp_reward: number
         }
         Update: {
           achievement_type?: string
           created_at?: string
           description?: string
+          group_key?: string
           label?: string
           requires_new_project?: boolean
+          scope?: string
           sort_order?: number
+          tier?: number
           xp_reward?: number
         }
         Relationships: []
@@ -264,7 +273,7 @@ export type Database = {
           event_key: string
           id: number
           owner_id: string
-          project_id: string
+          project_id: string | null
           status: string
           xp_awarded: number
         }
@@ -274,7 +283,7 @@ export type Database = {
           event_key: string
           id?: never
           owner_id: string
-          project_id: string
+          project_id?: string | null
           status?: string
           xp_awarded: number
         }
@@ -284,7 +293,7 @@ export type Database = {
           event_key?: string
           id?: never
           owner_id?: string
-          project_id?: string
+          project_id?: string | null
           status?: string
           xp_awarded?: number
         }
@@ -541,7 +550,7 @@ export type Database = {
       record_achievement: {
         Args: {
           requested_achievement_type: string
-          requested_project_id: string
+          requested_project_id?: string
         }
         Returns: {
           achievement_type: string

@@ -5,7 +5,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(63);
 
 -- ---------------------------------------------------------------- structure
 
@@ -13,10 +13,15 @@ select has_table('public', 'achievement_definitions', 'achievement catalog exist
 select has_table('public', 'project_achievements', 'awarded achievements table exists');
 
 select results_eq(
-  $$ select achievement_type, xp_reward from public.achievement_definitions order by sort_order $$,
-  $$ values ('product_launched'::text, 50), ('gained_users'::text, 25),
-            ('first_dollar'::text, 75), ('mrr_100'::text, 150) $$,
-  'the catalog holds the four achievements with their XP rewards'
+  $$ select achievement_type, group_key, tier, scope, xp_reward
+       from public.achievement_definitions order by sort_order $$,
+  $$ values ('product_launched'::text, 'launch'::text, 1::smallint, 'project'::text, 100),
+            ('users_10'::text,         'users'::text,   1::smallint, 'project'::text,   5),
+            ('users_50'::text,         'users'::text,   2::smallint, 'project'::text,  25),
+            ('users_100'::text,        'users'::text,   3::smallint, 'project'::text,  50),
+            ('revenue_10'::text,       'revenue'::text, 1::smallint, 'founder'::text,  50),
+            ('revenue_100'::text,      'revenue'::text, 2::smallint, 'founder'::text, 150) $$,
+  'revenue is founder-scoped; launch and users stay per project'
 );
 
 select hasnt_function('public', 'update_showcased_project', 'the superseded update RPC is gone');
@@ -79,13 +84,13 @@ select lives_ok(
 );
 select results_eq(
   $$ select xp_total from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  array[60],
+  array[110],
   'creating a project awards the product_launched reward'
 );
 select results_eq(
   $$ select achievement_type, xp_awarded, status from public.project_achievements
      where project_id = '10000000-0000-4000-8000-000000000002' $$,
-  $$ values ('product_launched'::text, 50, 'approved'::text) $$,
+  $$ values ('product_launched'::text, 100, 'approved'::text) $$,
   'the award is recorded against the new project'
 );
 reset role;
@@ -117,21 +122,30 @@ select lives_ok(
   'the original claim project can still be marked as launched'
 );
 
+-- 210 after the two launches, then revenue_100 drags revenue_10 up with it: 50 + 150. No project
+-- argument: revenue belongs to the founder, not to any one product.
 select results_eq(
-  $$ select xp_awarded, xp_total from public.record_achievement('mrr_100', '10000000-0000-4000-8000-000000000002') $$,
-  $$ values (150, 260) $$,
-  'an achievement awards exactly its catalog XP'
+  $$ select xp_awarded, xp_total from public.record_achievement('revenue_100') $$,
+  $$ values (200, 410) $$,
+  'claiming a rung also grants every rung below it in the same group'
+);
+select results_eq(
+  $$ select achievement_type, project_id from public.project_achievements
+      where owner_id = '00000000-0000-4000-8000-000000000001' and achievement_type like 'revenue_%'
+      order by achievement_type $$,
+  $$ values ('revenue_10'::text, null::uuid), ('revenue_100'::text, null::uuid) $$,
+  'founder-scoped awards attach to no project'
 );
 
 select throws_ok(
-  $$ select * from public.record_achievement('mrr_100', '10000000-0000-4000-8000-000000000002') $$,
+  $$ select * from public.record_achievement('revenue_100') $$,
   'P0001', 'achievement_already_claimed',
-  'the same achievement cannot be claimed twice for one project'
+  'the same achievement cannot be claimed twice'
 );
 reset role;
 select results_eq(
   $$ select count(*) from public.plot_xp_events
-     where event_key = 'achievement:mrr_100:10000000-0000-4000-8000-000000000002' $$,
+     where event_key = 'achievement:revenue_100:00000000-0000-4000-8000-000000000001' $$,
   array[1::bigint],
   'a rejected replay writes no second ledger event'
 );
@@ -139,13 +153,14 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 select results_eq(
   $$ select xp_total from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  array[260],
+  array[410],
   'a rejected replay awards no XP'
 );
 
-select lives_ok(
-  $$ select * from public.record_achievement('mrr_100', '10000000-0000-4000-8000-000000000001') $$,
-  'the same achievement is claimable again on a different project'
+select throws_ok(
+  $$ select * from public.record_achievement('revenue_10', '10000000-0000-4000-8000-000000000001') $$,
+  'P0001', 'achievement_already_claimed',
+  'a founder-scoped rung stays claimed across every project the founder owns'
 );
 
 select throws_ok(
@@ -153,6 +168,48 @@ select throws_ok(
   'P0001', 'invalid_achievement',
   'an unknown achievement type is rejected'
 );
+
+-- ---------------------------------------------------------------- cascading rungs
+
+-- Project one holds no users rungs yet, so 100+ users grants all three: 5 + 25 + 50.
+select results_eq(
+  $$ select xp_awarded, xp_total from public.record_achievement('users_100', '10000000-0000-4000-8000-000000000001') $$,
+  $$ values (80, 490) $$,
+  'the top users rung grants every rung beneath it'
+);
+select results_eq(
+  $$ select count(*) from public.project_achievements
+      where project_id = '10000000-0000-4000-8000-000000000001'
+        and achievement_type like 'users_%' $$,
+  array[3::bigint],
+  'all three users rungs are recorded, not just the one requested'
+);
+select throws_ok(
+  $$ select * from public.record_achievement('users_50', '10000000-0000-4000-8000-000000000001') $$,
+  'P0001', 'achievement_already_claimed',
+  'a lower rung is refused once the cascade has granted it'
+);
+
+-- The partial case: one rung already held, so only the two above it are granted.
+select results_eq(
+  $$ select xp_awarded, xp_total from public.record_achievement('users_10', '10000000-0000-4000-8000-000000000002') $$,
+  $$ values (5, 495) $$,
+  'a single low rung awards only itself'
+);
+select results_eq(
+  $$ select xp_awarded, xp_total from public.record_achievement('users_100', '10000000-0000-4000-8000-000000000002') $$,
+  $$ values (75, 570) $$,
+  'the cascade skips rungs already held and awards only the remainder'
+);
+reset role;
+select results_eq(
+  $$ select count(*) from public.plot_xp_events
+      where event_key like 'achievement:users_%:10000000-0000-4000-8000-000000000002' $$,
+  array[3::bigint],
+  'a partial cascade writes three ledger events for three rungs, never four'
+);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 
 -- ---------------------------------------------------------------- update_project
 
@@ -185,7 +242,7 @@ select results_eq(
 );
 select results_eq(
   $$ select xp_total, building_level from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values (410, 3::smallint) $$,
+  $$ values (570, 3::smallint) $$,
   'moving the billboard preserves plot progression'
 );
 
@@ -229,9 +286,9 @@ select throws_ok(
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
 select throws_ok(
-  $$ select * from public.record_achievement('first_dollar', '10000000-0000-4000-8000-000000000001') $$,
-  'P0001', 'project_not_owned',
-  'an achievement cannot be attached to another founder project'
+  $$ select * from public.record_achievement('users_10', '10000000-0000-4000-8000-000000000001') $$,
+  'P0001', 'claim_not_found',
+  'a user without a plot cannot log achievements at all'
 );
 select throws_ok(
   $$ select * from public.create_project(
@@ -245,6 +302,25 @@ select results_eq(
   array[0::bigint],
   'the failed create rolled back'
 );
+
+-- ---------------------------------------------------------------- founder scope is per founder
+
+-- Founder two claims their own plot, then the same revenue rung founder one already holds.
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
+select lives_ok(
+  $$ select * from public.claim_plot(
+    '10000000-0000-4000-8000-000000000200', 'pioneer:jobs:north:02',
+    'Founder Two', '@Founder_Two', 'Their Project', 'https://theirs.example/', 'website',
+    'startup-building-level-1', '#5fa8d3', '#f7e0a6', '#1b3a4b'
+  ) $$,
+  'founder two claims a plot'
+);
+select results_eq(
+  $$ select xp_awarded from public.record_achievement('revenue_100') $$,
+  array[200],
+  'founder-scoped rungs are per founder, not global to the city'
+);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 
 -- ---------------------------------------------------------------- cap and cardinality
 
