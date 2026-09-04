@@ -34,6 +34,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievement_definitions: {
+        Row: {
+          achievement_type: string
+          created_at: string
+          description: string
+          label: string
+          requires_new_project: boolean
+          sort_order: number
+          xp_reward: number
+        }
+        Insert: {
+          achievement_type: string
+          created_at?: string
+          description: string
+          label: string
+          requires_new_project?: boolean
+          sort_order: number
+          xp_reward: number
+        }
+        Update: {
+          achievement_type?: string
+          created_at?: string
+          description?: string
+          label?: string
+          requires_new_project?: boolean
+          sort_order?: number
+          xp_reward?: number
+        }
+        Relationships: []
+      }
       building_level_milestones: {
         Row: {
           created_at: string
@@ -227,6 +257,68 @@ export type Database = {
         }
         Relationships: []
       }
+      project_achievements: {
+        Row: {
+          achievement_type: string
+          created_at: string
+          event_key: string
+          id: number
+          owner_id: string
+          project_id: string
+          status: string
+          xp_awarded: number
+        }
+        Insert: {
+          achievement_type: string
+          created_at?: string
+          event_key: string
+          id?: never
+          owner_id: string
+          project_id: string
+          status?: string
+          xp_awarded: number
+        }
+        Update: {
+          achievement_type?: string
+          created_at?: string
+          event_key?: string
+          id?: never
+          owner_id?: string
+          project_id?: string
+          status?: string
+          xp_awarded?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_achievements_achievement_type_fkey"
+            columns: ["achievement_type"]
+            isOneToOne: false
+            referencedRelation: "achievement_definitions"
+            referencedColumns: ["achievement_type"]
+          },
+          {
+            foreignKeyName: "project_achievements_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "city_developments"
+            referencedColumns: ["owner_id"]
+          },
+          {
+            foreignKeyName: "project_achievements_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "plot_claims"
+            referencedColumns: ["owner_id"]
+          },
+          {
+            foreignKeyName: "project_achievements_project_owner_fk"
+            columns: ["project_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           created_at: string
@@ -330,6 +422,21 @@ export type Database = {
           xp_total: number
         }[]
       }
+      apply_project_achievement: {
+        Args: {
+          requested_achievement_type: string
+          target_owner_id: string
+          target_project_id: string
+        }
+        Returns: {
+          awarded_project_id: string
+          awarded_type: string
+          awarded_xp: number
+          resulting_building_level: number
+          resulting_level_changed: boolean
+          resulting_xp_total: number
+        }[]
+      }
       award_plot_xp: {
         Args: {
           requested_description?: string
@@ -395,6 +502,56 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      create_project: {
+        Args: {
+          project_name: string
+          project_uuid: string
+          project_website_url: string
+          requested_project_type: string
+          showcase_on_billboard?: boolean
+        }
+        Returns: {
+          avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
+          building_asset_id: string | null
+          building_color: string | null
+          building_level: number | null
+          claimed_at: string | null
+          current_level_xp: number | null
+          founder_name: string | null
+          next_level_xp: number | null
+          owner_id: string | null
+          plot_id: string | null
+          project_id: string | null
+          project_name: string | null
+          project_type: string | null
+          updated_at: string | null
+          website_url: string | null
+          x_handle: string | null
+          xp_total: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "city_developments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      record_achievement: {
+        Args: {
+          requested_achievement_type: string
+          requested_project_id: string
+        }
+        Returns: {
+          achievement_type: string
+          building_level: number
+          level_changed: boolean
+          project_id: string
+          xp_awarded: number
+          xp_total: number
+        }[]
+      }
       switch_claim_project: {
         Args: { requested_project_id: string }
         Returns: {
@@ -425,18 +582,47 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      update_showcased_project: {
+      update_plot_appearance: {
         Args: {
-          founder_full_name: string
-          founder_x_handle: string
-          project_name: string
-          project_website_url: string
           requested_billboard_background_color: string
           requested_billboard_text_color: string
-          requested_building_asset_id: string
           requested_building_color: string
+        }
+        Returns: {
+          avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
+          building_asset_id: string | null
+          building_color: string | null
+          building_level: number | null
+          claimed_at: string | null
+          current_level_xp: number | null
+          founder_name: string | null
+          next_level_xp: number | null
+          owner_id: string | null
+          plot_id: string | null
+          project_id: string | null
+          project_name: string | null
+          project_type: string | null
+          updated_at: string | null
+          website_url: string | null
+          x_handle: string | null
+          xp_total: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "city_developments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      update_project: {
+        Args: {
+          project_name: string
+          project_website_url: string
           requested_project_id: string
           requested_project_type: string
+          showcase_on_billboard: boolean
         }
         Returns: {
           avatar_url: string | null

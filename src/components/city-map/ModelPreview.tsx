@@ -4,9 +4,10 @@ import { Suspense, memo, useMemo, useRef, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import type { StartupBuildingAssetId } from "@/lib/city/types";
+import type { CityDevelopment, StartupBuildingAssetId } from "@/lib/city/types";
 import { BILLBOARD_FACE_MATERIAL, BUILDING_WALL_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
 import { useBillboardTexture } from "./billboard-texture";
+import { createPlotDevelopmentEntities } from "./plot-builds";
 import type { CityAssetId, CityEntity } from "./map-types";
 
 /** Assets that skip the shadow pass. The avenue trees, lamps and billboards are numerous and
@@ -22,6 +23,25 @@ const NON_SHADOW_CASTING_ASSETS = new Set<CityAssetId>([
   "billboard",
   "district-sign-gantry",
 ]);
+
+/** After the plot is normalised, the building's front points along +z. PreviewStage's camera sits at
+ * [8, 6, 8] — a 45 degree azimuth — so turning the plot by that same 45 degrees squares the front up
+ * with the camera. The small addition is the "slightly rotated" part: about ten degrees off
+ * dead-on, turning the plot so its right-hand side comes forward without hiding the entrance. */
+const PLOT_PREVIEW_YAW = Math.PI / 4 + 0.18;
+
+/** A lower camera than the stage default, so the plot is read from the front rather than looked
+ * down on. Elevation is atan(y / hypot(x, z)): the default [8, 6, 8] is ~28 degrees, this is ~14. */
+export const PLOT_PREVIEW_CAMERA: [number, number, number] = [8, 2.8, 8];
+
+/** The plot is ~11.4 units across against the ~5-unit subject the stage was framed for, so it is
+ * scaled to the camera rather than the camera being moved — the same trick BillboardPreview uses,
+ * and the reliable one, since Canvas reads `zoom` only on mount. Raising this crops further into the
+ * pad, which is wanted: the building is the subject, the grass is context. */
+const PLOT_PREVIEW_SCALE = 0.88;
+
+/** Drops the plot so the building, not the pad, sits in the middle of the pane. */
+const PLOT_PREVIEW_LIFT = -1.8;
 
 export const ModelInstance = memo(function ModelInstance({
   assetId,
@@ -105,21 +125,75 @@ export const BillboardPreview = memo(function BillboardPreview({ card }: { card:
   );
 });
 
+/** The founder's plot exactly as it stands on the map — grass pad, building and billboard — held
+ * still at a three-quarter angle.
+ *
+ * It composes the same pieces the map does rather than reproducing them: createPlotDevelopmentEntities
+ * supplies the building and billboard with the real offsets and scale, and ModelInstance is the same
+ * loader CityAsset uses. The grass pad is a separate static entity in the district, so it is passed
+ * in and rendered alongside them.
+ *
+ * There is deliberately no useFrame here. That absence is the feature. */
+export const PlotPreview = memo(function PlotPreview({
+  plotEntity,
+  development,
+}: {
+  plotEntity: CityEntity;
+  development: Pick<CityDevelopment, "plotId" | "building" | "project" | "billboard">;
+}) {
+  const entities = useMemo(
+    () => [plotEntity, ...createPlotDevelopmentEntities(plotEntity, development)],
+    [plotEntity, development],
+  );
+
+  return (
+    /* Two nested groups: the inner one brings the plot from its world position to the origin and
+       cancels its own facing, so north- and south-facing plots frame identically; the outer one
+       then applies the single presentation angle and drops the plot to sit under the camera. */
+    <group position={[0, PLOT_PREVIEW_LIFT, 0]}>
+      <group scale={PLOT_PREVIEW_SCALE} rotation={[0, PLOT_PREVIEW_YAW, 0]}>
+        <group
+          position={[-plotEntity.position.x, 0, -plotEntity.position.z]}
+          rotation={[0, -(plotEntity.rotationY ?? 0), 0]}
+        >
+        {entities.map((entity) => {
+          const scale = entity.scale ?? 1;
+          return (
+            <group
+              key={entity.id}
+              position={[entity.position.x, entity.position.y, entity.position.z]}
+              rotation={[0, entity.rotationY ?? 0, 0]}
+              scale={[scale, scale, scale]}
+            >
+              <ModelInstance
+                assetId={entity.assetId}
+                buildingColor={entity.buildingColor}
+                billboard={entity.billboard}
+              />
+            </group>
+          );
+          })}
+        </group>
+      </group>
+    </group>
+  );
+});
+
 /** The turntable both modals frame their preview in. The camera is a non-reactive prop, so `zoom`
  * is read once on mount — it sizes the framing to the pane, it does not animate. Previews that
  * don't fit are scaled to the camera, not the reverse. */
-export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, children }: { className?: string; zoom?: number; children: ReactNode }) {
+export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, shadows = true, cameraPosition = [8, 6, 8], children }: { className?: string; zoom?: number; shadows?: boolean; cameraPosition?: [number, number, number]; children: ReactNode }) {
   return (
     <Canvas
       className={className}
-      shadows
+      shadows={shadows}
       orthographic
-      camera={{ position: [8, 6, 8], zoom, near: 0.1, far: 100 }}
+      camera={{ position: cameraPosition, zoom, near: 0.1, far: 100 }}
       dpr={[1, 1.5]}
     >
       <ambientLight intensity={1.5} />
       <hemisphereLight args={["#fffdf2", "#91b9b2", 1.8]} />
-      <directionalLight position={[-6, 9, 7]} intensity={2.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      <directionalLight position={[-6, 9, 7]} intensity={2.8} castShadow={shadows} shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
       <Suspense fallback={null}>{children}</Suspense>
     </Canvas>
   );

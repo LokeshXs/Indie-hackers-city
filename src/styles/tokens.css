@@ -1,0 +1,116 @@
+/* Design tokens for the overlay layer (everything that is not the 3D canvas).
+ *
+ * Rule: no hex literal outside this file. Feature CSS modules read these vars.
+ * The 3D scene keeps its own colors in CityMap3D.tsx / ModelPreview.tsx, and
+ * BUILDING_COLORS in lib/city/constants.ts is user-selected building paint,
+ * not UI chrome — neither belongs here. */
+
+:root {
+  /* --- Base: city daylight ------------------------------------------ */
+  --ink: #163b3c;           /* headings, body copy */
+  --ink-soft: #35645e;      /* HUD body text */
+  --slate: #5c7a76;         /* secondary text, captions */
+  --paper: #fffaf0;         /* modal + card surfaces */
+  --paper-raised: var(--cream-100); /* inputs, wells */
+  --parchment: var(--cream-300); /* stamps, raised blocks */
+  --frame: var(--brown-500);   /* modal + sign frames */
+  --frame-deep: #5c3c1c;       /* frame underside */
+  --frame-ring: #e8d3ab;       /* frame outer ring */
+  --rule: #d3c49f;          /* dashed dividers, input borders */
+
+  /* --- Brand: three colors, in rank order ----------------------------
+   * 1. Teal   — primary. Every main action.
+   * 2. Brown  — secondary. Frames, and actions that support the primary one.
+   * 3. Cream  — tertiary. Neutral actions and surfaces.
+   * A control is painted in one of these three; nothing else is a button color. */
+
+  /* 1. Teal */
+  --teal-600: #176d6c;
+  --teal-500: #21857f;
+  --teal-400: #2ca89e;
+  --teal-300: #57c8bd;
+  --teal-edge: #155f5c;     /* the hard underside a pressed teal control drops onto */
+  --teal-wash: #e6f4ed;
+
+  /* 2. Brown — the same family as the frames, so a secondary control reads as
+   * cut from the city's woodwork. */
+  --brown-400: #a4703c;
+  --brown-500: #8a5a2f;
+  --brown-600: #74491f;
+  --brown-edge: #4b3018;
+  --brown-wash: #f6e8cf;
+
+  /* 3. Cream */
+  --cream-100: #fffdf6;
+  /* Cream as a foreground, on the city's dark teal surfaces — the loading screen, the modal preview
+   * pane, the update marker. Warmer than cream-100, and never a background. */
+  --cream-on-dark: #fff8dc;
+  --cream-200: #fff6e2;
+  --cream-300: #f3e6c8;
+  --cream-edge: #c5ae7d;
+
+  /* --- Semantic: each color means exactly one thing ------------------ */
+  --gold: #e5a846;          /* progression / XP ONLY */
+  --gold-deep: #b7792d;
+  --amber-ink: #7a5417;     /* warning copy ONLY — legible where --gold is not */
+  --rose: #c2415f;          /* errors ONLY */
+  --rose-wash: rgb(194 65 95 / 8%);
+
+  /* --- Type ---------------------------------------------------------- */
+  --font-sans: var(--font-overpass), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-overpass-mono), ui-monospace, Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.875rem;
+  --text-2xl: clamp(2.25rem, 4vw, 2.875rem);
+
+  /* Overpass is a variable font spanning 100-900. The old 650/750/850/950
+   * values were non-standard and silently snapped on the system stack. */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-black: 800;
+  --weight-heavy: 900;   /* display figures only */
+
+  /* --- Space: 4px base ----------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* --- Radius --------------------------------------------------------- */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* --- Elevation: the signature "hard bottom edge" press shadow ------- */
+  --lift-sm: 0 0.2rem 0;
+  --lift-md: 0 0.3rem 0;
+  --lift-lg: 0 0.35rem 0;
+  --shadow-panel: 0 0.7rem 2rem rgb(9 45 45 / 24%);
+  --shadow-modal: 0 2.6rem 5.5rem rgb(6 28 30 / 55%);
+
+  /* --- Focus ----------------------------------------------------------
+   * Ring + halo, not a flat outline. A single teal outline disappears on the
+   * teal preview pane (#2b9a92) where .previewArrow:focus-visible lives; the
+   * halo is what lets one token work on every background in the app. */
+  --ring: var(--teal-400);
+  --ring-halo: rgb(255 248 220 / 85%);
+  --focus: 0 0 0 3px var(--ring), 0 0 0 6px var(--ring-halo);
+
+  /* --- Motion ---------------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+}

@@ -1,0 +1,36 @@
+/* A stamped tick rather than a native box: the same pressed-into-paper well the fields use, with the
+ * teal accent filling it when set. */
+
+.wrap { display: flex; gap: var(--space-3); align-items: flex-start; cursor: pointer; }
+.wrap[aria-disabled="true"] { cursor: default; }
+
+.input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.box {
+  display: grid;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
+  place-items: center;
+  margin-top: 0.1rem;
+  border: 0.12rem solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  box-shadow: inset 0 0.1rem 0.3rem rgb(139 90 47 / 10%);
+  color: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.input:checked + .box { border-color: var(--teal-400); background: var(--teal-400); color: var(--cream-100); }
+.input:focus-visible + .box { outline: 0; box-shadow: var(--focus); }
+.input:disabled + .box { opacity: 0.55; }
+
+.text { display: grid; gap: 0.15rem; min-width: 0; }
+.label { color: var(--ink); font-size: var(--text-base); font-weight: var(--weight-bold); }
+.hint { color: var(--slate); font-size: var(--text-xs); }
+
+@media (prefers-reduced-motion: reduce) {
+  .box { transition: none; }
+}

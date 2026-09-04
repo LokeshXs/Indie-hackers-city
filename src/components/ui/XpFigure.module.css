@@ -1,0 +1,26 @@
+/* XP set as a figure, not an object: no container, no label, just the number in
+ * the one colour that means progression in this palette.
+ *
+ * It sits on the project title's baseline, so the two read as a single line of
+ * information — the name of the thing and how far it has come. Set a step above
+ * the title's own clamp so the figure, not the name, is what the eye lands on
+ * first. Gold-deep rather than gold: plain gold on cream is about 1.9:1, while
+ * this clears the 3:1 AA bar that large text is held to. */
+
+.figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.22rem;
+  margin: 0;
+  color: var(--gold-deep);
+  font-family: var(--font-mono);
+  font-size: clamp(2rem, 3.6vw, 2.75rem);
+  font-weight: var(--weight-heavy);
+  /* Fixed-width digits so the figure does not shift as XP ticks up. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.unit { font-size: 0.4em; letter-spacing: 0.08em; }

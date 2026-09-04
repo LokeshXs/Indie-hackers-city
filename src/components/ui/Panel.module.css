@@ -1,0 +1,28 @@
+/* The HUD surface: cream glass floating over the city. Four elements in CityMap3D already shared one
+ * rule for this; promoting it here brings the account popover and the founder card onto the same
+ * treatment instead of each re-deriving it. */
+
+.panel {
+  position: absolute;
+  z-index: var(--ui-panel-z, 2);
+  border: 1px solid color-mix(in srgb, var(--ink) 48%, transparent);
+  border-radius: var(--radius-lg);
+  background: rgb(255 249 228 / 92%);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(10px);
+  color: var(--ink-soft);
+}
+
+/* Placement. The HUD corners are fixed inset points, so they live here rather than at each call
+ * site — that is what keeps the four corners aligned with each other. */
+.topLeft { top: 1.25rem; left: 1.25rem; }
+.topRight { top: 1.25rem; right: 1.25rem; }
+.bottomRight { right: 1.25rem; bottom: 1.25rem; }
+.bottomCenter { bottom: 1.25rem; left: 50%; transform: translateX(-50%); }
+
+/* Readouts, not controls: they must never swallow a drag meant for the map. */
+.inert { pointer-events: none; }
+
+@media (max-width: 700px) {
+  .topLeft { top: 0.75rem; left: 0.75rem; }
+}

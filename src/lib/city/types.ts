@@ -54,3 +54,37 @@ export interface CityDevelopment {
 }
 
 export type CityDevelopmentRecord = Record<string, CityDevelopment>;
+
+export type AchievementType = "product_launched" | "gained_users" | "first_dollar" | "mrr_100";
+
+export interface AchievementDefinition {
+  type: AchievementType;
+  label: string;
+  description: string;
+  xpReward: number;
+  sortOrder: number;
+  /** product_launched is claimed by creating a project, not by picking one. */
+  requiresNewProject: boolean;
+}
+
+/** One row of the founder's portfolio. Assembled client-side from `projects` and
+ * `project_achievements`, which are both publicly readable. */
+export interface FounderProject {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  type: ProjectType;
+  /** True for the single project standing on the plot's billboard. */
+  isShowcased: boolean;
+  achievements: AchievementType[];
+  createdAt: string;
+}
+
+export interface AwardedAchievement {
+  achievementType: AchievementType;
+  projectId: string;
+  xpAwarded: number;
+  xpTotal: number;
+  buildingLevel: StartupBuildingLevel;
+  levelChanged: boolean;
+}

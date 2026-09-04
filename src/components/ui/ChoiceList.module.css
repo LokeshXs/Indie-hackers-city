@@ -1,0 +1,38 @@
+/* A stack of selectable rows — achievements to log, projects to attach one to. Each row is a slab
+ * like the buttons, but flat: it is a choice, not an action, so it has no pressed edge. */
+
+.list { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; }
+.legend { margin-bottom: var(--space-1); color: var(--ink); font-size: var(--text-base); font-weight: var(--weight-bold); }
+
+.row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  border: 0.12rem solid var(--rule);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, background var(--dur-fast) ease;
+}
+
+.row:hover:not(:disabled) { border-color: var(--teal-400); background: var(--teal-wash); }
+.row:focus-visible { outline: 0; box-shadow: var(--focus); }
+.row:disabled { cursor: not-allowed; opacity: 0.55; }
+.row[aria-checked="true"] { border-color: var(--teal-400); background: var(--teal-wash); }
+
+.body { display: grid; gap: 0.12rem; min-width: 0; flex: 1; }
+.title { font-size: var(--text-base); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.description { color: var(--slate); font-size: var(--text-xs); overflow-wrap: anywhere; }
+
+/* The reward, or the reason the row is unavailable. */
+.meta { flex: none; color: var(--gold-deep); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: var(--weight-black); }
+.metaDone { color: var(--slate); font-family: var(--font-sans); }
+
+@media (prefers-reduced-motion: reduce) {
+  .row { transition: none; }
+}

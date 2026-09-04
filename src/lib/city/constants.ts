@@ -1,4 +1,4 @@
-import type { ProjectType, StartupBuildingAssetId } from "./types";
+import type { ProjectType, StartupBuildingAssetId, AchievementType } from "./types";
 
 export const PROJECT_TYPES = ["website", "app", "chrome-extension"] as const satisfies readonly ProjectType[];
 export const STARTUP_BUILDING_ASSET_IDS = [
@@ -36,3 +36,14 @@ export const X_HANDLE_PATTERN = /^@?[A-Za-z0-9_]{1,15}$/;
 export const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 export const DEFAULT_BILLBOARD_TEXT_COLOR = "#f7e0a6";
 export const DEFAULT_BILLBOARD_BACKGROUND_COLOR = "#1b3a4b";
+
+export const ACHIEVEMENT_TYPES = [
+  "product_launched",
+  "gained_users",
+  "first_dollar",
+  "mrr_100",
+] as const satisfies readonly AchievementType[];
+
+/** Mirrors max_projects_per_founder in public.create_project. Until achievement approval exists,
+ * this cap is the ceiling on how much XP a founder can mint. */
+export const MAX_PROJECTS_PER_FOUNDER = 10;

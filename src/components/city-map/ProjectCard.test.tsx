@@ -42,40 +42,30 @@ function stubSuccessfulSave() {
   })));
 }
 
-describe("ProjectCard building selection", () => {
+describe("ProjectCard building", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("displays Garage and lets the owner persist it", async () => {
+  it("no longer lets the owner change the building shape", async () => {
     const user = userEvent.setup();
-    const onUpdated = vi.fn();
-    stubSuccessfulSave();
-
     render(
       <ProjectCard
-        development={{ ...development, building: { ...development.building, assetId: "startup-building-level-1" } }}
+        development={development}
         address="Pioneer District · Jobs Avenue · North Plot 01"
         currentUserId="user-1"
         onClose={vi.fn()}
-        onUpdated={onUpdated}
+        onUpdated={vi.fn()}
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Edit project" }));
-    const buildingSelect = screen.getByRole("combobox", { name: "Building" });
-    expect(screen.getByRole("option", { name: "Garage" })).toBeInTheDocument();
-    await user.selectOptions(buildingSelect, "indie-garage-level-1");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Customise" }));
+    await user.click(screen.getByRole("button", { name: /Building colour/ }));
 
-    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
-    const request = vi.mocked(fetch).mock.calls[0];
-    expect((request[1]?.body as FormData).get("buildingAssetId")).toBe("indie-garage-level-1");
+    // The shell is assigned at claim time; only its paint is editable now.
+    expect(screen.queryByRole("combobox", { name: "Building" })).not.toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Building colour" })).toBeInTheDocument();
   });
-});
 
-describe("ProjectCard billboard editing", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("edits the billboard in place and resends the untouched project fields", async () => {
+  it("saves the building colour without touching the project", async () => {
     const user = userEvent.setup();
     const onUpdated = vi.fn();
     stubSuccessfulSave();
@@ -90,23 +80,58 @@ describe("ProjectCard billboard editing", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Edit billboard" }));
-    // Same modal, no second dialog opened.
+    await user.click(screen.getByRole("button", { name: "Customise" }));
+    await user.click(screen.getByRole("button", { name: /Building colour/ }));
+    await user.click(screen.getByRole("radio", { name: "Sage Green" }));
+    await user.click(screen.getByRole("button", { name: "Save colour" }));
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
+    const [url, request] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("/api/plot-claim/appearance");
+    const body = request?.body as FormData;
+    expect(body.get("buildingColor")).toBe("#7fa87a");
+    // The appearance route owns three fields and no project or founder data.
+    expect(body.get("projectName")).toBeNull();
+    expect(body.get("buildingAssetId")).toBeNull();
+  });
+});
+
+describe("ProjectCard billboard editing", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("edits the billboard in place and sends only the appearance fields", async () => {
+    const user = userEvent.setup();
+    const onUpdated = vi.fn();
+    stubSuccessfulSave();
+
+    render(
+      <ProjectCard
+        development={development}
+        address="Pioneer District · Jobs Avenue · North Plot 01"
+        currentUserId="user-1"
+        onClose={vi.fn()}
+        onUpdated={onUpdated}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Customise" }));
+    await user.click(screen.getByRole("button", { name: /Billboard design/ }));
+    // Same modal throughout; no second dialog is opened.
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    expect(screen.getByText("Design your billboard")).toBeInTheDocument();
 
     // A color input has no text to type into; the picker commits through a change event.
     fireEvent.change(screen.getByLabelText("Billboard background"), { target: { value: "#102030" } });
     await user.click(screen.getByRole("button", { name: "Save billboard" }));
 
     await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
-    const body = vi.mocked(fetch).mock.calls[0][1]?.body as FormData;
+    const [url, request] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("/api/plot-claim/appearance");
+    const body = request?.body as FormData;
     expect(body.get("billboardBackgroundColor")).toBe("#102030");
-    // The RPC replaces the whole project, so a billboard-only save still carries everything else.
     expect(body.get("billboardTextColor")).toBe("#f7e0a6");
-    expect(body.get("buildingAssetId")).toBe("indie-garage-level-1");
-    expect(body.get("fullName")).toBe("Ada Founder");
-    expect(body.get("projectName")).toBe("Garageware");
+    // The old ten-argument RPC forced a billboard save to resend the whole project. It no longer does.
+    expect(body.get("projectName")).toBeNull();
+    expect(body.get("fullName")).toBeNull();
   });
 
   it("warns about low contrast without blocking the save", async () => {
@@ -123,7 +148,8 @@ describe("ProjectCard billboard editing", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Edit billboard" }));
+    await user.click(screen.getByRole("button", { name: "Customise" }));
+    await user.click(screen.getByRole("button", { name: /Billboard design/ }));
     expect(screen.getByText(/hard to read/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save billboard" })).toBeEnabled();
   });

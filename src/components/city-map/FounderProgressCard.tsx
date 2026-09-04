@@ -1,6 +1,7 @@
 "use client";
 
 import type { RefObject } from "react";
+import { ProgressTrack } from "@/components/ui";
 import { getBuildingProgress } from "@/lib/city/progression";
 import type { CityDevelopment } from "@/lib/city/types";
 import styles from "./FounderProgressCard.module.css";
@@ -41,9 +42,7 @@ export function FounderProgressCard({
       </span>
       <span className={styles.xp}>{XP_FORMATTER.format(xp)} <small>XP</small></span>
       {progress.requiredWithinLevel !== null || progress.isMaximumLevel ? (
-        <span className={styles.track} aria-hidden="true">
-          <span style={{ width: `${progress.percentage}%` }} />
-        </span>
+        <ProgressTrack percentage={progress.percentage} label={`Level ${buildingLevel} progress`} />
       ) : null}
       {progressCopy ? <span className={styles.next}>{progressCopy}</span> : null}
       <span className={styles.action}>View my building <span aria-hidden="true">→</span></span>

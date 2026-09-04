@@ -173,18 +173,17 @@ values (
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
 select lives_ok(
-  $$ select * from public.update_showcased_project(
-    '10000000-0000-4000-8000-000000000001', 'Founder One Updated', 'Founder_One',
+  $$ select * from public.update_project(
+    '10000000-0000-4000-8000-000000000001',
     'First Project Updated', 'https://updated.example/', 'chrome-extension',
-    'indie-garage-level-1', '#9b8ac4',
-    '#f7e0a6', '#1b3a4b'
+    true
   ) $$,
   'an owner can update the currently showcased project'
 );
 select results_eq(
   $$ select building_asset_id from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
   array['indie-garage-level-1'::text],
-  'an owner can update the showcased building to the Indie Garage'
+  'the claimed building asset survives a project edit'
 );
 select results_eq(
   $$ select billboard_text_color, billboard_background_color from public.city_developments
@@ -209,11 +208,10 @@ select results_eq(
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000002', true);
 select throws_ok(
-  $$ select * from public.update_showcased_project(
-    '10000000-0000-4000-8000-000000000099', 'Intruder', 'Founder_Two',
+  $$ select * from public.update_project(
+    '10000000-0000-4000-8000-000000000099',
     'Stolen Project', 'https://stolen.example/', 'website',
-    'startup-building-level-1', '#d1ad6e',
-    '#f7e0a6', '#1b3a4b'
+    true
   ) $$,
   'P0001',
   'project_not_owned',

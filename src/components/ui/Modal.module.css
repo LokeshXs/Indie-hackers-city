@@ -1,0 +1,134 @@
+/* The toy-city frame: a thick brown border, a parchment ring outside it, and a
+ * hard underside shadow so it reads as a physical object sitting on the city.
+ *
+ * Per-call-site differences (width, stacking, pane ratios) arrive as inline
+ * custom properties rather than competing class rules — CSS Modules give no
+ * deterministic cross-file order under Next's chunking, so a feature module and
+ * this file must never set the same property on .panel. */
+
+.panel {
+  position: relative;
+  z-index: var(--ui-modal-z, 1);
+  width: var(--ui-modal-w, min(78rem, 100%));
+  border: 0.55rem solid var(--frame);
+  border-radius: var(--radius-xl);
+  background: var(--paper);
+  box-shadow:
+    0 0 0 0.3rem var(--frame-ring),
+    0 0.6rem 0 var(--frame-deep),
+    0 1.4rem 0 rgb(0 0 0 / 8%),
+    var(--shadow-modal);
+  color: var(--ink);
+  animation: panelIn 260ms var(--ease);
+}
+
+/* Full-bleed: the pane fills the frame edge to edge and owns its own padding. */
+.surface {
+  height: min(45rem, calc(100dvh - 3rem));
+  overflow: hidden;
+  padding: 0;
+}
+
+/* Padded centred column, for short alerts. */
+.panelLayout {
+  display: grid;
+  justify-items: center;
+  padding: var(--space-7) var(--space-6) var(--space-6);
+  text-align: center;
+}
+
+.close {
+  position: absolute;
+  z-index: 3;
+  top: 1.35rem;
+  right: 1.35rem;
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--parchment);
+  color: var(--slate);
+  font: inherit;
+  font-size: 1.55rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.close:hover { background: var(--teal-wash); color: var(--teal-600); }
+.close:focus-visible { outline: 0; box-shadow: var(--focus); }
+.close:disabled { opacity: 0.45; cursor: wait; }
+
+/* --- Two-pane surface ------------------------------------------------- */
+
+.split {
+  display: grid;
+  height: 100%;
+  grid-template-columns: var(--ui-modal-preview-col, minmax(0, 1.15fr))
+                         var(--ui-modal-action-col, minmax(22rem, 0.85fr));
+  overflow: hidden;
+}
+
+.preview {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle, rgb(255 255 255 / 12%) 1px, transparent 1.2px) 0 0 / 26px 26px,
+    radial-gradient(circle at 50% 40%, var(--teal-300) 0%, #2b9a92 42%, var(--teal-600) 76%, #125351 100%);
+}
+
+/* Soft glow behind the model, then a contact shadow beneath it. */
+.preview::before {
+  position: absolute;
+  inset: 7%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(221 255 242 / 22%), transparent 67%);
+  content: "";
+}
+
+.preview::after {
+  position: absolute;
+  z-index: 0;
+  right: 18%;
+  bottom: 11%;
+  left: 18%;
+  height: 13%;
+  border-radius: 50%;
+  background: rgb(7 49 49 / 32%);
+  filter: blur(1.4rem);
+  content: "";
+  pointer-events: none;
+}
+
+.pane {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 0.16rem dashed var(--rule);
+  background: linear-gradient(145deg, #eef8f2 0%, #fffdf4 68%);
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.94); }
+  60%  { opacity: 1; transform: translateY(-2px) scale(1.008); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 700px) {
+  .panel { border-width: 0.35rem; border-radius: var(--radius-lg); }
+  .surface { height: calc(100dvh - 1.3rem); }
+  .panelLayout { padding: var(--space-6) var(--space-4) var(--space-5); }
+  .close { top: 0.9rem; right: 0.9rem; }
+  .split { grid-template-columns: 1fr; grid-template-rows: minmax(19rem, 43dvh) minmax(0, 1fr); }
+  .pane { border-top: 1px solid #eadfc3; border-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .close { transition: none; }
+}

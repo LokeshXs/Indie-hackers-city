@@ -1,0 +1,137 @@
+/* Three paints, one press.
+ *
+ * Every control in the city is the same physical object: a slab sitting on a
+ * hard coloured edge that it drops onto when pressed. Only the paint changes —
+ * teal (primary), brown (secondary), cream (tertiary).
+ *
+ * Each variant declares --btn-edge, --btn-ambient and --btn-inset; the rest of
+ * the file reads those. That is what keeps the resting, hover and pressed states
+ * in agreement — a variant that changes colour on hover moves its edge with it
+ * instead of leaving a mismatched lip behind. Size sets --btn-lift, so a large
+ * slab sits on a deeper edge than a small one and drops exactly its own depth. */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-style: solid;
+  border-radius: var(--radius-md);
+  box-shadow: 0 var(--btn-lift) 0 var(--btn-edge), var(--btn-ambient), var(--btn-inset);
+  font: inherit;
+  font-weight: var(--weight-black);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter var(--dur-fast) ease, transform var(--dur-fast) ease,
+              box-shadow var(--dur-fast) ease, border-color var(--dur-fast) ease,
+              background var(--dur-fast) ease;
+}
+
+.button:hover:not(:disabled) { transform: translateY(-2px); }
+
+.button:active:not(:disabled) {
+  box-shadow: 0 0 0 var(--btn-edge), var(--btn-inset);
+  transform: translateY(var(--btn-lift));
+}
+
+.button:focus-visible { outline: 0; box-shadow: var(--focus); }
+.button:disabled { cursor: not-allowed; filter: saturate(0.7); }
+
+/* --- Size: sets the slab, its border, and how deep it sits ------------- */
+
+.sm {
+  --btn-lift: 0.2rem;
+  min-height: 2.5rem;
+  border-width: 0.1rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.default {
+  --btn-lift: 0.28rem;
+  min-height: 3.1rem;
+  border-width: 0.13rem;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+}
+
+.lg {
+  --btn-lift: 0.35rem;
+  min-height: 3.8rem;
+  border-width: 0.16rem;
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-md);
+}
+
+/* Square, for icon-only controls: camera buttons, carousel arrows. */
+.icon { padding: 0; aspect-ratio: 1; }
+.icon.sm { min-width: 2.5rem; }
+.icon.default { min-width: 3.1rem; font-size: var(--text-lg); }
+.icon.lg { min-width: 3.8rem; font-size: var(--text-xl); }
+
+.block { width: 100%; }
+
+/* --- Paint 1: teal, the primary action -------------------------------- */
+
+.primary {
+  --btn-edge: var(--teal-edge);
+  --btn-ambient: 0 0.8rem 1.5rem rgb(21 95 92 / 24%);
+  --btn-inset: inset 0 0 0 0.14rem rgb(255 253 243 / 25%);
+  border-color: var(--parchment);
+  background: linear-gradient(135deg, var(--teal-400), var(--teal-500));
+  color: var(--cream-100);
+}
+.primary:hover:not(:disabled) { filter: brightness(1.06) saturate(1.08); }
+.primary:disabled {
+  --btn-edge: #5c8d88;
+  --btn-ambient: 0 0 0 transparent;
+  border-color: rgb(243 230 200 / 60%);
+  background: #8dbbb5;
+  color: rgb(255 253 243 / 72%);
+}
+
+/* --- Paint 2: brown, cut from the city's woodwork ---------------------- */
+
+.secondary {
+  --btn-edge: var(--brown-edge);
+  --btn-ambient: 0 0.8rem 1.5rem rgb(75 48 24 / 22%);
+  --btn-inset: inset 0 0 0 0.14rem rgb(255 253 243 / 22%);
+  border-color: var(--parchment);
+  background: linear-gradient(135deg, var(--brown-400), var(--brown-500));
+  color: var(--cream-200);
+}
+.secondary:hover:not(:disabled) { filter: brightness(1.07) saturate(1.05); }
+.secondary:disabled {
+  --btn-edge: #6f5d4b;
+  --btn-ambient: 0 0 0 transparent;
+  border-color: rgb(243 230 200 / 60%);
+  background: #ab9179;
+  color: rgb(255 246 226 / 72%);
+}
+
+/* --- Paint 3: cream, for neutral actions ------------------------------ */
+
+.tertiary {
+  --btn-edge: var(--cream-edge);
+  --btn-ambient: 0 0.8rem 1.5rem rgb(32 78 78 / 12%);
+  --btn-inset: inset 0 0 0 0.14rem rgb(255 255 255 / 55%);
+  border-color: var(--rule);
+  background: linear-gradient(135deg, var(--cream-100), var(--cream-200));
+  color: var(--ink);
+}
+
+/* Hover moves the whole object to teal — border and the edge underneath it, so
+ * no tan lip is left showing. The edge stays a step darker than the border. */
+.tertiary:hover:not(:disabled) {
+  --btn-edge: var(--teal-500);
+  border-color: var(--teal-400);
+  filter: brightness(1.02);
+}
+
+.tertiary:disabled { opacity: 0.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .button { transition: none; }
+  .button:hover:not(:disabled), .button:active:not(:disabled) { transform: none; }
+}
