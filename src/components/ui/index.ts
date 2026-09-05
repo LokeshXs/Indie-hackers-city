@@ -6,7 +6,6 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from ".
 export { Field, fieldColorControlClass, fieldControlClass, type FieldProps } from "./Field";
 export { Modal, type ModalProps } from "./Modal";
 export { Panel, type PanelPlacement, type PanelProps } from "./Panel";
-export { ProgressTrack, type ProgressTrackProps } from "./ProgressTrack";
 export { VisuallyHidden, type VisuallyHiddenProps } from "./VisuallyHidden";
 export { Overlay, type OverlayContainment, type OverlayProps, type OverlayTone } from "./Overlay";
 export { SwatchGroup, type SwatchGroupProps, type SwatchOption } from "./SwatchGroup";

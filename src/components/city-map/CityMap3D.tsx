@@ -18,8 +18,9 @@ import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildi
 import { useCityDevelopments } from "@/hooks/useCityDevelopments";
 import { CITY_ASSET_PATHS } from "./city-assets";
 import { contrastRatio } from "./billboard-texture";
-import { BillboardPreview, BuildingPreview, ModelInstance, PreviewStage } from "./ModelPreview";
+import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
 import {
+  PLOT_BUILDING_SCALE,
   createPlotDevelopmentEntities,
   getBuildingPlacement,
 } from "./plot-builds";
@@ -27,6 +28,7 @@ import type { CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
 import { FounderProgressCard } from "./FounderProgressCard";
+import { RoofProps, type RoofPropPlacement } from "./RoofProps";
 import { ClaimSuccessOverlay } from "./ClaimSuccessOverlay";
 import { ProjectCard } from "./ProjectCard";
 import {
@@ -356,8 +358,10 @@ const Scene = memo(function Scene({
   construction,
   constructionPosition,
   focusedPlotId,
+  roofProps,
 }: {
   entities: CityEntity[];
+  roofProps: RoofPropPlacement[];
   selectedPlotId: string | null;
   hoveredPlotId: string | null;
   selectablePlotIds: Set<string>;
@@ -429,6 +433,19 @@ const Scene = memo(function Scene({
         mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }}
         touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
       />
+      <MarqueeDriver />
+      {/* Earned roof decoration, in a group carrying the building's own placement and scale so the
+          anchor coordinates apply directly and the props turn with it on reversed plots. */}
+      {roofProps.map(({ plotId, position, rotationY, development }) => (
+        <group
+          key={`${plotId}-roof`}
+          position={[position.x, position.y, position.z]}
+          rotation={[0, rotationY ?? 0, 0]}
+          scale={PLOT_BUILDING_SCALE}
+        >
+          <RoofProps development={development} />
+        </group>
+      ))}
       {entities.map((entity) => (
         <Suspense fallback={null} key={entity.id}>
           <CityAsset
@@ -548,6 +565,10 @@ export function CityMap3D({
     () => user ? Object.values(developments).find((development) => development.ownerId === user.id) : undefined,
     [developments, user],
   );
+  /** The founder's own plot, but only once auth has settled — three HUD elements key off it, and
+   * without the guard they would each flash for a moment at someone who turns out to be signed
+   * out. A single narrowed const rather than the condition repeated at each of them. */
+  const ownPlot = !isAuthLoading && isAuthenticated ? ownerDevelopment ?? null : null;
   const selectablePlotIds = useMemo(
     () => new Set(plotEntities.flatMap((entity) => entity.plotId ? [entity.plotId] : [])),
     [plotEntities],
@@ -570,6 +591,20 @@ export function CityMap3D({
   const sceneEntities = useMemo(
     () => [...district.entities, ...dynamicEntities],
     [district.entities, dynamicEntities],
+  );
+  const roofPropPlacements = useMemo<RoofPropPlacement[]>(
+    () => plotEntities.flatMap((plotEntity) => {
+      const development = plotEntity.plotId ? developments[plotEntity.plotId] : undefined;
+      if (!development || !plotEntity.plotId) return [];
+      const placement = getBuildingPlacement(plotEntity);
+      return [{
+        plotId: plotEntity.plotId,
+        position: placement.position,
+        rotationY: placement.rotationY,
+        development,
+      }];
+    }),
+    [plotEntities, developments],
   );
   const selectedPlot = district.plots.find((plot) => plot.id === selectedPlotId);
   const inspectedDevelopment = inspectedPlotId ? developments[inspectedPlotId] : undefined;
@@ -956,6 +991,7 @@ export function CityMap3D({
           <Suspense fallback={null}>
             <Scene
               entities={sceneEntities}
+              roofProps={roofPropPlacements}
               selectedPlotId={selectedPlotId}
               hoveredPlotId={hoveredPlotId}
               selectablePlotIds={selectablePlotIds}
@@ -977,15 +1013,15 @@ export function CityMap3D({
         <Button variant="secondary" size="sm" icon aria-label="Zoom in" onClick={() => zoomBy(3)}>+</Button>
         <Button variant="secondary" size="sm" icon aria-label="Reset camera" onClick={resetCamera}>⌂</Button>
       </Panel>
-      {!isAuthLoading && isAuthenticated && ownerDevelopment ? (
+      {ownPlot ? (
         <FounderProgressCard
-          development={ownerDevelopment}
+          development={ownPlot}
           buttonRef={founderProgressButtonRef}
           onViewBuilding={openOwnerProjectFromProgress}
         />
       ) : null}
       {hasPendingUpdates ? (
-        <aside className={`${styles.cityUpdateNotice} ${!isAuthLoading && isAuthenticated && ownerDevelopment ? styles.cityUpdateNoticeWithProgress : ""}`} aria-live="polite" aria-label="City updates available">
+        <aside className={`${styles.cityUpdateNotice} ${ownPlot ? styles.cityUpdateNoticeWithProgress : ""}`} aria-live="polite" aria-label="City updates available">
           <span className={styles.cityUpdateMarker} aria-hidden="true">◆</span>
           <div>
             <strong>New city activity</strong>
