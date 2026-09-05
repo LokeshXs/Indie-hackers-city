@@ -25,8 +25,8 @@ export interface LadderReward {
 
 export interface LadderEntry {
   threshold: number;
-  /** Absent until the reward is designed. Those entries exist so the timeline always has road
-   * ahead, and render as a sealed parcel whatever the founder's XP.
+  /** Absent until the reward is designed. Those entries exist so there is always road ahead, and
+   * anything showing them has to name the unnamed state itself.
    *
    * Passing one is not a broken promise: unlocks are derived from xp_total rather than stored, so a
    * founder already past the threshold receives the reward the moment it ships — no migration, no
@@ -63,7 +63,7 @@ export const LADDER: readonly LadderEntry[] = [
   { threshold: 850 },
 ];
 
-export const UNLOCK_THRESHOLDS = Object.fromEntries(
+const UNLOCK_THRESHOLDS = Object.fromEntries(
   LADDER.flatMap((entry) => (entry.reward ? [[entry.reward.key, entry.threshold]] : [])),
 ) as Record<UnlockKey, number>;
 
@@ -75,11 +75,6 @@ export function unlocksFor(xp: number): Unlocks {
     status: xp >= UNLOCK_THRESHOLDS.status,
     levelTwo: xp >= UNLOCK_THRESHOLDS.levelTwo,
   };
-}
-
-/** The next thing to earn, or null once the whole ladder is behind you. */
-export function nextEntry(xp: number): LadderEntry | null {
-  return LADDER.find((entry) => xp < entry.threshold) ?? null;
 }
 
 export interface RewardLeg {
@@ -126,71 +121,4 @@ export function currentLeg(xp: number, ladder: readonly LadderEntry[] = LADDER):
     // the bar rather than throwing. The clamp is the everyday one: negative xp.
     progress: span <= 0 ? 1 : Math.min(1, Math.max(0, (xp - from) / span)),
   };
-}
-
-/** How many entries a ladder view shows at once.
- *
- * `TIMELINE_WINDOW` and `timelineWindow` below currently have no UI consumer — the strip that used
- * them was removed, and its replacement has not been built yet. They are kept rather than deleted
- * because they are the pure, tested answer to "where on the ladder does this founder stand", which
- * any replacement needs first. `unlocksFor` is the live part of this module: RoofProps and
- * plot-builds derive real decorations from it. */
-export const TIMELINE_WINDOW = 5;
-
-export interface TimelineEntry extends LadderEntry {
-  earned: boolean;
-  /** The one the founder is working toward — exactly one entry per window, unless the ladder is
-   * entirely behind them. */
-  isNext: boolean;
-}
-
-export interface Timeline {
-  entries: TimelineEntry[];
-  /** 0-1 along the window's rail, for the marker and the filled portion. */
-  progress: number;
-  /** XP still needed for the next entry, or null once the ladder is complete. */
-  remaining: number | null;
-}
-
-/** A window of the ladder centred on where the founder stands.
- *
- * Keeping two earned entries behind them means the strip always shows something achieved — the
- * point of the thing is that rewards feel real, not hypothetical. The clamps handle both ends: a
- * new founder sees mostly parcels, one near the top sees mostly icons, and the window stays the
- * same size throughout so the layout never jumps. */
-export function timelineWindow(xp: number, ladder: readonly LadderEntry[] = LADDER): Timeline {
-  const nextIndex = ladder.findIndex((entry) => xp < entry.threshold);
-  const complete = nextIndex === -1;
-  const maxStart = Math.max(0, ladder.length - TIMELINE_WINDOW);
-  const start = complete ? maxStart : Math.min(Math.max(nextIndex - 2, 0), maxStart);
-
-  const entries = ladder.slice(start, start + TIMELINE_WINDOW).map((entry, index) => ({
-    ...entry,
-    earned: xp >= entry.threshold,
-    isNext: !complete && start + index === nextIndex,
-  }));
-
-  return {
-    entries,
-    progress: railProgress(xp, entries),
-    remaining: complete ? null : ladder[nextIndex].threshold - xp,
-  };
-}
-
-/** Where the marker sits along the window, in 0-1.
- *
- * Nodes are evenly spaced rather than to scale — the real gaps run 100, 240, 390, 490, and spacing
- * to scale would crush the early ones together — so the marker interpolates within whichever slot
- * the founder currently occupies. */
-function railProgress(xp: number, entries: readonly TimelineEntry[]): number {
-  if (entries.length === 0) return 0;
-  const step = 1 / (entries.length - 1 || 1);
-  const nextIndex = entries.findIndex((entry) => !entry.earned);
-  if (nextIndex === -1) return 1;
-  if (nextIndex === 0) return 0;
-
-  const from = entries[nextIndex - 1].threshold;
-  const to = entries[nextIndex].threshold;
-  const withinSlot = to === from ? 1 : (xp - from) / (to - from);
-  return Math.min(1, Math.max(0, (nextIndex - 1 + withinSlot) * step));
 }
