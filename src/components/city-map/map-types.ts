@@ -43,7 +43,7 @@ export interface CityEntity {
   scaleXZ?: { x: number; z: number };
   buildingColor?: string;
   /** Card content painted onto the billboard's face at runtime. */
-  billboard?: { name: string; textColor: string; backgroundColor: string };
+  billboard?: { name: string; textColor: string; backgroundColor: string; scrolling?: boolean };
   plotId?: string;
   interactive?: boolean;
   /** Set on assets that stand on a plot (building, billboard) rather than being the plot pad.

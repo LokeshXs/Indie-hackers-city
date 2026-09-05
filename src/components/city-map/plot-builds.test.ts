@@ -16,6 +16,8 @@ const development = (plotId: string, assetId: StartupBuildingAssetId = "startup-
   building: { level: 1 as const, assetId, color: "#d1ad6e" },
   project: { id: "p1", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "website" as const },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
+  // The board's scrolling flag is derived from XP, so the fixture has to carry progression.
+  progression: { xp: 10, buildingLevel: 1 as const, currentLevelXp: 0, nextLevelXp: 100 },
 });
 describe("Level 1 plot development", () => {
   it("places the universal building immediately on a north plot", () => {
@@ -100,7 +102,8 @@ describe("Level 1 plot development", () => {
       rotationY: undefined,
       plotId: "plot-north-1",
       suppressPlotHighlight: true,
-      billboard: { name: "Xenith", textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
+      // Below the 240 XP marquee unlock, so the board is static.
+      billboard: { name: "Xenith", textColor: "#f7e0a6", backgroundColor: "#1b3a4b", scrolling: false },
     });
   });
 
@@ -132,5 +135,14 @@ describe("Level 1 plot development", () => {
     // Both stand on the plot and share its id to stay clickable, but the building is scaled 1.4
     // and the billboard sits out in the yard, so either drawing the outline would misplace it.
     expect(entities.every((entity) => entity.suppressPlotHighlight)).toBe(true);
+  });
+
+  it("switches the billboard to a marquee once the 240 XP unlock is reached", () => {
+    const earned = {
+      ...development("plot-north-1"),
+      progression: { xp: 240, buildingLevel: 1 as const, currentLevelXp: 100, nextLevelXp: 300 },
+    };
+    const [, billboard] = createPlotDevelopmentEntities(plot(-7.90, undefined), earned);
+    expect(billboard.billboard?.scrolling).toBe(true);
   });
 });

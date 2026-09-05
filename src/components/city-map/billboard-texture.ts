@@ -14,6 +14,8 @@ export interface BillboardCard {
   name: string;
   textColor: string;
   backgroundColor: string;
+  /** Earned at 240 XP: the name travels across the board like a station departure display. */
+  scrolling?: boolean;
 }
 
 /** One grain tile, generated once and reused. Regenerating speckle per pixel on every colour
@@ -150,17 +152,56 @@ export function createBillboardTexture(card: BillboardCard): THREE.CanvasTexture
   return texture;
 }
 
+/** How many board-widths the scrolling canvas spans. The name is painted twice across it so the
+ * wrap point never shows a gap. */
+const MARQUEE_REPEATS = 2;
+
+/** Board-widths travelled per second. Slow enough to read at city zoom. */
+export const MARQUEE_SPEED = 0.14;
+
+/** A canvas twice the board's width, carrying the name at both halves.
+ *
+ * Scrolling is a UV offset on this, never a repaint: a claimed district is 64 boards, and redrawing
+ * even a handful of canvases every frame would cost more than the whole rest of the scene. */
+function createMarqueeTexture(card: BillboardCard): THREE.CanvasTexture | null {
+  const canvas = document.createElement("canvas");
+  canvas.width = CARD_WIDTH * MARQUEE_REPEATS;
+  canvas.height = CARD_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  for (let index = 0; index < MARQUEE_REPEATS; index += 1) {
+    ctx.save();
+    ctx.translate(CARD_WIDTH * index, 0);
+    drawBillboardCard(ctx, card);
+    ctx.restore();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
+  texture.anisotropy = 8;
+  // Repeat on U is what lets the offset run past 1 and wrap seamlessly.
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.repeat.set(1 / MARQUEE_REPEATS, 1);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 /** Memoises on the card content and disposes the texture it replaces. Passing `undefined` skips
  * the paint entirely: every entity in the city runs this hook, and only a handful are billboards. */
 export function useBillboardTexture(card: BillboardCard | undefined): THREE.CanvasTexture | null {
   const name = card?.name;
   const textColor = card?.textColor;
   const backgroundColor = card?.backgroundColor;
+  const scrolling = card?.scrolling ?? false;
   const texture = useMemo(
     () => (name !== undefined && textColor !== undefined && backgroundColor !== undefined
-      ? createBillboardTexture({ name, textColor, backgroundColor })
+      ? (scrolling
+        ? createMarqueeTexture({ name, textColor, backgroundColor })
+        : createBillboardTexture({ name, textColor, backgroundColor }))
       : null),
-    [name, textColor, backgroundColor],
+    [name, textColor, backgroundColor, scrolling],
   );
   useEffect(() => () => texture?.dispose(), [texture]);
   return texture;

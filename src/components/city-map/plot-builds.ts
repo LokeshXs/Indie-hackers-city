@@ -1,4 +1,5 @@
 import type { CityEntity, WorldPosition } from "./map-types";
+import { unlocksFor } from "@/lib/city/unlocks";
 import type { CityDevelopment } from "@/lib/city/types";
 
 export type { StartupBuildingAssetId } from "@/lib/city/types";
@@ -14,6 +15,9 @@ export function getBuildingPlacement(plotEntity: CityEntity): { position: WorldP
   };
 }
 
+/** The building's scale on its plot. Roof props ride the same group, so they share it. */
+export const PLOT_BUILDING_SCALE = 1.4;
+
 /** Sideways offset into the lawn pocket beside the 3.4-wide driveway, and forward into the front
  * yard. The building fills most of the 11.4 x 10.3 plot at scale 1.4, so the pockets either side
  * of the drive are the only free ground: 4.0 wide, and 2.3 deep even for the deepest building. */
@@ -22,7 +26,7 @@ const BILLBOARD_YARD_OFFSET = 3.9;
 
 export function createPlotDevelopmentEntities(
   plotEntity: CityEntity,
-  development: Pick<CityDevelopment, "plotId" | "building" | "project" | "billboard">,
+  development: Pick<CityDevelopment, "plotId" | "building" | "project" | "billboard" | "progression">,
 ): CityEntity[] {
   if (!plotEntity.plotId) return [];
 
@@ -34,7 +38,7 @@ export function createPlotDevelopmentEntities(
     assetId,
     position: placement.position,
     rotationY: placement.rotationY,
-    scale: 1.4,
+    scale: PLOT_BUILDING_SCALE,
     buildingColor: development.building.color,
     plotId: development.plotId,
     interactive: true,
@@ -58,6 +62,8 @@ export function createPlotDevelopmentEntities(
       name: development.project.name,
       textColor: development.billboard.textColor,
       backgroundColor: development.billboard.backgroundColor,
+      // Earned at 240 XP. Derived rather than stored, like every other unlock.
+      scrolling: unlocksFor(development.progression.xp).marquee,
     },
   }];
 }
