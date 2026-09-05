@@ -1,0 +1,90 @@
+/* The deed of claim.
+ *
+ * The city's whole vocabulary is municipal — plots, permits, districts, records — so a claim
+ * produces a document rather than a success dialog. That is why there is no check badge here: the
+ * seal is what says "this happened", and it says it in the product's own language.
+ *
+ * Parchment stock, a ruled record of the four facts, and a pressed stamp. */
+
+.deed {
+  position: relative;
+  width: min(34rem, 100%);
+  overflow: hidden;
+  border: 0.5rem solid var(--frame);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  background:
+    repeating-linear-gradient(0deg, rgb(139 90 47 / 3%) 0 1px, transparent 1px 3px),
+    linear-gradient(160deg, var(--cream-100) 0%, #fdf3d6 100%);
+  box-shadow:
+    0 0 0 0.28rem var(--frame-ring),
+    0 0.55rem 0 var(--frame-deep),
+    0 1.2rem 0 rgb(0 0 0 / 8%),
+    0 2rem 5rem rgb(8 43 44 / 45%);
+  animation: deedIn 420ms cubic-bezier(0.15, 0.9, 0.25, 1.2);
+}
+
+/* A printed rule inset from the frame, the way a certificate is bordered. */
+.deed::before {
+  position: absolute;
+  inset: 0.55rem;
+  border: 0.1rem dashed rgb(183 121 45 / 40%);
+  border-radius: var(--radius-lg);
+  content: "";
+  pointer-events: none;
+}
+
+.masthead { position: relative; z-index: 1; text-align: center; }
+.district { margin: 0; color: var(--gold-deep); font-size: var(--text-2xs); font-weight: var(--weight-black); letter-spacing: 0.18em; text-transform: uppercase; }
+.title { margin: var(--space-1) 0 0; color: var(--ink); font-size: var(--text-lg); font-weight: var(--weight-heavy); letter-spacing: 0.02em; }
+.rule { margin: var(--space-4) 0 var(--space-3); border: 0; border-top: 0.1rem solid rgb(183 121 45 / 35%); }
+
+/* The record. Labels in the left column, values in mono — these are the city's register, and the
+ * same treatment the XP figure and plot addresses already use. */
+.record { position: relative; z-index: 1; display: grid; margin: 0; gap: var(--space-2) var(--space-4); grid-template-columns: minmax(4.5rem, auto) 1fr; }
+.record dt { color: var(--slate); font-size: var(--text-2xs); font-weight: var(--weight-black); letter-spacing: 0.1em; text-transform: uppercase; }
+.record dd { margin: 0; min-width: 0; color: var(--ink); font-family: var(--font-mono); font-size: var(--text-sm); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+
+.foot { position: relative; z-index: 1; display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-5); }
+
+/* The stamp: pressed beside the action, off square and slightly transparent so it reads as ink on
+ * the page rather than another interface element. */
+.stamp {
+  width: 5.6rem;
+  height: 5.6rem;
+  flex: none;
+  color: var(--teal-600);
+  opacity: 0.72;
+  transform: rotate(-13deg);
+  pointer-events: none;
+}
+
+/* Set tight and tracked out, the way stamp lettering is cut. */
+.stampWord { font-family: var(--font-sans); font-size: 15px; font-weight: 900; letter-spacing: 1.2px; text-transform: uppercase; }
+.stampStar { font-size: 7px; }
+
+.action { flex: 1; }
+
+.confetti { position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
+.confetti i { position: absolute; top: -1rem; width: 0.52rem; height: 0.9rem; border-radius: 0.12rem; background: var(--teal-500); animation: confettiFall 2.8s linear infinite; }
+.confetti i:nth-child(3n) { background: #21a99e; }
+.confetti i:nth-child(3n + 2) { background: var(--gold); }
+.confetti i:nth-child(4n) { width: 0.68rem; height: 0.68rem; border-radius: 50%; }
+
+@keyframes deedIn { from { opacity: 0; transform: translateY(1.5rem) scale(0.9); } }
+@keyframes confettiFall {
+  0% { opacity: 0; transform: translateY(-1rem) rotate(0); }
+  10% { opacity: 1; }
+  100% { opacity: 0.85; transform: translateY(31rem) rotate(620deg); }
+}
+
+@media (max-width: 700px) {
+  .deed { border-width: 0.35rem; padding: var(--space-5) var(--space-4) var(--space-4); }
+  .record { grid-template-columns: 1fr; gap: var(--space-1) 0; }
+  .record dd { margin-bottom: var(--space-2); }
+  .stamp { width: 4.6rem; height: 4.6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deed, .confetti i { animation: none; }
+}

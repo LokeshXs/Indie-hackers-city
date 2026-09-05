@@ -245,3 +245,83 @@ Future automatic rewards must use their own deterministic event keys, calling
 `award_plot_xp` from an administrative session, or `apply_plot_xp` when already
 inside an authorized `security definer` function. They must not update the
 stored total directly.
+
+## Achievements
+
+Achievements are the only client-triggered source of XP. The catalog lives in
+`public.achievement_definitions`, each row carrying an `xp_reward` plus a
+`group_key` and a `tier`. The reward is read *inside* the award function and is
+never accepted as an argument, so a client cannot express an amount.
+
+| Type | Group | Tier | Scope | Reward |
+| --- | --- | --- | --- | --- |
+| `product_launched` | launch | 1 | project | 100 |
+| `users_10` | users | 1 | project | 5 |
+| `users_50` | users | 2 | project | 25 |
+| `users_100` | users | 3 | project | 50 |
+| `revenue_10` | revenue | 1 | **founder** | 50 |
+| `revenue_100` | revenue | 2 | **founder** | 150 |
+
+**Revenue is founder-scoped**: it is money the founder earned across everything they
+have built, claimable once ever, so its rows carry `project_id = null` and its
+event key ends in the owner uuid rather than a project uuid. Uniqueness is two
+partial indexes — `(project_id, achievement_type)` where a project is set, and
+`(owner_id, achievement_type)` where it is not.
+
+**Claiming a rung also grants every rung below it in the same group.** Picking
+`users_100` on a project holding none of them writes three rows and three ledger
+events, and reports `xp_awarded` as their sum, 80. Rungs already held are
+skipped, so claiming `users_100` after `users_10` awards 75. This exists because
+a founder knows how far a product has got, not which individual milestones they
+remembered to log.
+
+Project-scoped rungs are claimed **once per project**; founder-scoped ones once per founder. `public.create_project`
+mints `product_launched` for the project it creates, in the same transaction, so
+a failed award rolls the project back. `public.record_achievement` handles every
+type — including `product_launched`, which stays claimable on the project that
+`claim_plot` created, since that one never received an award.
+
+Awards write two rows: `public.project_achievements` and the XP ledger. The key
+is derived, not supplied:
+
+```
+achievement:<achievement_type>:<project_uuid>
+```
+
+`project_achievements_event_key_derived` forces the stored key to that exact
+expression, which is also what `apply_project_achievement` hands to
+`apply_plot_xp` — so the two idempotency guards cannot drift apart. The
+`(project_id, achievement_type)` unique constraint is checked first, so a replay
+raises `achievement_already_claimed` **before** the ledger is touched and awards
+nothing. Cascading does not weaken that: each rung keeps its own row, its own
+derived key and its own ledger event, and a claim where *every* rung is already
+held raises the same error.
+
+To revoke an achievement, delete the `project_achievements` row and post a
+compensating negative event under a *new* key, following the correction pattern
+above:
+
+```
+correction:achievement:<type>:<project_uuid>:1
+```
+
+The original ledger row stays, so a re-claim finds the key already applied and
+awards no XP a second time. Revocation is permanent for XP, by design.
+
+### The XP ceiling
+
+Nothing verifies an achievement — there is no oracle for "100+ users" — so
+assume every founder claims every rung. A product is worth 180 (100 launch +
+80 users) and revenue pays 200 once, ever. The per-founder
+project cap in `create_project` (`max_projects_per_founder`, currently 10,
+mirrored by `MAX_PROJECTS_PER_FOUNDER` in `src/lib/city/constants.ts`) is
+therefore the real ceiling:
+
+```
+max client-mintable XP = 10 (claim) + 200 (revenue) + cap x 180
+```
+
+`project_achievements.status` ships defaulting to `'approved'` and nothing reads
+it yet. When the admin console lands, flip that default to `'pending'` and move
+the `apply_plot_xp` call from submission to approval; the column exists now so
+rows written before then never have to be retro-classified.

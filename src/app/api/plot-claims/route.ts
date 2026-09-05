@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { errorResponse, rpcErrorCode } from "@/lib/city/api";
 import { serializeCityDevelopment } from "@/lib/city/developments";
-import { validateProjectFormData } from "@/lib/city/validation";
+import { validateClaimFormData } from "@/lib/city/validation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (typeof plotId !== "string" || !/^pioneer:(jobs|lovelace|turing|hopper):(north|south|north-outer|south-outer):0[1-4]$/.test(plotId)) {
     return errorResponse("invalid_request", "Choose a valid Pioneer District plot.");
   }
-  const validation = validateProjectFormData(formData);
+  const validation = validateClaimFormData(formData);
   if (!validation.data) return errorResponse("invalid_request", validation.error ?? "Check the submitted project details.");
 
   const projectId = crypto.randomUUID();

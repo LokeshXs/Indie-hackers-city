@@ -1,17 +1,17 @@
-.account { position: absolute; z-index: 4; top: 1.25rem; right: 12.35rem; font-family: ui-rounded, "Avenir Next", Avenir, "Segoe UI", sans-serif; }
-.trigger { position: relative; display: grid; width: 3.6rem; height: 3.6rem; place-items: center; overflow: hidden; border: 0.14rem solid #fff4cf; border-radius: 1.05rem; background: linear-gradient(145deg, #42c4b7, #21857f); box-shadow: 0 0.28rem 0 #155f5c, 0 0.7rem 1.5rem rgb(9 45 45 / 28%); color: #fffdf3; font: inherit; font-size: 0.82rem; font-weight: 950; cursor: pointer; transform: rotate(1deg); transition: filter 140ms ease, transform 140ms ease; }
+.account { position: absolute; z-index: 4; top: 1.25rem; right: 12.35rem; }
+.trigger { position: relative; display: grid; width: 3.6rem; height: 3.6rem; place-items: center; overflow: hidden; border: 0.14rem solid #fff4cf; border-radius: 1.05rem; background: linear-gradient(145deg, #42c4b7, var(--teal-500)); box-shadow: 0 0.28rem 0 var(--teal-edge), 0 0.7rem 1.5rem rgb(9 45 45 / 28%); color: var(--cream-100); font: inherit; font-size: 0.82rem; font-weight: var(--weight-black); cursor: pointer; transform: rotate(1deg); transition: filter 140ms ease, transform 140ms ease; }
 .trigger:hover { filter: brightness(1.08); transform: rotate(0deg) translateY(-1px); }
-.trigger:focus-visible { outline: 3px solid #f0b24f; outline-offset: 3px; }
+.trigger:focus-visible { outline: 0; box-shadow: var(--focus); }
 .avatar { object-fit: cover; }
-.menu { position: absolute; top: calc(100% + 0.85rem); right: 0; width: min(18rem, calc(100vw - 1.5rem)); overflow: hidden; border: 0.22rem solid #8a5a2f; border-radius: 1.1rem; background: #fff9e8; box-shadow: 0 0 0 0.16rem #e8d3ab, 0 0.35rem 0 #5c3c1c, 0 1.4rem 3rem rgb(6 28 30 / 38%); animation: menuIn 160ms cubic-bezier(.2,.8,.2,1); }
-.identity { display: grid; gap: 0.18rem; padding: 1rem 1.05rem 0.9rem; border-bottom: 0.12rem dashed #d3c49f; }
-.identity strong { overflow: hidden; color: #204e4e; font-size: 0.92rem; text-overflow: ellipsis; white-space: nowrap; }
+.menu { position: absolute; top: calc(100% + 0.85rem); right: 0; width: min(18rem, calc(100vw - 1.5rem)); overflow: hidden; border: 0.22rem solid var(--frame); border-radius: 1.1rem; background: #fff9e8; box-shadow: 0 0 0 0.16rem var(--frame-ring), 0 0.35rem 0 var(--frame-deep), 0 1.4rem 3rem rgb(6 28 30 / 38%); animation: menuIn 160ms cubic-bezier(.2,.8,.2,1); }
+.identity { display: grid; gap: 0.18rem; padding: 1rem 1.05rem 0.9rem; border-bottom: 0.12rem dashed var(--rule); }
+.identity strong { overflow: hidden; color: var(--ink); font-size: 0.92rem; text-overflow: ellipsis; white-space: nowrap; }
 .identity span { overflow: hidden; color: #78908c; font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
-.signOut { width: 100%; border: 0; padding: 0.9rem 1.05rem; background: transparent; color: #8a4d3d; font: inherit; font-size: 0.8rem; font-weight: 900; text-align: left; cursor: pointer; }
-.signOut:hover { background: #f6e8cf; }
-.signOut:focus-visible { outline: 3px solid #42c4b7; outline-offset: -3px; }
+.signOut { width: 100%; border: 0; padding: 0.9rem 1.05rem; background: transparent; color: #8a4d3d; font: inherit; font-size: 0.8rem; font-weight: var(--weight-black); text-align: left; cursor: pointer; }
+.signOut:hover { background: var(--brown-wash); }
+.signOut:focus-visible { outline: 0; box-shadow: var(--focus); }
 .signOut:disabled { color: #a99b8e; cursor: wait; }
-.error { margin: 0; padding: 0 1.05rem 0.9rem; color: #ba365c; font-size: 0.68rem; }
+.error { margin: 0; padding: 0 1.05rem 0.9rem; color: var(--rose); font-size: 0.68rem; }
 @keyframes menuIn { from { opacity: 0; transform: translateY(-0.45rem) scale(0.96); } }
 @media (max-width: 700px) { .account { top: 0.75rem; right: 0.75rem; } .trigger { width: 3.2rem; height: 3.2rem; } }
 @media (prefers-reduced-motion: reduce) { .menu { animation: none; } .trigger { transition: none; } }

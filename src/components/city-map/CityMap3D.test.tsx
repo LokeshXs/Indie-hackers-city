@@ -113,10 +113,11 @@ describe("plot claim modal", () => {
     render(<CityMap3D district={starterDistrict} initialDevelopments={{ [plotId]: development }} />);
 
     await user.click(screen.getByRole("button", { name: `${plotAddress}, occupied` }));
-    expect(screen.getByRole("dialog", { name: "Xenith" })).toHaveTextContent("Founded by Lokesh Singh");
-    expect(screen.getByLabelText("Building Level 1, 0 city XP")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /visit project/i })).toHaveAttribute("href", "https://xenith.dev/");
-    expect(screen.getByRole("button", { name: "Edit project" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Lokesh Singh" })).toHaveTextContent("On the billboard");
+    expect(screen.getByLabelText("0 city XP")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /xenith/i })).toHaveAttribute("href", "https://xenith.dev/");
+    expect(screen.getByRole("button", { name: "My projects" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add achievement" })).toBeInTheDocument();
   });
 
   it("opens the owner's project from the progression card and restores focus when closed", async () => {
@@ -128,10 +129,10 @@ describe("plot claim modal", () => {
     };
     render(<CityMap3D district={starterDistrict} initialDevelopments={{ [plotId]: progressedDevelopment }} />);
 
-    const progressCard = screen.getByRole("button", { name: "Level 2, 185 XP, 115 XP until Level 3. View my building." });
+    const progressCard = screen.getByRole("button", { name: "Level 2, 185 XP. Next reward Scrolling billboard, 55 XP to go. View my building." });
     await user.click(progressCard);
-    expect(screen.getByRole("dialog", { name: "Xenith" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Building Level 2, 185 city XP")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Lokesh Singh" })).toBeInTheDocument();
+    expect(screen.getByLabelText("185 city XP")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close project card" }));
     await waitFor(() => expect(progressCard).toHaveFocus());
   });
@@ -205,8 +206,10 @@ describe("plot claim modal", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: `${plotAddress} setup` })).not.toBeInTheDocument(), { timeout: 1200 });
     const successDialog = await screen.findByRole("dialog", { name: "Plot claimed successfully" }, { timeout: 3000 });
-    expect(successDialog).toHaveTextContent("You’re now part of");
+    // The claim now produces a deed: the district masthead plus the four facts of record.
+    expect(successDialog).toHaveTextContent("Deed of Claim");
     expect(successDialog).toHaveTextContent("Pioneer District");
+    expect(successDialog).toHaveTextContent(plotAddress);
     expect(screen.getByRole("button", { name: "View my building" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `${plotAddress}, occupied` })).toBeEnabled();
     expect(screen.getByText("Xenith is now part of Pioneer District. +10 XP earned.")).toBeInTheDocument();

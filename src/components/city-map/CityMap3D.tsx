@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, Preload, useGLTF, useTexture } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -18,8 +18,9 @@ import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildi
 import { useCityDevelopments } from "@/hooks/useCityDevelopments";
 import { CITY_ASSET_PATHS } from "./city-assets";
 import { contrastRatio } from "./billboard-texture";
-import { BillboardPreview, BuildingPreview, ModelInstance, PreviewStage } from "./ModelPreview";
+import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
 import {
+  PLOT_BUILDING_SCALE,
   createPlotDevelopmentEntities,
   getBuildingPlacement,
 } from "./plot-builds";
@@ -27,7 +28,21 @@ import type { CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
 import { FounderProgressCard } from "./FounderProgressCard";
+import { RoofProps, type RoofPropPlacement } from "./RoofProps";
+import { ClaimSuccessOverlay } from "./ClaimSuccessOverlay";
 import { ProjectCard } from "./ProjectCard";
+import {
+  Alert,
+  Button,
+  ChoiceGroup,
+  Field,
+  Modal,
+  Panel,
+  SwatchGroup,
+  VisuallyHidden,
+  fieldColorControlClass,
+  fieldControlClass,
+} from "@/components/ui";
 import styles from "./CityMap3D.module.css";
 
 export interface CityMap3DProps {
@@ -343,8 +358,10 @@ const Scene = memo(function Scene({
   construction,
   constructionPosition,
   focusedPlotId,
+  roofProps,
 }: {
   entities: CityEntity[];
+  roofProps: RoofPropPlacement[];
   selectedPlotId: string | null;
   hoveredPlotId: string | null;
   selectablePlotIds: Set<string>;
@@ -416,6 +433,19 @@ const Scene = memo(function Scene({
         mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }}
         touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
       />
+      <MarqueeDriver />
+      {/* Earned roof decoration, in a group carrying the building's own placement and scale so the
+          anchor coordinates apply directly and the props turn with it on reversed plots. */}
+      {roofProps.map(({ plotId, position, rotationY, development }) => (
+        <group
+          key={`${plotId}-roof`}
+          position={[position.x, position.y, position.z]}
+          rotation={[0, rotationY ?? 0, 0]}
+          scale={PLOT_BUILDING_SCALE}
+        >
+          <RoofProps development={development} />
+        </group>
+      ))}
       {entities.map((entity) => (
         <Suspense fallback={null} key={entity.id}>
           <CityAsset
@@ -436,6 +466,15 @@ const Scene = memo(function Scene({
     </>
   );
 });
+
+/** What the deed needs. Captured from the claim response rather than looked up afterwards, so the
+ * document cannot render half-filled if the development record arrives late. */
+interface ClaimedDeed {
+  plotId: string;
+  name: string;
+  founderName: string;
+  claimedAt: string;
+}
 
 export function CityMap3D({
   district,
@@ -477,7 +516,7 @@ export function CityMap3D({
   const [isReserving, setIsReserving] = useState(false);
   const [reservedPlotId, setReservedPlotId] = useState<string | null>(null);
   const [construction, setConstruction] = useState<ConstructionState | null>(null);
-  const [completedProject, setCompletedProject] = useState<{ plotId: string; name: string } | null>(null);
+  const [completedProject, setCompletedProject] = useState<ClaimedDeed | null>(null);
   const [focusedPlotId, setFocusedPlotId] = useState<string | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [loadingComplete, setLoadingComplete] = useState(false);
@@ -491,7 +530,6 @@ export function CityMap3D({
   );
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const shellRef = useRef<HTMLElement>(null);
-  const modalRef = useRef<HTMLElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const firstSwatchRef = useRef<HTMLButtonElement>(null);
   const googleButtonRef = useRef<HTMLButtonElement>(null);
@@ -519,10 +557,6 @@ export function CityMap3D({
     shellRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-    if (isClaimLimitAlertOpen) claimLimitButtonRef.current?.focus();
-  }, [isClaimLimitAlertOpen]);
-
   const plotEntities = useMemo(
     () => district.entities.filter((entity) => entity.plotId),
     [district.entities],
@@ -531,6 +565,10 @@ export function CityMap3D({
     () => user ? Object.values(developments).find((development) => development.ownerId === user.id) : undefined,
     [developments, user],
   );
+  /** The founder's own plot, but only once auth has settled — three HUD elements key off it, and
+   * without the guard they would each flash for a moment at someone who turns out to be signed
+   * out. A single narrowed const rather than the condition repeated at each of them. */
+  const ownPlot = !isAuthLoading && isAuthenticated ? ownerDevelopment ?? null : null;
   const selectablePlotIds = useMemo(
     () => new Set(plotEntities.flatMap((entity) => entity.plotId ? [entity.plotId] : [])),
     [plotEntities],
@@ -553,6 +591,20 @@ export function CityMap3D({
   const sceneEntities = useMemo(
     () => [...district.entities, ...dynamicEntities],
     [district.entities, dynamicEntities],
+  );
+  const roofPropPlacements = useMemo<RoofPropPlacement[]>(
+    () => plotEntities.flatMap((plotEntity) => {
+      const development = plotEntity.plotId ? developments[plotEntity.plotId] : undefined;
+      if (!development || !plotEntity.plotId) return [];
+      const placement = getBuildingPlacement(plotEntity);
+      return [{
+        plotId: plotEntity.plotId,
+        position: placement.position,
+        rotationY: placement.rotationY,
+        development,
+      }];
+    }),
+    [plotEntities, developments],
   );
   const selectedPlot = district.plots.find((plot) => plot.id === selectedPlotId);
   const inspectedDevelopment = inspectedPlotId ? developments[inspectedPlotId] : undefined;
@@ -858,7 +910,12 @@ export function CityMap3D({
         window.setTimeout(() => {
           setConstruction({ plotId, phase: "complete", assetId: buildingAssetId });
           setReservedPlotId(null);
-          setCompletedProject({ plotId, name: normalizedProject });
+          setCompletedProject({
+            plotId,
+            name: normalizedProject,
+            founderName: development.founder.fullName,
+            claimedAt: development.claimedAt,
+          });
           setStatusMessage(
             `${normalizedProject} is now part of ${district.name}.`
             + (awardedXp > 0 ? ` +${awardedXp} XP earned.` : ""),
@@ -885,28 +942,6 @@ export function CityMap3D({
   function browseBuilding(direction: -1 | 1) {
     const nextIndex = (selectedBuildingIndex + direction + BUILDING_OPTIONS.length) % BUILDING_OPTIONS.length;
     setSelectedBuildingAssetId(BUILDING_OPTIONS[nextIndex].assetId);
-  }
-
-  function handleModalKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closePlotModal();
-      return;
-    }
-    if (event.key !== "Tab" || !modalRef.current) return;
-    const focusable = Array.from(modalRef.current.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), input:not([disabled])",
-    ));
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   function resetCamera() {
@@ -939,11 +974,11 @@ export function CityMap3D({
 
   return (
     <main ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete}>
-      <header className={styles.header}>
+      <Panel as="header" placement="topLeft" inert className={styles.header}>
         <p className={styles.eyebrow}>{district.name}</p>
         <h1>Indie Hackers City</h1>
         <p>Choose a plot and found your first startup.</p>
-      </header>
+      </Panel>
       <AccountMenu />
       <CityAssetErrorBoundary onError={handleAssetError} resetKey={assetBoundaryResetKey}>
         <Canvas
@@ -956,6 +991,7 @@ export function CityMap3D({
           <Suspense fallback={null}>
             <Scene
               entities={sceneEntities}
+              roofProps={roofPropPlacements}
               selectedPlotId={selectedPlotId}
               hoveredPlotId={hoveredPlotId}
               selectablePlotIds={selectablePlotIds}
@@ -972,20 +1008,20 @@ export function CityMap3D({
           </Suspense>
         </Canvas>
       </CityAssetErrorBoundary>
-      <div className={styles.controls} aria-label="Camera controls">
-        <button className={styles.controlButton} type="button" aria-label="Zoom out" onClick={() => zoomBy(-3)}>−</button>
-        <button className={styles.controlButton} type="button" aria-label="Zoom in" onClick={() => zoomBy(3)}>+</button>
-        <button className={styles.controlButton} type="button" aria-label="Reset camera" onClick={resetCamera}>⌂</button>
-      </div>
-      {!isAuthLoading && isAuthenticated && ownerDevelopment ? (
+      <Panel placement="topRight" className={styles.controls} aria-label="Camera controls">
+        <Button variant="secondary" size="sm" icon aria-label="Zoom out" onClick={() => zoomBy(-3)}>−</Button>
+        <Button variant="secondary" size="sm" icon aria-label="Zoom in" onClick={() => zoomBy(3)}>+</Button>
+        <Button variant="secondary" size="sm" icon aria-label="Reset camera" onClick={resetCamera}>⌂</Button>
+      </Panel>
+      {ownPlot ? (
         <FounderProgressCard
-          development={ownerDevelopment}
+          development={ownPlot}
           buttonRef={founderProgressButtonRef}
           onViewBuilding={openOwnerProjectFromProgress}
         />
       ) : null}
       {hasPendingUpdates ? (
-        <aside className={`${styles.cityUpdateNotice} ${!isAuthLoading && isAuthenticated && ownerDevelopment ? styles.cityUpdateNoticeWithProgress : ""}`} aria-live="polite" aria-label="City updates available">
+        <aside className={`${styles.cityUpdateNotice} ${ownPlot ? styles.cityUpdateNoticeWithProgress : ""}`} aria-live="polite" aria-label="City updates available">
           <span className={styles.cityUpdateMarker} aria-hidden="true">◆</span>
           <div>
             <strong>New city activity</strong>
@@ -996,8 +1032,8 @@ export function CityMap3D({
           </button>
         </aside>
       ) : null}
-      <p className={styles.hint}>Tap a plot to build · Drag to pan · Right-drag to rotate · Scroll to zoom where you point</p>
-      <p className={styles.buildStatus} aria-live="polite">{hasRefreshError ? "Live city updates are temporarily unavailable. Showing the last known city state." : statusMessage}</p>
+      <Panel as="p" placement="bottomCenter" inert className={styles.hint}>Tap a plot to build · Drag to pan · Right-drag to rotate · Scroll to zoom where you point</Panel>
+      <Panel as="p" placement="bottomRight" inert className={styles.buildStatus} aria-live="polite">{hasRefreshError ? "Live city updates are temporarily unavailable. Showing the last known city state." : statusMessage}</Panel>
       {!loadingComplete ? (
         <CityLoadingScreen
           sceneReady={sceneReady}
@@ -1007,207 +1043,179 @@ export function CityMap3D({
         />
       ) : null}
       {isClaimLimitAlertOpen ? (
-        <div
-          className={styles.claimLimitOverlay}
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) closeClaimLimitAlert();
-          }}
+        <Modal
+          role="alertdialog"
+          containment="absolute"
+          tone="alert"
+          layout="panel"
+          width="min(31rem, 100%)"
+          zIndex={12}
+          className={styles.claimLimitModal}
+          labelledBy="claim-limit-title"
+          describedBy="claim-limit-description"
+          initialFocus={claimLimitButtonRef}
+          showClose={false}
+          onClose={closeClaimLimitAlert}
         >
-          <section
-            className={styles.claimLimitModal}
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="claim-limit-title"
-            aria-describedby="claim-limit-description"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") closeClaimLimitAlert();
-              if (event.key === "Tab") {
-                event.preventDefault();
-                claimLimitButtonRef.current?.focus();
-              }
-            }}
-          >
-            <span className={styles.claimLimitPermit}>Founder permit</span>
-            <span className={styles.claimLimitMarker} aria-hidden="true">◆</span>
-            <h2 id="claim-limit-title">Your plot is already claimed</h2>
-            <p id="claim-limit-description">
-              Only one plot can be claimed per founder. You can still explore every building in the city.
-            </p>
-            <button ref={claimLimitButtonRef} type="button" onClick={closeClaimLimitAlert}>Got it</button>
-          </section>
-        </div>
+        
+          <h2 id="claim-limit-title">Your plot is already claimed</h2>
+          <p id="claim-limit-description">
+            Only one plot can be claimed per founder. You can still explore every building in the city.
+          </p>
+          <Button ref={claimLimitButtonRef} size="default" onClick={closeClaimLimitAlert}>Got it</Button>
+        </Modal>
       ) : null}
       {selectedPlot && (
-        <div
-          className={styles.modalBackdrop}
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) closePlotModal();
-          }}
+        <Modal
+          containment="absolute"
+          layout="surface"
+          width="min(78rem, 100%)"
+          zIndex={10}
+          label={`${selectedPlot.label} setup`}
+          busy={isReserving}
+          closeLabel="Close plot setup"
+          initialFocus={false}
+          onClose={closePlotModal}
         >
-          <section ref={modalRef} className={styles.plotModal} role="dialog" aria-modal="true" aria-label={`${selectedPlot.label} setup`} onKeyDown={handleModalKeyDown}>
-            <button className={styles.modalClose} type="button" aria-label="Close plot setup" disabled={isReserving} onClick={closePlotModal}>×</button>
-            <div className={styles.modalSurface}>
-              <div className={styles.previewPane} aria-label="Rotating Level 1 startup building preview">
-          
-                <div className={styles.previewInfo}>
-                  <span className={styles.permitTag} aria-hidden="true">Build Permit</span>
-                  <strong className={styles.previewBuildingName}>{BUILDING_OPTIONS[selectedBuildingIndex].label}</strong>
-                  <p className={styles.previewAddress}><span aria-hidden="true">◆</span>{selectedPlot.label}</p>
-                </div>
-                <PreviewStage className={styles.previewCanvas}>
-                  {formStep === "billboard"
-                    ? <BillboardPreview card={billboardCard} />
-                    : <BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} buildingColor={selectedBuildingColor} />}
-                </PreviewStage>
-{formStep !== "billboard" && (
-                  <>
-                <button className={`${styles.previewArrow} ${styles.previewArrowLeft}`} type="button" aria-label="Previous building" onClick={() => browseBuilding(-1)}>‹</button>
-                <button className={`${styles.previewArrow} ${styles.previewArrowRight}`} type="button" aria-label="Next building" onClick={() => browseBuilding(1)}>›</button>
-                <div className={styles.previewDots} aria-label={`${selectedBuildingIndex + 1} of ${BUILDING_OPTIONS.length}`}>
-                  {BUILDING_OPTIONS.map((option) => (
-                    <span key={option.assetId} className={option.assetId === selectedBuildingAssetId ? styles.previewDotActive : undefined} />
-                  ))}
-                </div>
-                  </>
+          <Modal.Split previewColumn="minmax(0, 1.15fr)" actionColumn="minmax(22rem, 0.85fr)">
+            <Modal.Preview label="Rotating Level 1 startup building preview">
+              <div className={styles.previewInfo}>
+                <strong className={styles.previewBuildingName}>{BUILDING_OPTIONS[selectedBuildingIndex].label}</strong>
+                <p className={styles.previewAddress}><span aria-hidden="true">◆</span>{selectedPlot.label}</p>
+              </div>
+              <PreviewStage className={styles.previewCanvas}>
+                {formStep === "billboard"
+                  ? <BillboardPreview card={billboardCard} />
+                  : <BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} buildingColor={selectedBuildingColor} />}
+              </PreviewStage>
+              {formStep !== "billboard" && (
+                <>
+                  <Button variant="secondary" icon className={`${styles.previewArrow} ${styles.previewArrowLeft}`} aria-label="Previous building" onClick={() => browseBuilding(-1)}>‹</Button>
+                  <Button variant="secondary" icon className={`${styles.previewArrow} ${styles.previewArrowRight}`} aria-label="Next building" onClick={() => browseBuilding(1)}>›</Button>
+                  <div className={styles.previewDots} aria-label={`${selectedBuildingIndex + 1} of ${BUILDING_OPTIONS.length}`}>
+                    {BUILDING_OPTIONS.map((option) => (
+                      <span key={option.assetId} className={option.assetId === selectedBuildingAssetId ? styles.previewDotActive : undefined} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </Modal.Preview>
+            <Modal.Pane>
+              <form className={styles.startupForm} noValidate aria-busy={isReserving} onSubmit={addBuilding}>
+                {formStep === "auth" ? (
+                  <div className={styles.formStep}>
+                    <div className={styles.stepIntro}>
+                      <h2>{isAuthLoading ? "Checking your sign-in\u2026" : "Sign in to claim this plot"}</h2>
+                      <span>Your account keeps this build permit connected to you.</span>
+                    </div>
+                    <Button
+                      ref={googleButtonRef}
+                      variant="tertiary"
+                      size="lg"
+                      block
+                      disabled={isAuthLoading || isStartingAuth}
+                      onClick={beginGoogleSignIn}
+                    >
+                      <svg className={styles.googleMark} viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.41Z" />
+                        <path fill="#34a853" d="M12 22c2.7 0 4.98-.9 6.63-2.36l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.77-5.61-4.14H3.04v2.62A10 10 0 0 0 12 22Z" />
+                        <path fill="#fbbc05" d="M6.39 13.92A6 6 0 0 1 6.07 12c0-.67.12-1.32.32-1.92V7.46H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.54l3.35-2.62Z" />
+                        <path fill="#ea4335" d="M12 5.94c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.96 5.46l3.35 2.62C7.18 7.71 9.39 5.94 12 5.94Z" />
+                      </svg>
+                      {isStartingAuth ? "Opening Google\u2026" : "Continue with Google"}
+                    </Button>
+                    {authError ? <Alert>{authError}</Alert> : null}
+                    <p className={styles.authNote}>The city stays open to explore. Sign-in is only required when you build.</p>
+                  </div>
+                ) : formStep === "founder" ? (
+                  <div className={styles.formStep}>
+                    <div className={styles.stepIntro}><strong>Meet the founder</strong><span>Tell the city who is building here.</span></div>
+                    <Field label="Full name" htmlFor="founder-name">
+                      {(field) => <input {...field} ref={firstFieldRef} className={fieldControlClass} value={fullName} required maxLength={60} placeholder="Your full name" onChange={(event) => setFullName(event.target.value)} />}
+                    </Field>
+                    <Field label="X handle" htmlFor="x-handle" error={xHandleError}>
+                      {(field) => <input {...field} className={fieldControlClass} value={xHandle} required maxLength={16} autoCapitalize="none" spellCheck={false} placeholder="@yourhandle" pattern="@?[A-Za-z0-9_]{1,15}" onBlur={() => setXHandleTouched(true)} onChange={(event) => setXHandle(event.target.value)} />}
+                    </Field>
+                    <Button size="lg" block disabled={!canContinue} onClick={() => setFormStep("project")}>Continue <span aria-hidden="true">→</span></Button>
+                  </div>
+                ) : formStep === "project" ? (
+                  <div className={styles.formStep}>
+                    <div className={styles.stepIntro}><strong>Introduce your project</strong><span>Add the identity visitors will discover.</span></div>
+                    <Field label="Project name" htmlFor="project-name">
+                      {(field) => <input {...field} ref={firstFieldRef} className={fieldControlClass} value={projectName} required maxLength={40} placeholder="Your project name" onChange={(event) => setProjectName(event.target.value)} />}
+                    </Field>
+                    <Field label="Project URL" htmlFor="project-url" error={websiteError}>
+                      {(field) => <input {...field} className={fieldControlClass} value={projectUrl} required inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="https://yourproject.com" onBlur={() => { setWebsiteTouched(true); if (normalizedWebsite) setProjectUrl(normalizedWebsite); }} onChange={(event) => setProjectUrl(event.target.value)} />}
+                    </Field>
+                    <ChoiceGroup
+                      legend="Type"
+                      value={projectType}
+                      onChange={setProjectType}
+                      options={[
+                        { value: "website", label: "Website" },
+                        { value: "app", label: "App" },
+                        { value: "chrome-extension", label: "Chrome extension" },
+                      ]}
+                    />
+                    <div className={styles.formActions}>
+                      <Button variant="tertiary" onClick={() => setFormStep("founder")}>← Back</Button>
+                      <Button size="lg" disabled={!canClaimPlot} onClick={() => setFormStep("billboard")}>Continue <span aria-hidden="true">→</span></Button>
+                    </div>
+                  </div>
+                ) : formStep === "billboard" ? (
+                  <div className={styles.formStep}>
+                    <div className={styles.stepIntro}><strong>Design your billboard</strong><span>It stands on your lawn showing your product name.</span></div>
+                    <Field label="Billboard background" htmlFor="billboard-background">
+                      {(field) => <input {...field} ref={firstFieldRef} className={fieldColorControlClass} type="color" value={billboardBackgroundColor} onChange={(event) => setBillboardBackgroundColor(event.target.value.toLowerCase())} />}
+                    </Field>
+                    <Field label="Product name color" htmlFor="billboard-text" warning={billboardContrastWarning}>
+                      {(field) => <input {...field} className={fieldColorControlClass} type="color" value={billboardTextColor} onChange={(event) => setBillboardTextColor(event.target.value.toLowerCase())} />}
+                    </Field>
+                    <div className={styles.formActions}>
+                      <Button variant="tertiary" onClick={() => setFormStep("project")}>← Back</Button>
+                      <Button size="lg" onClick={() => setFormStep("colors")}>Continue <span aria-hidden="true">→</span></Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.formStep}>
+                    <div className={styles.stepIntro}><strong>Pick your colors</strong><span>Give the building your brand&apos;s look.</span></div>
+                    <div className={styles.claimField}>
+                      <label className={styles.swatchLabel} id="building-color-label">Building color</label>
+                      <SwatchGroup
+                        options={BUILDING_COLOR_OPTIONS}
+                        value={selectedBuildingColor}
+                        onChange={setSelectedBuildingColor}
+                        labelledBy="building-color-label"
+                        firstSwatchRef={firstSwatchRef}
+                      />
+                    </div>
+                    <div className={styles.formActions}>
+                      <Button variant="tertiary" onClick={() => setFormStep("billboard")}>← Back</Button>
+                      <Button size="lg" type="submit" disabled={!canClaimPlot || isReserving}>{isReserving ? "Reserving plot\u2026" : "Claim my plot"}</Button>
+                    </div>
+                    {claimError ? <Alert>{claimError}</Alert> : null}
+                  </div>
                 )}
-              </div>
-              <div className={styles.actionPane}>
-                <form className={styles.startupForm} noValidate aria-busy={isReserving} onSubmit={addBuilding}>
-              
-                  {formStep === "auth" ? (
-                    <div className={`${styles.formStep} ${styles.authStep}`}>
-                      <div className={styles.authPermit} aria-hidden="true">
-                        <span>Permit checkpoint</span>
-                        <b>◆</b>
-                      </div>
-                      <div className={styles.stepIntro}>
-                        <h2>{isAuthLoading ? "Checking your sign-in…" : "Sign in to claim this plot"}</h2>
-                        <span>Your account keeps this build permit connected to you.</span>
-                      </div>
-                      <button
-                        ref={googleButtonRef}
-                        className={styles.googleButton}
-                        type="button"
-                        disabled={isAuthLoading || isStartingAuth}
-                        onClick={beginGoogleSignIn}
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.41Z" />
-                          <path fill="#34a853" d="M12 22c2.7 0 4.98-.9 6.63-2.36l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.77-5.61-4.14H3.04v2.62A10 10 0 0 0 12 22Z" />
-                          <path fill="#fbbc05" d="M6.39 13.92A6 6 0 0 1 6.07 12c0-.67.12-1.32.32-1.92V7.46H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.54l3.35-2.62Z" />
-                          <path fill="#ea4335" d="M12 5.94c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.96 5.46l3.35 2.62C7.18 7.71 9.39 5.94 12 5.94Z" />
-                        </svg>
-                        {isStartingAuth ? "Opening Google…" : "Continue with Google"}
-                      </button>
-                      {authError ? <p className={styles.authError} role="alert">{authError}</p> : null}
-                      <p className={styles.authNote}>The city stays open to explore. Sign-in is only required when you build.</p>
-                    </div>
-                  ) : formStep === "founder" ? (
-                    <div className={styles.formStep}>
-                      <div className={styles.stepIntro}><strong>Meet the founder</strong><span>Tell the city who is building here.</span></div>
-                      <div className={styles.claimField}>
-                        <label htmlFor="founder-name">Full name</label>
-                        <input ref={firstFieldRef} id="founder-name" value={fullName} required maxLength={60} placeholder="Your full name" onChange={(event) => setFullName(event.target.value)} />
-                      </div>
-                      <div className={styles.claimField}>
-                        <label htmlFor="x-handle">X handle</label>
-                        <input id="x-handle" value={xHandle} required maxLength={16} autoCapitalize="none" spellCheck={false} placeholder="@yourhandle" pattern="@?[A-Za-z0-9_]{1,15}" aria-invalid={Boolean(xHandleError)} aria-describedby={xHandleError ? "x-handle-error" : undefined} onBlur={() => setXHandleTouched(true)} onChange={(event) => setXHandle(event.target.value)} />
-                        {xHandleError && <small id="x-handle-error" className={styles.claimError}>{xHandleError}</small>}
-                      </div>
-                      <button className={styles.addBuildingButton} type="button" disabled={!canContinue} onClick={() => setFormStep("project")}>Continue <span aria-hidden="true">→</span></button>
-                    </div>
-                  ) : formStep === "project" ? (
-                    <div className={styles.formStep}>
-                      <div className={styles.stepIntro}><strong>Introduce your project</strong><span>Add the identity visitors will discover.</span></div>
-                      <div className={styles.claimField}>
-                        <label htmlFor="project-name">Project name</label>
-                        <input ref={firstFieldRef} id="project-name" value={projectName} required maxLength={40} placeholder="Your project name" onChange={(event) => setProjectName(event.target.value)} />
-                      </div>
-                      <div className={styles.claimField}>
-                        <label htmlFor="project-url">Project URL</label>
-                        <input id="project-url" value={projectUrl} required inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-invalid={Boolean(websiteError)} aria-describedby={websiteError ? "website-error" : undefined} placeholder="https://yourproject.com" onBlur={() => { setWebsiteTouched(true); if (normalizedWebsite) setProjectUrl(normalizedWebsite); }} onChange={(event) => setProjectUrl(event.target.value)} />
-                        {websiteError && <small id="website-error" className={styles.claimError}>{websiteError}</small>}
-                      </div>
-                      <fieldset className={styles.projectTypes}>
-                        <legend>Type</legend>
-                        {([['website', 'Website'], ['app', 'App'], ['chrome-extension', 'Chrome extension']] as const).map(([value, label]) => (
-                          <label key={value}><input type="radio" name="project-type" value={value} checked={projectType === value} onChange={() => setProjectType(value)} /><span>{label}</span></label>
-                        ))}
-                      </fieldset>
-                      <div className={styles.formActions}>
-                        <button className={styles.backButton} type="button" onClick={() => setFormStep("founder")}>← Back</button>
-                        <button className={styles.addBuildingButton} type="button" disabled={!canClaimPlot} onClick={() => setFormStep("billboard")}>Continue <span aria-hidden="true">→</span></button>
-                      </div>
-                    </div>
-                  ) : formStep === "billboard" ? (
-                    <div className={styles.formStep}>
-                      <div className={styles.stepIntro}><strong>Design your billboard</strong><span>It stands on your lawn showing your product name.</span></div>
-                      <div className={styles.claimField}>
-                        <label htmlFor="billboard-background">Billboard background</label>
-                        <input ref={firstFieldRef} id="billboard-background" type="color" className={styles.colorInput} value={billboardBackgroundColor} onChange={(event) => setBillboardBackgroundColor(event.target.value.toLowerCase())} />
-                      </div>
-                      <div className={styles.claimField}>
-                        <label htmlFor="billboard-text">Product name color</label>
-                        <input id="billboard-text" type="color" className={styles.colorInput} value={billboardTextColor} onChange={(event) => setBillboardTextColor(event.target.value.toLowerCase())} />
-                        {billboardContrastWarning && <small className={styles.claimError}>{billboardContrastWarning}</small>}
-                      </div>
-                      <div className={styles.formActions}>
-                        <button className={styles.backButton} type="button" onClick={() => setFormStep("project")}>← Back</button>
-                        <button className={styles.addBuildingButton} type="button" onClick={() => setFormStep("colors")}>Continue <span aria-hidden="true">→</span></button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className={styles.formStep}>
-                      <div className={styles.stepIntro}><strong>Pick your colors</strong><span>Give the building your brand&apos;s look.</span></div>
-                      <div className={styles.claimField}>
-                        <label id="building-color-label">Building color</label>
-                        <div className={styles.colorSwatches} role="radiogroup" aria-labelledby="building-color-label">
-                          {BUILDING_COLOR_OPTIONS.map((option, index) => (
-                            <button
-                              key={option.id}
-                              ref={index === 0 ? firstSwatchRef : undefined}
-                              type="button"
-                              role="radio"
-                              aria-checked={selectedBuildingColor === option.hex}
-                              aria-label={option.label}
-                              className={`${styles.colorSwatch} ${selectedBuildingColor === option.hex ? styles.colorSwatchActive : ""}`}
-                              style={{ background: option.hex }}
-                              onClick={() => setSelectedBuildingColor(option.hex)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <div className={styles.formActions}>
-                        <button className={styles.backButton} type="button" onClick={() => setFormStep("billboard")}>← Back</button>
-                        <button className={styles.addBuildingButton} type="submit" disabled={!canClaimPlot || isReserving}>{isReserving ? "Reserving plot…" : "Claim my plot"}</button>
-                      </div>
-                      {claimError ? <p className={styles.authError} role="alert">{claimError}</p> : null}
-                    </div>
-                  )}
-                </form>
-              </div>
-            </div>
-          </section>
-        </div>
+              </form>
+            </Modal.Pane>
+          </Modal.Split>
+        </Modal>
       )}
       {completedProject && (
-        <div className={styles.successOverlay} role="presentation">
-          <aside className={styles.successCard} role="dialog" aria-modal="true" aria-label="Plot claimed successfully">
-            <div className={styles.confetti} aria-hidden="true">
-              {Array.from({ length: 24 }, (_, index) => <i key={index} style={{ left: `${4 + ((index * 19) % 92)}%`, animationDelay: `${(index % 8) * -0.18}s` }} />)}
-            </div>
-            <span className={styles.successBadge} aria-hidden="true">✓</span>
-            <p className={styles.successEyebrow}>Plot successfully claimed!</p>
-            <h2>You’re now part of<br />{district.name}</h2>
-            <p className={styles.successCopy}><strong>{completedProject.name}</strong> is ready to begin its story.</p>
-            <button ref={viewBuildingButtonRef} type="button" onClick={viewCompletedBuilding}>View my building <span aria-hidden="true">→</span></button>
-            <small className={styles.successTimer}>Closing automatically in 5 seconds</small>
-          </aside>
-        </div>
+        <ClaimSuccessOverlay
+          districtName={district.name}
+          plotLabel={district.plots.find((plot) => plot.id === completedProject.plotId)?.label ?? completedProject.plotId}
+          founderName={completedProject.founderName}
+          projectName={completedProject.name}
+          claimedAt={completedProject.claimedAt}
+          actionRef={viewBuildingButtonRef}
+          onViewBuilding={viewCompletedBuilding}
+        />
       )}
       {inspectedDevelopment && inspectedPlot ? (
         <ProjectCard
           development={inspectedDevelopment}
+          plotEntity={plotEntities.find((entity) => entity.plotId === inspectedDevelopment.plotId)}
           address={inspectedPlot.label}
           currentUserId={user?.id}
           onClose={closeInspectedProject}
@@ -1217,13 +1225,13 @@ export function CityMap3D({
           }}
         />
       ) : null}
-      <div className={styles.srOnly} aria-label="Empty buildable plots">
+      <VisuallyHidden aria-label="Empty buildable plots">
         {district.plots.map((plot) => (
           <button id={`plot-control-${plot.id}`} key={plot.id} type="button" onClick={() => handlePlotInteraction(plot.id)}>
             {plot.label}, {developments[plot.id] ? "occupied" : "available"}
           </button>
         ))}
-      </div>
+      </VisuallyHidden>
     </main>
   );
 }

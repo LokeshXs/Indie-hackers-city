@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { loadFounderProjects } from "@/lib/city/achievements";
 import { errorResponse, rpcErrorCode } from "@/lib/city/api";
 import { serializeCityDevelopment } from "@/lib/city/developments";
-import { isUuid, validateProjectFormData } from "@/lib/city/validation";
+import { formBoolean, isUuid, validateProjectDetails } from "@/lib/city/validation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 interface RouteContext {
@@ -22,34 +23,37 @@ export async function PATCH(request: Request, context: RouteContext) {
   } catch {
     return errorResponse("invalid_request", "The submitted project update could not be read.");
   }
-  const validation = validateProjectFormData(formData);
+  const validation = validateProjectDetails(formData);
   if (!validation.data) return errorResponse("invalid_request", validation.error ?? "Check the submitted project details.");
 
-  const result = await supabase.rpc("update_showcased_project", {
+  // update_project, not the retired update_showcased_project: this one edits a project whether or
+  // not it is the one currently on the billboard.
+  const result = await supabase.rpc("update_project", {
     requested_project_id: projectId,
-    founder_full_name: validation.data.fullName,
-    founder_x_handle: validation.data.xHandle,
     project_name: validation.data.projectName,
     project_website_url: validation.data.websiteUrl,
     requested_project_type: validation.data.projectType,
-    requested_building_asset_id: validation.data.buildingAssetId,
-    requested_building_color: validation.data.buildingColor,
-    requested_billboard_text_color: validation.data.billboardTextColor,
-    requested_billboard_background_color: validation.data.billboardBackgroundColor,
+    showcase_on_billboard: formBoolean(formData, "showcase"),
   });
 
   if (result.error || !result.data?.[0]) {
     if (result.error) {
       const code = rpcErrorCode(result.error);
-      return errorResponse(code, code === "x_handle_taken"
-        ? "That X handle is already used by another founder."
-        : code === "project_not_owned"
-          ? "You can only edit your own project."
-          : "The project could not be updated. Check the details and try again.",
+      return errorResponse(code, code === "project_not_owned"
+        ? "You can only edit your own project."
+        : code === "showcase_required"
+          ? "Your billboard needs a project. Put another one on it first."
+          : code === "project_url_taken"
+            ? "You already have a project at that URL."
+            : "The project could not be updated. Check the details and try again.",
       code === "project_not_owned" ? 403 : undefined);
     }
     return errorResponse("unexpected_error", "The updated city record could not be loaded.");
   }
 
-  return NextResponse.json({ development: serializeCityDevelopment(result.data[0]) });
+  const development = serializeCityDevelopment(result.data[0]);
+  return NextResponse.json({
+    development,
+    projects: await loadFounderProjects(supabase, user.id, development.project.id),
+  });
 }

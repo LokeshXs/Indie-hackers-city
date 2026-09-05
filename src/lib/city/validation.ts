@@ -45,41 +45,91 @@ export function normalizeWebsite(value: string): string | null {
   }
 }
 
-export function validateProjectFormData(formData: FormData): ValidationResult<ValidatedProjectFields> {
+export interface ValidatedFounderFields {
+  fullName: string;
+  xHandle: string;
+}
+
+export interface ValidatedProjectDetails {
+  projectName: string;
+  websiteUrl: string;
+  projectType: ProjectType;
+}
+
+export interface ValidatedBuildingChoice {
+  buildingAssetId: StartupBuildingAssetId;
+}
+
+export interface ValidatedAppearance {
+  buildingColor: string;
+  billboardTextColor: string;
+  billboardBackgroundColor: string;
+}
+
+export function validateFounderFields(formData: FormData): ValidationResult<ValidatedFounderFields> {
   const fullName = formString(formData, "fullName");
-  const rawHandle = formString(formData, "xHandle");
-  const xHandle = rawHandle.replace(/^@/, "").toLowerCase();
+  const xHandle = formString(formData, "xHandle").replace(/^@/, "").toLowerCase();
+
+  if (!fullName || fullName.length > 60) return { error: "Enter a founder name of 60 characters or fewer." };
+  if (!X_HANDLE_PATTERN.test(xHandle)) return { error: "Enter a valid X handle." };
+
+  return { data: { fullName, xHandle } };
+}
+
+export function validateProjectDetails(formData: FormData): ValidationResult<ValidatedProjectDetails> {
   const projectName = formString(formData, "projectName");
   const websiteUrl = normalizeWebsite(formString(formData, "websiteUrl"));
   const projectType = formString(formData, "projectType");
+
+  if (!projectName || projectName.length > 40) return { error: "Enter a project name of 40 characters or fewer." };
+  if (!websiteUrl || websiteUrl.length > 2048) return { error: "Enter a valid HTTP or HTTPS project URL." };
+  if (!(PROJECT_TYPES as readonly string[]).includes(projectType)) return { error: "Choose a valid project type." };
+
+  return { data: { projectName, websiteUrl, projectType: projectType as ProjectType } };
+}
+
+export function validateBuildingChoice(formData: FormData): ValidationResult<ValidatedBuildingChoice> {
   const buildingAssetId = formString(formData, "buildingAssetId");
+
+  if (!(STARTUP_BUILDING_ASSET_IDS as readonly string[]).includes(buildingAssetId)) {
+    return { error: "Choose a valid building." };
+  }
+
+  return { data: { buildingAssetId: buildingAssetId as StartupBuildingAssetId } };
+}
+
+export function validateAppearance(formData: FormData): ValidationResult<ValidatedAppearance> {
   const buildingColor = formString(formData, "buildingColor").toLowerCase();
   const billboardTextColor = formString(formData, "billboardTextColor").toLowerCase();
   const billboardBackgroundColor = formString(formData, "billboardBackgroundColor").toLowerCase();
 
-  if (!fullName || fullName.length > 60) return { error: "Enter a founder name of 60 characters or fewer." };
-  if (!X_HANDLE_PATTERN.test(xHandle)) return { error: "Enter a valid X handle." };
-  if (!projectName || projectName.length > 40) return { error: "Enter a project name of 40 characters or fewer." };
-  if (!websiteUrl || websiteUrl.length > 2048) return { error: "Enter a valid HTTP or HTTPS project URL." };
-  if (!(PROJECT_TYPES as readonly string[]).includes(projectType)) return { error: "Choose a valid project type." };
-  if (!(STARTUP_BUILDING_ASSET_IDS as readonly string[]).includes(buildingAssetId)) return { error: "Choose a valid building." };
   if (!(BUILDING_COLORS as readonly string[]).includes(buildingColor)) return { error: "Choose a valid building color." };
   if (!HEX_COLOR_PATTERN.test(billboardTextColor)) return { error: "Choose a valid billboard text color." };
   if (!HEX_COLOR_PATTERN.test(billboardBackgroundColor)) return { error: "Choose a valid billboard background color." };
 
-  return {
-    data: {
-      fullName,
-      xHandle,
-      projectName,
-      websiteUrl,
-      projectType: projectType as ProjectType,
-      buildingAssetId: buildingAssetId as StartupBuildingAssetId,
-      buildingColor,
-      billboardTextColor,
-      billboardBackgroundColor,
-    },
-  };
+  return { data: { buildingColor, billboardTextColor, billboardBackgroundColor } };
+}
+
+/** Only the claim needs all nine fields. Composed in the original order so every error message and
+ * its precedence are preserved exactly. */
+export function validateClaimFormData(formData: FormData): ValidationResult<ValidatedProjectFields> {
+  const founder = validateFounderFields(formData);
+  if (!founder.data) return { error: founder.error };
+
+  const project = validateProjectDetails(formData);
+  if (!project.data) return { error: project.error };
+
+  const building = validateBuildingChoice(formData);
+  if (!building.data) return { error: building.error };
+
+  const appearance = validateAppearance(formData);
+  if (!appearance.data) return { error: appearance.error };
+
+  return { data: { ...founder.data, ...project.data, ...building.data, ...appearance.data } };
+}
+
+export function formBoolean(formData: FormData, key: string): boolean {
+  return formString(formData, key) === "true";
 }
 
 export function isUuid(value: string): boolean {
