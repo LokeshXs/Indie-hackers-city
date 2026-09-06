@@ -50,7 +50,7 @@ const development = {
   ownerId: "user-1",
   project: { id: "123e4567-e89b-42d3-a456-426614174000", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "app" as const },
   founder: { fullName: "Lokesh Singh", xHandle: "lokesh_singh", avatarUrl: null },
-  building: { level: 1 as const, assetId: "startup-building-level-1" as const, color: "#e2775c" },
+  building: { level: 1 as const, assetId: "startup-building-level-1" as const },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
   progression: { xp: 0, buildingLevel: 1 as const, currentLevelXp: 0, nextLevelXp: 100 },
   claimedAt: "2026-08-30T00:00:00.000Z",
@@ -171,33 +171,33 @@ describe("plot claim modal", () => {
 
     const projectInput = screen.getByRole("textbox", { name: "Project name" });
     const websiteInput = screen.getByRole("textbox", { name: "Project URL" });
-    const continueToColorButton = screen.getByRole("button", { name: /continue/i });
-    expect(continueToColorButton).toBeDisabled();
+    const continueToBillboardButton = screen.getByRole("button", { name: /continue/i });
+    expect(continueToBillboardButton).toBeDisabled();
     await waitFor(() => expect(projectInput).toHaveFocus());
     await user.type(projectInput, "Xenith");
     await user.type(websiteInput, "ftp://xenith.dev");
     await user.tab();
     expect(screen.getByText("Enter a valid project URL.")).toBeInTheDocument();
-    expect(continueToColorButton).toBeDisabled();
+    expect(continueToBillboardButton).toBeDisabled();
 
     await user.clear(websiteInput);
     await user.type(websiteInput, "xenith.dev");
     await user.tab();
     expect(websiteInput).toHaveValue("https://xenith.dev/");
     await user.click(screen.getByRole("radio", { name: "App" }));
-    expect(continueToColorButton).toBeEnabled();
-    await user.click(continueToColorButton);
+    expect(continueToBillboardButton).toBeEnabled();
 
-    // Billboard step: the colors carry defaults, so it only has to be stepped through.
-    expect(screen.getByText("Design your billboard")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /continue/i }));
-
-    const claimButton = screen.getByRole("button", { name: /claim my plot/i });
-    expect(claimButton).toBeEnabled();
+    // The shell carousel is hidden on the billboard step, whose preview shows the board rather
+    // than the building, so this is the last screen on which the shell can be changed.
     expect(screen.getByText("Startup Shop")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Previous building" }));
     expect(screen.getByText("Garage")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: "Coral" }));
+    await user.click(continueToBillboardButton);
+
+    // Billboard is now the last step: its colours carry defaults, and it submits the claim.
+    expect(screen.getByText("Design your billboard")).toBeInTheDocument();
+    const claimButton = screen.getByRole("button", { name: /claim my plot/i });
+    expect(claimButton).toBeEnabled();
     await user.click(claimButton);
 
     const claimRequest = vi.mocked(fetch).mock.calls.at(-1);

@@ -1,4 +1,4 @@
-import type { StartupBuildingAssetId } from "@/lib/city/types";
+import type { PlotBuildingAssetId } from "@/lib/city/types";
 import type { CityAssetId } from "./map-types";
 
 export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
@@ -18,6 +18,8 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "startup-building-level-1": "/assets/city/v3/startup-building-level-1.glb",
   "corner-studio-level-1": "/assets/city/v3/corner-studio-level-1.glb",
   "indie-garage-level-1": "/assets/city/v3/indie-garage-level-1.glb",
+  "slat-studio-level-2": "/assets/city/v3/level2/slat-studio-level-2.glb",
+  "teal-brow-level-2": "/assets/city/v3/level2/teal-brow-level-2.glb",
 };
 
 // Name of the mesh material representing each building's main wall surface,
@@ -25,12 +27,6 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
 /** Mesh material on the billboard whose map the runtime replaces with the painted product card.
  * Verified against the exported glb material names. */
 export const BILLBOARD_FACE_MATERIAL = "Billboard Dynamic Face";
-
-export const BUILDING_WALL_MATERIAL: Partial<Record<CityAssetId, string>> = {
-  "startup-building-level-1": "Warm cream walls",
-  "corner-studio-level-1": "Warm studio cream",
-  "indie-garage-level-1": "Garage shell",
-};
 
 /** Where roof props sit on each building, in the building's own local space.
  *
@@ -62,7 +58,7 @@ export interface RoofAnchors {
 /** How far outside the roof tier the garland hangs, so bulbs clear the fascia. */
 const OVERHANG = 0.16;
 
-export const BUILDING_ROOF_ANCHORS: Record<StartupBuildingAssetId, RoofAnchors> = {
+export const BUILDING_ROOF_ANCHORS: Record<PlotBuildingAssetId, RoofAnchors> = {
   // One mass. Roof shadow tier: top 3.75, X +-4.08, Z +-2.58.
   "startup-building-level-1": {
     garland: [
@@ -98,5 +94,33 @@ export const BUILDING_ROOF_ANCHORS: Record<StartupBuildingAssetId, RoofAnchors> 
       { x: -4.00 - OVERHANG, y: 3.81, z: 2.58 + OVERHANG },
     ],
     bubbleY: 7.0,
+  },
+  // Level-2 premises. These are not optional: RoofProps bails with `return null` when an asset has
+  // no entry here, so a founder redeeming the 490 XP reward would lose the roof lights they earned
+  // at 100 XP -- an upgrade that quietly takes a reward away.
+  //
+  // Two full-width tiers stepped front to back. Bay roof: top 3.12, X +-4.05, Z -2.68..-1.60.
+  // Main roof:                                            top 4.34, X +-4.05, Z -1.72..2.52.
+  // The wire runs the back and both flanks high, then drops to the bay across the frontage.
+  "slat-studio-level-2": {
+    garland: [
+      { x: -4.05 - OVERHANG, y: 4.34, z: 2.52 + OVERHANG },
+      { x: 4.05 + OVERHANG, y: 4.34, z: 2.52 + OVERHANG },
+      { x: 4.05 + OVERHANG, y: 4.34, z: -1.72 },
+      { x: 4.05 + OVERHANG, y: 3.12, z: -2.68 - OVERHANG },
+      { x: -4.05 - OVERHANG, y: 3.12, z: -2.68 - OVERHANG },
+      { x: -4.05 - OVERHANG, y: 4.34, z: -1.72 },
+    ],
+    bubbleY: 6.6,
+  },
+  // One slab, oversailing the walls on every side. Roof slab: top 7.20, X +-4.05, Z -3.05..2.95.
+  "teal-brow-level-2": {
+    garland: [
+      { x: -4.05 - OVERHANG, y: 7.20, z: -3.05 - OVERHANG },
+      { x: 4.05 + OVERHANG, y: 7.20, z: -3.05 - OVERHANG },
+      { x: 4.05 + OVERHANG, y: 7.20, z: 2.95 + OVERHANG },
+      { x: -4.05 - OVERHANG, y: 7.20, z: 2.95 + OVERHANG },
+    ],
+    bubbleY: 9.2,
   },
 };

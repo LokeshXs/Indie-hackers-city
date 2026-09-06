@@ -1,5 +1,4 @@
 import {
-  BUILDING_COLORS,
   HEX_COLOR_PATTERN,
   PROJECT_TYPES,
   STARTUP_BUILDING_ASSET_IDS,
@@ -14,7 +13,6 @@ export interface ValidatedProjectFields {
   websiteUrl: string;
   projectType: ProjectType;
   buildingAssetId: StartupBuildingAssetId;
-  buildingColor: string;
   billboardTextColor: string;
   billboardBackgroundColor: string;
 }
@@ -61,7 +59,6 @@ export interface ValidatedBuildingChoice {
 }
 
 export interface ValidatedAppearance {
-  buildingColor: string;
   billboardTextColor: string;
   billboardBackgroundColor: string;
 }
@@ -99,15 +96,13 @@ export function validateBuildingChoice(formData: FormData): ValidationResult<Val
 }
 
 export function validateAppearance(formData: FormData): ValidationResult<ValidatedAppearance> {
-  const buildingColor = formString(formData, "buildingColor").toLowerCase();
   const billboardTextColor = formString(formData, "billboardTextColor").toLowerCase();
   const billboardBackgroundColor = formString(formData, "billboardBackgroundColor").toLowerCase();
 
-  if (!(BUILDING_COLORS as readonly string[]).includes(buildingColor)) return { error: "Choose a valid building color." };
   if (!HEX_COLOR_PATTERN.test(billboardTextColor)) return { error: "Choose a valid billboard text color." };
   if (!HEX_COLOR_PATTERN.test(billboardBackgroundColor)) return { error: "Choose a valid billboard background color." };
 
-  return { data: { buildingColor, billboardTextColor, billboardBackgroundColor } };
+  return { data: { billboardTextColor, billboardBackgroundColor } };
 }
 
 /** Only the claim needs all nine fields. Composed in the original order so every error message and

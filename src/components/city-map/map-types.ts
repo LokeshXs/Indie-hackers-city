@@ -14,7 +14,9 @@ export type CityAssetId =
   | "district-sign-gantry"
   | "startup-building-level-1"
   | "corner-studio-level-1"
-  | "indie-garage-level-1";
+  | "indie-garage-level-1"
+  | "slat-studio-level-2"
+  | "teal-brow-level-2";
 
 export interface WorldPosition {
   x: number;
@@ -41,7 +43,6 @@ export interface CityEntity {
   rotationY?: number;
   scale?: number;
   scaleXZ?: { x: number; z: number };
-  buildingColor?: string;
   /** Card content painted onto the billboard's face at runtime. */
   billboard?: { name: string; textColor: string; backgroundColor: string; scrolling?: boolean };
   plotId?: string;

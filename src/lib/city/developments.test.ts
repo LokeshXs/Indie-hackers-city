@@ -8,7 +8,6 @@ function developmentRow(overrides: Partial<CityDevelopmentRow> = {}): CityDevelo
     billboard_background_color: "#1b3a4b",
     billboard_text_color: "#f7e0a6",
     building_asset_id: "startup-building-level-1",
-    building_color: "#d1ad6e",
     building_level: 1,
     claimed_at: "2026-08-30T00:00:00.000Z",
     current_level_xp: 0,
@@ -41,7 +40,6 @@ describe("city development serialization", () => {
     expect(development.building).toEqual({
       level: 4,
       assetId: "corner-studio-level-1",
-      color: "#d1ad6e",
     });
   });
 

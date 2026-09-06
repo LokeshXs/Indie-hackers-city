@@ -1,11 +1,11 @@
 -- Multi-project + achievements. Kept in its own file so the XP arithmetic chain in
--- city_developments_test.sql keeps its plan(68) and never has to be renumbered.
+-- city_developments_test.sql keeps its own plan count and never has to be renumbered.
 
 begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(63);
+select plan(62);
 
 -- ---------------------------------------------------------------- structure
 
@@ -49,8 +49,8 @@ select ok(has_function_privilege('authenticated', 'public.update_project(uuid, t
 select ok(not has_function_privilege('anon', 'public.update_project(uuid, text, text, text, boolean)', 'EXECUTE'), 'anon cannot update projects');
 select ok(has_function_privilege('authenticated', 'public.record_achievement(text, uuid)', 'EXECUTE'), 'founders can record achievements');
 select ok(not has_function_privilege('anon', 'public.record_achievement(text, uuid)', 'EXECUTE'), 'anon cannot record achievements');
-select ok(has_function_privilege('authenticated', 'public.update_plot_appearance(text, text, text)', 'EXECUTE'), 'founders can restyle their plot');
-select ok(not has_function_privilege('anon', 'public.update_plot_appearance(text, text, text)', 'EXECUTE'), 'anon cannot restyle a plot');
+select ok(has_function_privilege('authenticated', 'public.update_plot_appearance(text, text)', 'EXECUTE'), 'founders can restyle their plot');
+select ok(not has_function_privilege('anon', 'public.update_plot_appearance(text, text)', 'EXECUTE'), 'anon cannot restyle a plot');
 select ok(not has_function_privilege('authenticated', 'public.apply_project_achievement(uuid, uuid, text)', 'EXECUTE'), 'the private applier is unreachable by clients');
 select ok(not has_function_privilege('anon', 'public.apply_project_achievement(uuid, uuid, text)', 'EXECUTE'), 'the private applier is unreachable by anon');
 
@@ -68,7 +68,7 @@ select lives_ok(
   $$ select * from public.claim_plot(
     '10000000-0000-4000-8000-000000000001', 'pioneer:jobs:north:01',
     'Founder One', '@Founder_One', 'First Project', 'https://one.example/', 'website',
-    'indie-garage-level-1', '#d1ad6e', '#f7e0a6', '#1b3a4b'
+    'indie-garage-level-1', '#f7e0a6', '#1b3a4b'
   ) $$,
   'founder one claims a plot'
 );
@@ -242,7 +242,7 @@ select results_eq(
 );
 select results_eq(
   $$ select xp_total, building_level from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values (570, 3::smallint) $$,
+  $$ values (570, 2::smallint) $$,
   'moving the billboard preserves plot progression'
 );
 
@@ -267,19 +267,14 @@ select throws_ok(
 -- ---------------------------------------------------------------- update_plot_appearance
 
 select lives_ok(
-  $$ select * from public.update_plot_appearance('#9b8ac4', '#ffffff', '#101010') $$,
-  'a founder can restyle their plot'
+  $$ select * from public.update_plot_appearance('#ffffff', '#101010') $$,
+  'a founder can restyle their billboard'
 );
 select results_eq(
-  $$ select building_color, billboard_text_color, billboard_background_color, building_asset_id
+  $$ select billboard_text_color, billboard_background_color, building_asset_id
      from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values ('#9b8ac4'::text, '#ffffff'::text, '#101010'::text, 'indie-garage-level-1'::text) $$,
-  'colours change and the building shell is left alone'
-);
-select throws_ok(
-  $$ select * from public.update_plot_appearance('wheat', '#ffffff', '#101010') $$,
-  'P0001', 'invalid_building',
-  'an unknown building colour is rejected'
+  $$ values ('#ffffff'::text, '#101010'::text, 'indie-garage-level-1'::text) $$,
+  'billboard colours change and the building shell is left alone'
 );
 
 -- ---------------------------------------------------------------- ownership
@@ -311,7 +306,7 @@ select lives_ok(
   $$ select * from public.claim_plot(
     '10000000-0000-4000-8000-000000000200', 'pioneer:jobs:north:02',
     'Founder Two', '@Founder_Two', 'Their Project', 'https://theirs.example/', 'website',
-    'startup-building-level-1', '#5fa8d3', '#f7e0a6', '#1b3a4b'
+    'startup-building-level-1', '#f7e0a6', '#1b3a4b'
   ) $$,
   'founder two claims a plot'
 );

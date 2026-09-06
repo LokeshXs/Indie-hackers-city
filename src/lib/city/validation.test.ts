@@ -16,7 +16,6 @@ function validFormData() {
   formData.set("websiteUrl", "https://example.com/project");
   formData.set("projectType", "website");
   formData.set("buildingAssetId", "startup-building-level-1");
-  formData.set("buildingColor", "#d1ad6e");
   formData.set("billboardTextColor", "#f7e0a6");
   formData.set("billboardBackgroundColor", "#1b3a4b");
   return formData;
@@ -78,15 +77,17 @@ describe("narrow field validators", () => {
     expect(result.data?.xHandle).toBe("ada_builds");
   });
 
-  it("validates appearance without a building asset", () => {
+  it("validates appearance without a building asset, lowercasing what it accepts", () => {
     const formData = new FormData();
-    formData.set("buildingColor", "#5FA8D3");
     formData.set("billboardTextColor", "#F7E0A6");
     formData.set("billboardBackgroundColor", "#1B3A4B");
 
     const result = validateAppearance(formData);
     expect(result.error).toBeUndefined();
-    expect(result.data?.buildingColor).toBe("#5fa8d3");
+    // The hex check is lowercase-only, so normalising is what lets an uppercase value through
+    // rather than being rejected. This used to be asserted via the building colour.
+    expect(result.data?.billboardTextColor).toBe("#f7e0a6");
+    expect(result.data?.billboardBackgroundColor).toBe("#1b3a4b");
   });
 
   it("reads only an explicit \"true\" as a checked box", () => {

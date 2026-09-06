@@ -13,7 +13,7 @@ const plot = (z: number, rotationY: number | undefined): CityEntity => ({
 });
 const development = (plotId: string, assetId: StartupBuildingAssetId = "startup-building-level-1") => ({
   plotId,
-  building: { level: 1 as const, assetId, color: "#d1ad6e" },
+  building: { level: 1 as const, assetId },
   project: { id: "p1", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "website" as const },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
   // The board's scrolling flag is derived from XP, so the fixture has to carry progression.
@@ -27,8 +27,7 @@ describe("Level 1 plot development", () => {
       position: { x: -18, y: 0, z: -9.14 },
       rotationY: Math.PI,
       scale: 1.4,
-      buildingColor: "#d1ad6e",
-      plotId: "plot-north-1",
+        plotId: "plot-north-1",
       interactive: true,
       suppressPlotHighlight: true,
     });
@@ -41,8 +40,7 @@ describe("Level 1 plot development", () => {
       position: { x: -18, y: 0, z: 9.14 },
       rotationY: undefined,
       scale: 1.4,
-      buildingColor: "#d1ad6e",
-      plotId: "plot-south-1",
+        plotId: "plot-south-1",
       interactive: true,
       suppressPlotHighlight: true,
     });
@@ -55,8 +53,7 @@ describe("Level 1 plot development", () => {
       position: { x: -18, y: 0, z: -9.14 },
       rotationY: Math.PI,
       scale: 1.4,
-      buildingColor: "#d1ad6e",
-      plotId: "plot-north-1",
+        plotId: "plot-north-1",
       interactive: true,
       suppressPlotHighlight: true,
     });
@@ -69,8 +66,7 @@ describe("Level 1 plot development", () => {
       position: { x: -18, y: 0, z: -9.14 },
       rotationY: Math.PI,
       scale: 1.4,
-      buildingColor: "#d1ad6e",
-      plotId: "plot-north-1",
+        plotId: "plot-north-1",
       interactive: true,
       suppressPlotHighlight: true,
     });
@@ -85,8 +81,7 @@ describe("Level 1 plot development", () => {
       position: { x: -18, y: 0, z: -16.76 },
       rotationY: undefined,
       scale: 1.4,
-      buildingColor: "#d1ad6e",
-      plotId: "plot-north-1",
+        plotId: "plot-north-1",
       interactive: true,
       suppressPlotHighlight: true,
     });
@@ -123,8 +118,7 @@ describe("Level 1 plot development", () => {
       position: { x: -18, y: 0, z: 16.76 },
       rotationY: Math.PI,
       scale: 1.4,
-      buildingColor: "#d1ad6e",
-      plotId: "plot-south-1",
+        plotId: "plot-south-1",
       interactive: true,
       suppressPlotHighlight: true,
     });

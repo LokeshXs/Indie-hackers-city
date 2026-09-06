@@ -8,5 +8,4 @@ export { Modal, type ModalProps } from "./Modal";
 export { Panel, type PanelPlacement, type PanelProps } from "./Panel";
 export { VisuallyHidden, type VisuallyHiddenProps } from "./VisuallyHidden";
 export { Overlay, type OverlayContainment, type OverlayProps, type OverlayTone } from "./Overlay";
-export { SwatchGroup, type SwatchGroupProps, type SwatchOption } from "./SwatchGroup";
 export { XpFigure, type XpFigureProps } from "./XpFigure";

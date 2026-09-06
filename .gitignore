@@ -43,5 +43,9 @@ yarn-error.log*
 next-env.d.ts
 
 
+# Blender auto-backups: rewritten on every save of the matching .blend, which is the
+# real source and stays tracked.
+*.blend1
+
 # Agent skills
 .agents

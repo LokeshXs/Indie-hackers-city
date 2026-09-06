@@ -4,8 +4,8 @@ import { Suspense, memo, useEffect, useMemo, useRef, type ReactNode } from "reac
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import type { CityDevelopment, StartupBuildingAssetId } from "@/lib/city/types";
-import { BILLBOARD_FACE_MATERIAL, BUILDING_WALL_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
+import type { CityDevelopment, PlotBuildingAssetId } from "@/lib/city/types";
+import { BILLBOARD_FACE_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
 import { MARQUEE_SPEED, useBillboardTexture } from "./billboard-texture";
 import { PLOT_BUILDING_SCALE, createPlotDevelopmentEntities, getBuildingPlacement } from "./plot-builds";
 import { RoofProps } from "./RoofProps";
@@ -66,9 +66,8 @@ const PLOT_PREVIEW_LIFT_RATIO = -0.115;
 
 export const ModelInstance = memo(function ModelInstance({
   assetId,
-  buildingColor,
   billboard,
-}: Pick<CityEntity, "assetId" | "buildingColor" | "billboard">) {
+}: Pick<CityEntity, "assetId" | "billboard">) {
   const model = useGLTF(CITY_ASSET_PATHS[assetId]);
   const cardTexture = useBillboardTexture(billboard);
 
@@ -81,19 +80,18 @@ export const ModelInstance = memo(function ModelInstance({
   }, [cardTexture, billboard?.scrolling]);
   const instance = useMemo(() => {
     const scene = model.scene.clone(true);
-    const wallMaterialName = BUILDING_WALL_MATERIAL[assetId];
     scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(assetId);
+      // A transparent material still casts a fully opaque shadow: the depth pass writes geometry,
+      // not alpha. Left alone, the level-2 studio's glazing lays a solid dark slab across the
+      // interior it exists to reveal. Keyed off the material rather than the asset id so any future
+      // glass gets the same treatment without another entry in the set above.
+      const material = Array.isArray(object.material) ? object.material[0] : object.material;
+      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(assetId) && !material?.transparent;
       object.receiveShadow = true;
       if (Array.isArray(object.material)) return;
-      // clone() shares materials with the cached GLTF, so both branches below have to clone
-      // before mutating or every instance in the city picks up the change.
-      if (buildingColor && wallMaterialName && object.material.name === wallMaterialName) {
-        const material = object.material.clone();
-        if (material instanceof THREE.MeshStandardMaterial) material.color.set(buildingColor);
-        object.material = material;
-      }
+      // clone() shares materials with the cached GLTF, so the branch below has to clone before
+      // mutating or every instance in the city picks up the change.
       if (billboard && cardTexture && object.material.name === BILLBOARD_FACE_MATERIAL) {
         const material = object.material.clone();
         if (material instanceof THREE.MeshStandardMaterial) {
@@ -107,12 +105,12 @@ export const ModelInstance = memo(function ModelInstance({
       }
     });
     return scene;
-  }, [assetId, buildingColor, billboard, cardTexture, model.scene]);
+  }, [assetId, billboard, cardTexture, model.scene]);
 
   return <primitive object={instance} />;
 });
 
-export const BuildingPreview = memo(function BuildingPreview({ assetId, buildingColor }: { assetId: StartupBuildingAssetId; buildingColor: string }) {
+export const BuildingPreview = memo(function BuildingPreview({ assetId }: { assetId: PlotBuildingAssetId }) {
   const buildingRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
@@ -126,7 +124,7 @@ export const BuildingPreview = memo(function BuildingPreview({ assetId, building
         <meshStandardMaterial color="#c9e4df" roughness={0.78} />
       </mesh>
       <group ref={buildingRef} position={[0, -1.58, 0]} rotation={[0, -0.55, 0]}>
-        <ModelInstance assetId={assetId} buildingColor={buildingColor} />
+        <ModelInstance assetId={assetId} />
       </group>
     </>
   );
@@ -207,11 +205,7 @@ export const PlotPreview = memo(function PlotPreview({
               rotation={[0, entity.rotationY ?? 0, 0]}
               scale={[scale, scale, scale]}
             >
-              <ModelInstance
-                assetId={entity.assetId}
-                buildingColor={entity.buildingColor}
-                billboard={entity.billboard}
-              />
+              <ModelInstance assetId={entity.assetId} billboard={entity.billboard} />
             </group>
           );
           })}
@@ -233,7 +227,12 @@ export const PlotPreview = memo(function PlotPreview({
 
 /** The turntable both modals frame their preview in. The camera is a non-reactive prop, so `zoom`
  * is read once on mount — it sizes the framing to the pane, it does not animate. Previews that
- * don't fit are scaled to the camera, not the reverse. */
+ * don't fit are scaled to the camera, not the reverse.
+ *
+ * Worth knowing when judging an asset here: this is a flattering rig, not the city's. The ambient
+ * light below has no counterpart in CityMap3D's scene, and the three sources together sum to
+ * roughly twice what a building receives once placed — so a palette read in this pane runs about a
+ * stop lighter than it will render on the map. */
 export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, shadows = true, cameraPosition = [8, 6, 8], children }: { className?: string; zoom?: number; shadows?: boolean; cameraPosition?: [number, number, number]; children: ReactNode }) {
   return (
     <Canvas

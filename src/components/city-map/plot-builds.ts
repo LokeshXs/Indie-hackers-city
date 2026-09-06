@@ -39,7 +39,6 @@ export function createPlotDevelopmentEntities(
     position: placement.position,
     rotationY: placement.rotationY,
     scale: PLOT_BUILDING_SCALE,
-    buildingColor: development.building.color,
     plotId: development.plotId,
     interactive: true,
     suppressPlotHighlight: true,

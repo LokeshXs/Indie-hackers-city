@@ -9,14 +9,15 @@ import { AccountMenu } from "@/components/auth/AccountMenu";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getUserDisplayName } from "@/lib/auth/user-metadata";
 import {
-  BUILDING_COLOR_OPTIONS,
   DEFAULT_BILLBOARD_BACKGROUND_COLOR,
   DEFAULT_BILLBOARD_TEXT_COLOR,
   X_HANDLE_PATTERN,
 } from "@/lib/city/constants";
 import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId } from "@/lib/city/types";
 import { useCityDevelopments } from "@/hooks/useCityDevelopments";
+import { canChoosePremises } from "@/lib/city/unlocks";
 import { CITY_ASSET_PATHS } from "./city-assets";
+import { PremisesUpgradeModal } from "./PremisesUpgradeModal";
 import { contrastRatio } from "./billboard-texture";
 import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
 import {
@@ -24,7 +25,7 @@ import {
   createPlotDevelopmentEntities,
   getBuildingPlacement,
 } from "./plot-builds";
-import type { CityDistrict, CityEntity } from "./map-types";
+import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
 import { FounderProgressCard } from "./FounderProgressCard";
@@ -38,7 +39,6 @@ import {
   Field,
   Modal,
   Panel,
-  SwatchGroup,
   VisuallyHidden,
   fieldColorControlClass,
   fieldControlClass,
@@ -60,7 +60,7 @@ const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: 
 ];
 
 type ConstructionPhase = "blueprint" | "reveal" | "complete";
-type ClaimStep = "auth" | "founder" | "project" | "billboard" | "colors";
+type ClaimStep = "auth" | "founder" | "project" | "billboard";
 interface ConstructionState {
   plotId: string;
   phase: ConstructionPhase;
@@ -297,7 +297,7 @@ const CityAsset = memo(function CityAsset({
       rotation={[0, entity.rotationY ?? 0, 0]}
       scale={scaleVector}
     >
-      <ModelInstance assetId={entity.assetId} buildingColor={entity.buildingColor} billboard={entity.billboard} />
+      <ModelInstance assetId={entity.assetId} billboard={entity.billboard} />
       {selectable && entity.plotId && (
         <mesh
           position={[0, 0.2, 0]}
@@ -345,6 +345,14 @@ const SceneReadySignal = memo(function SceneReadySignal({ onReady }: { onReady: 
   });
   return null;
 });
+
+/** Assets kept out of the eager preload sweep.
+ *
+ * The level-2 shells are the two largest models in the kit, and a city where nobody has redeemed
+ * the 490 XP reward contains none of them -- sweeping them in would lengthen the loading screen for
+ * every visitor to fetch models most maps never show. They are preloaded conditionally instead, by
+ * the effect below, the moment a development actually names one. */
+const DEFERRED_PRELOAD_ASSETS = new Set<CityAssetId>(["slat-studio-level-2", "teal-brow-level-2"]);
 
 const Scene = memo(function Scene({
   entities,
@@ -499,7 +507,6 @@ export function CityMap3D({
   const [inspectedPlotId, setInspectedPlotId] = useState<string | null>(null);
   const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
   const [selectedBuildingAssetId, setSelectedBuildingAssetId] = useState<StartupBuildingAssetId>(BUILDING_OPTIONS[0].assetId);
-  const [selectedBuildingColor, setSelectedBuildingColor] = useState<string>(BUILDING_COLOR_OPTIONS[0].hex);
   const [formStep, setFormStep] = useState<ClaimStep>("auth");
   const [billboardTextColor, setBillboardTextColor] = useState(DEFAULT_BILLBOARD_TEXT_COLOR);
   const [billboardBackgroundColor, setBillboardBackgroundColor] = useState(DEFAULT_BILLBOARD_BACKGROUND_COLOR);
@@ -520,6 +527,10 @@ export function CityMap3D({
   const [focusedPlotId, setFocusedPlotId] = useState<string | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [loadingComplete, setLoadingComplete] = useState(false);
+  // Session-scoped only, on purpose. Nothing records that a founder has seen the premises chooser,
+  // so closing it silences it for this visit and it returns on the next one -- until they choose,
+  // at which point their asset id is level-2 and the predicate below stops matching for good.
+  const [premisesDismissed, setPremisesDismissed] = useState(false);
   const [assetError, setAssetError] = useState<Error | null>(null);
   const [assetBoundaryResetKey] = useState(0);
   const [isClaimLimitAlertOpen, setIsClaimLimitAlertOpen] = useState(false);
@@ -531,7 +542,6 @@ export function CityMap3D({
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const shellRef = useRef<HTMLElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
-  const firstSwatchRef = useRef<HTMLButtonElement>(null);
   const googleButtonRef = useRef<HTMLButtonElement>(null);
   const constructionTimersRef = useRef<number[]>([]);
   const focusTimerRef = useRef<number | null>(null);
@@ -569,6 +579,11 @@ export function CityMap3D({
    * without the guard they would each flash for a moment at someone who turns out to be signed
    * out. A single narrowed const rather than the condition repeated at each of them. */
   const ownPlot = !isAuthLoading && isAuthenticated ? ownerDevelopment ?? null : null;
+  /** The 490 XP reward, unspent. Derived rather than stored, like every other unlock: the founder
+   * still standing on a level-1 shell is the whole of the record that they have not redeemed it. */
+  const premisesAvailable = Boolean(
+    ownPlot && canChoosePremises(ownPlot.progression.xp, ownPlot.building.assetId),
+  );
   const selectablePlotIds = useMemo(
     () => new Set(plotEntities.flatMap((entity) => entity.plotId ? [entity.plotId] : [])),
     [plotEntities],
@@ -665,8 +680,20 @@ export function CityMap3D({
     window.requestAnimationFrame(() => shellRef.current?.focus());
   }
 
+  // Deferred shells, fetched as soon as any plot shows one -- including the founder's own the
+  // instant they choose it, so the swap does not blink through the per-entity Suspense fallback.
+  // useGLTF.preload is cached, so re-running this on every developments change costs nothing.
   useEffect(() => {
-    Object.values(CITY_ASSET_PATHS).forEach((path) => useGLTF.preload(path));
+    for (const development of Object.values(developments)) {
+      const assetId = development.building.assetId;
+      if (DEFERRED_PRELOAD_ASSETS.has(assetId)) useGLTF.preload(CITY_ASSET_PATHS[assetId]);
+    }
+  }, [developments]);
+
+  useEffect(() => {
+    Object.entries(CITY_ASSET_PATHS)
+      .filter(([assetId]) => !DEFERRED_PRELOAD_ASSETS.has(assetId as CityAssetId))
+      .forEach(([, path]) => useGLTF.preload(path));
     useTexture.preload("/assets/city/v3/water-surface-tile.png");
     return () => {
       document.body.style.cursor = "auto";
@@ -679,7 +706,7 @@ export function CityMap3D({
     if (!selectedPlotId) return;
     const frame = window.requestAnimationFrame(() => {
       if (formStep === "auth") googleButtonRef.current?.focus();
-      else (firstFieldRef.current ?? firstSwatchRef.current)?.focus();
+      else firstFieldRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedPlotId, formStep]);
@@ -740,7 +767,6 @@ export function CityMap3D({
     setProjectUrl("");
     setProjectType("website");
     setWebsiteTouched(false);
-    setSelectedBuildingColor(BUILDING_COLOR_OPTIONS[0].hex);
     // Pre-existing gap: the building choice used to survive between claims.
     setSelectedBuildingAssetId(BUILDING_OPTIONS[0].assetId);
     setBillboardTextColor(DEFAULT_BILLBOARD_TEXT_COLOR);
@@ -841,7 +867,6 @@ export function CityMap3D({
     formData.set("websiteUrl", normalizedWebsite);
     formData.set("projectType", projectType);
     formData.set("buildingAssetId", buildingAssetId);
-    formData.set("buildingColor", selectedBuildingColor);
     formData.set("billboardTextColor", billboardTextColor);
     formData.set("billboardBackgroundColor", billboardBackgroundColor);
 
@@ -1042,6 +1067,20 @@ export function CityMap3D({
           onRetry={retryAssetLoading}
         />
       ) : null}
+      {ownPlot && premisesAvailable && !premisesDismissed && loadingComplete ? (
+        <PremisesUpgradeModal
+          development={ownPlot}
+          onClose={() => {
+            setPremisesDismissed(true);
+            setStatusMessage("New premises still available on your founder card.");
+          }}
+          onUpgraded={(development) => {
+            applyDevelopment(development);
+            setPremisesDismissed(true);
+            setStatusMessage(`${development.project.name} has moved into new premises.`);
+          }}
+        />
+      ) : null}
       {isClaimLimitAlertOpen ? (
         <Modal
           role="alertdialog"
@@ -1086,7 +1125,7 @@ export function CityMap3D({
               <PreviewStage className={styles.previewCanvas}>
                 {formStep === "billboard"
                   ? <BillboardPreview card={billboardCard} />
-                  : <BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} buildingColor={selectedBuildingColor} />}
+                  : <BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} />}
               </PreviewStage>
               {formStep !== "billboard" && (
                 <>
@@ -1162,7 +1201,7 @@ export function CityMap3D({
                       <Button size="lg" disabled={!canClaimPlot} onClick={() => setFormStep("billboard")}>Continue <span aria-hidden="true">→</span></Button>
                     </div>
                   </div>
-                ) : formStep === "billboard" ? (
+                ) : (
                   <div className={styles.formStep}>
                     <div className={styles.stepIntro}><strong>Design your billboard</strong><span>It stands on your lawn showing your product name.</span></div>
                     <Field label="Billboard background" htmlFor="billboard-background">
@@ -1173,24 +1212,6 @@ export function CityMap3D({
                     </Field>
                     <div className={styles.formActions}>
                       <Button variant="tertiary" onClick={() => setFormStep("project")}>← Back</Button>
-                      <Button size="lg" onClick={() => setFormStep("colors")}>Continue <span aria-hidden="true">→</span></Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={styles.formStep}>
-                    <div className={styles.stepIntro}><strong>Pick your colors</strong><span>Give the building your brand&apos;s look.</span></div>
-                    <div className={styles.claimField}>
-                      <label className={styles.swatchLabel} id="building-color-label">Building color</label>
-                      <SwatchGroup
-                        options={BUILDING_COLOR_OPTIONS}
-                        value={selectedBuildingColor}
-                        onChange={setSelectedBuildingColor}
-                        labelledBy="building-color-label"
-                        firstSwatchRef={firstSwatchRef}
-                      />
-                    </div>
-                    <div className={styles.formActions}>
-                      <Button variant="tertiary" onClick={() => setFormStep("billboard")}>← Back</Button>
                       <Button size="lg" type="submit" disabled={!canClaimPlot || isReserving}>{isReserving ? "Reserving plot\u2026" : "Claim my plot"}</Button>
                     </div>
                     {claimError ? <Alert>{claimError}</Alert> : null}

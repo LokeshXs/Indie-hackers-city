@@ -15,9 +15,12 @@ export type CityApiErrorCode =
   | "project_url_taken"
   | "project_already_exists"
   | "showcase_required"
+  | "reward_locked"
+  | "premises_already_chosen"
   | "unexpected_error";
 
 const CONFLICT_ERRORS = new Set([
+  "premises_already_chosen",
   "user_already_has_plot",
   "plot_taken",
   "x_handle_taken",
@@ -37,6 +40,7 @@ const KNOWN_RPC_ERRORS = new Set([
   "claim_not_found",
   "invalid_achievement",
   "showcase_required",
+  "reward_locked",
 ]);
 
 // Longest first: the match is a substring scan, so a shorter code that happens to be contained in a
@@ -50,6 +54,7 @@ export function rpcErrorCode(error: Pick<PostgrestError, "message">): CityApiErr
   if (code === "project_not_owned") return "project_not_owned";
   if (code === "claim_not_found") return "claim_not_found";
   if (code === "showcase_required") return "showcase_required";
+  if (code === "reward_locked") return "reward_locked";
   if (code && CONFLICT_ERRORS.has(code)) return code as CityApiErrorCode;
   if (code === "invalid_project" || code === "invalid_building" || code === "invalid_achievement") {
     return "invalid_request";
@@ -60,6 +65,7 @@ export function rpcErrorCode(error: Pick<PostgrestError, "message">): CityApiErr
 export function errorResponse(code: CityApiErrorCode, message: string, status?: number) {
   const responseStatus = status ?? (
     code === "not_authenticated" ? 401
+      : code === "reward_locked" ? 403
       : CONFLICT_ERRORS.has(code) ? 409
         : ["invalid_request", "inactive_plot", "project_not_owned", "claim_not_found", "showcase_required"].includes(code) ? 400
           : 500

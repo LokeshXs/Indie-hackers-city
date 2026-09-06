@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LADDER, TIMELINE_WINDOW, currentLeg, timelineWindow, unlocksFor, type LadderEntry } from "./unlocks";
+import { LADDER, canChoosePremises, currentLeg, unlocksFor, type LadderEntry } from "./unlocks";
 
 describe("unlocksFor", () => {
   it("derives every unlock from xp alone", () => {
@@ -11,61 +11,6 @@ describe("unlocksFor", () => {
   it("unlocks exactly on the threshold, not one past it", () => {
     expect(unlocksFor(99).lights).toBe(false);
     expect(unlocksFor(100).lights).toBe(true);
-  });
-});
-
-describe("timelineWindow", () => {
-  it("shows a full window with nothing earned yet", () => {
-    const timeline = timelineWindow(10);
-    expect(timeline.entries).toHaveLength(TIMELINE_WINDOW);
-    expect(timeline.entries.every((entry) => !entry.earned)).toBe(true);
-    expect(timeline.entries[0].isNext).toBe(true);
-    expect(timeline.progress).toBe(0);
-    expect(timeline.remaining).toBe(90);
-  });
-
-  it("keeps two earned entries behind the founder mid-ladder", () => {
-    // 400 clears 100, 240 and 390; the next is 490.
-    const timeline = timelineWindow(400);
-    expect(timeline.entries.map((entry) => entry.threshold)).toEqual([240, 390, 490, 570, 670]);
-    expect(timeline.entries.filter((entry) => entry.earned)).toHaveLength(2);
-    expect(timeline.entries.find((entry) => entry.isNext)?.threshold).toBe(490);
-    expect(timeline.remaining).toBe(90);
-  });
-
-  it("pins the window to the end once the whole ladder is behind you", () => {
-    const timeline = timelineWindow(10_000);
-    const lastFive = LADDER.slice(-TIMELINE_WINDOW).map((entry) => entry.threshold);
-    expect(timeline.entries.map((entry) => entry.threshold)).toEqual(lastFive);
-    expect(timeline.entries.every((entry) => entry.earned)).toBe(true);
-    expect(timeline.entries.some((entry) => entry.isNext)).toBe(false);
-    expect(timeline.progress).toBe(1);
-    expect(timeline.remaining).toBeNull();
-  });
-
-  it("returns everything it has when the ladder is shorter than the window", () => {
-    const short: LadderEntry[] = [{ threshold: 50 }, { threshold: 150 }];
-    const timeline = timelineWindow(60, short);
-    expect(timeline.entries.map((entry) => entry.threshold)).toEqual([50, 150]);
-    expect(timeline.remaining).toBe(90);
-  });
-
-  it("leaves a passed placeholder sealed", () => {
-    // 570 has no reward yet. Passing it must still mark it earned — the founder gets it when it
-    // ships — while the UI has nothing to reveal.
-    const timeline = timelineWindow(600);
-    const placeholder = timeline.entries.find((entry) => entry.threshold === 570);
-    expect(placeholder?.earned).toBe(true);
-    expect(placeholder?.reward).toBeUndefined();
-  });
-
-  it("advances the marker within the slot rather than jumping between nodes", () => {
-    const atNode = timelineWindow(240).progress;
-    const partWay = timelineWindow(315).progress;
-    const nearlyThere = timelineWindow(385).progress;
-    expect(partWay).toBeGreaterThan(atNode);
-    expect(nearlyThere).toBeGreaterThan(partWay);
-    expect(nearlyThere).toBeLessThan(1);
   });
 });
 
@@ -107,5 +52,36 @@ describe("currentLeg", () => {
     // from <= xp < to. It takes a first threshold of zero or less, and an xp below it.
     const degenerate: LadderEntry[] = [{ threshold: 0 }, { threshold: 100 }];
     expect(currentLeg(-5, degenerate)?.progress).toBe(1);
+  });
+});
+
+describe("the levelTwo rung", () => {
+  // Pinned from this side because the same number is hardcoded in SQL, in
+  // supabase/migrations/20260907120000_upgrade_plot_premises.sql. That RPC is granted to
+  // `authenticated` and so must gate on XP itself; it cannot import this file. Moving the
+  // threshold means moving this test and the pgTAP one with it -- which is the point of both.
+  it("unlocks new premises at exactly 490 XP", () => {
+    expect(LADDER.find((entry) => entry.reward?.key === "levelTwo")?.threshold).toBe(490);
+    expect(unlocksFor(489).levelTwo).toBe(false);
+    expect(unlocksFor(490).levelTwo).toBe(true);
+  });
+});
+
+describe("canChoosePremises", () => {
+  it("stays shut until the reward is earned", () => {
+    expect(canChoosePremises(489, "startup-building-level-1")).toBe(false);
+    expect(canChoosePremises(490, "startup-building-level-1")).toBe(true);
+  });
+
+  it("closes for good once a level-2 shell is standing", () => {
+    // The asset id is the only record that the reward has been spent, so this is what stops the
+    // chooser reopening on every load. A founder who keeps earning must not be asked twice.
+    expect(canChoosePremises(490, "slat-studio-level-2")).toBe(false);
+    expect(canChoosePremises(9999, "teal-brow-level-2")).toBe(false);
+  });
+
+  it("offers the upgrade from any of the three claim-time shells", () => {
+    expect(canChoosePremises(490, "corner-studio-level-1")).toBe(true);
+    expect(canChoosePremises(490, "indie-garage-level-1")).toBe(true);
   });
 });

@@ -63,7 +63,7 @@ const development: CityDevelopment = {
     type: "app",
   },
   founder: { fullName: "Ada Founder", xHandle: "ada_founder", avatarUrl: null },
-  building: { level: 1, assetId: "indie-garage-level-1", color: "#5fa8d3" },
+  building: { level: 1, assetId: "indie-garage-level-1" },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
   progression: { xp: 10, buildingLevel: 1, currentLevelXp: 0, nextLevelXp: 100 },
   claimedAt: "2026-08-30T00:00:00.000Z",
@@ -77,11 +77,13 @@ function stubSuccessfulSave() {
   })));
 }
 
-describe("ProjectCard building", () => {
+describe("ProjectCard customise menu", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("no longer lets the owner change the building shape", async () => {
+  it("offers founder details and the billboard, and no way to change the building", async () => {
     const user = userEvent.setup();
+    stubSuccessfulSave();
+
     render(
       <ProjectCard
         development={development}
@@ -93,41 +95,13 @@ describe("ProjectCard building", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Customise" }));
-    await user.click(screen.getByRole("button", { name: /Building colour/ }));
 
-    // The shell is assigned at claim time; only its paint is editable now.
+    // The shell is assigned at claim time and its colour is no longer a founder choice at all,
+    // so neither a shape picker nor a paint picker should be reachable from here.
+    expect(screen.getByRole("button", { name: /Founder details/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Billboard design/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Building colour/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Building" })).not.toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: "Building colour" })).toBeInTheDocument();
-  });
-
-  it("saves the building colour without touching the project", async () => {
-    const user = userEvent.setup();
-    const onUpdated = vi.fn();
-    stubSuccessfulSave();
-
-    render(
-      <ProjectCard
-        development={development}
-        address="Pioneer District · Jobs Avenue · North Plot 01"
-        currentUserId="user-1"
-        onClose={vi.fn()}
-        onUpdated={onUpdated}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Customise" }));
-    await user.click(screen.getByRole("button", { name: /Building colour/ }));
-    await user.click(screen.getByRole("radio", { name: "Sage Green" }));
-    await user.click(screen.getByRole("button", { name: "Save colour" }));
-
-    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
-    const [url, request] = vi.mocked(fetch).mock.calls[0];
-    expect(url).toBe("/api/plot-claim/appearance");
-    const body = request?.body as FormData;
-    expect(body.get("buildingColor")).toBe("#7fa87a");
-    // The appearance route owns three fields and no project or founder data.
-    expect(body.get("projectName")).toBeNull();
-    expect(body.get("buildingAssetId")).toBeNull();
   });
 });
 

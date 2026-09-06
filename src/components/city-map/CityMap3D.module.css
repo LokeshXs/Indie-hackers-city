@@ -47,13 +47,11 @@
 .formStep { display: grid; gap: var(--space-4); }
 /* The Google mark keeps its brand colours, so it is sized here rather than inheriting. */
 .googleMark { width: 1.45rem; height: 1.45rem; flex: none; }
-.swatchLabel { color: var(--ink); font-size: var(--text-base); font-weight: var(--weight-bold); }
 .authStep { position: relative; gap: 1.25rem; }
 .authNote { margin: 0; color: var(--slate); font-size: var(--text-xs); line-height: 1.5; text-align: center; }
 .stepIntro { display: grid; gap: 0.18rem; }
 .stepIntro strong, .stepIntro h2 { margin: 0; color: var(--ink); font-size: var(--text-xl); }
 .stepIntro span { color: var(--slate); font-size: var(--text-sm); }
-.claimField { display: grid; gap: var(--space-2); }
 .formActions { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); align-items: stretch; }
 .claimLimitModal h2 { margin: 1.35rem 0 0; color: var(--ink); font-size: var(--text-2xl); line-height: 1.02; letter-spacing: -0.035em; }
 .claimLimitModal p { max-width: 24rem; margin: var(--space-3) 0 var(--space-5); color: #765f4b; font-size: var(--text-base); font-weight: var(--weight-medium); line-height: 1.55; }
