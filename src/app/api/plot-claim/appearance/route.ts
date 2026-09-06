@@ -18,9 +18,9 @@ export async function PATCH(request: Request) {
   const validation = validateAppearance(formData);
   if (!validation.data) return errorResponse("invalid_request", validation.error ?? "Check the submitted colors.");
 
-  // No building asset: the shell is assigned at claim time and is no longer founder-editable.
+  // Billboard colours only. The shell is fixed at claim time, and a building's own colour is no
+  // longer something a founder picks -- every shell renders in the palette it was authored in.
   const result = await supabase.rpc("update_plot_appearance", {
-    requested_building_color: validation.data.buildingColor,
     requested_billboard_text_color: validation.data.billboardTextColor,
     requested_billboard_background_color: validation.data.billboardBackgroundColor,
   });

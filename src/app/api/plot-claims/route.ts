@@ -34,7 +34,6 @@ export async function POST(request: Request) {
     project_website_url: validation.data.websiteUrl,
     requested_project_type: validation.data.projectType,
     requested_building_asset_id: validation.data.buildingAssetId,
-    requested_building_color: validation.data.buildingColor,
     requested_billboard_text_color: validation.data.billboardTextColor,
     requested_billboard_background_color: validation.data.billboardBackgroundColor,
   });

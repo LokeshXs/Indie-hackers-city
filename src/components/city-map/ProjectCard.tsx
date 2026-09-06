@@ -8,13 +8,12 @@ import {
   ChoiceList,
   Field,
   Modal,
-  SwatchGroup,
   XpFigure,
   fieldColorControlClass,
   fieldControlClass,
 } from "@/components/ui";
 import { useFounderProjects } from "@/hooks/useFounderProjects";
-import { BUILDING_COLOR_OPTIONS, X_HANDLE_PATTERN } from "@/lib/city/constants";
+import { X_HANDLE_PATTERN } from "@/lib/city/constants";
 import type {
   AchievementDefinition,
   AchievementGroup,
@@ -90,11 +89,10 @@ type CardMode =
   | "project-edit"
   | "customise"
   | "founder"
-  | "building"
   | "billboard";
 
 /** Which model the left pane shows. Everything but the two appearance editors shows the real plot. */
-type PreviewKind = "plot" | "building" | "billboard";
+type PreviewKind = "plot" | "billboard";
 
 const PREVIEW_BY_MODE: Record<CardMode, PreviewKind> = {
   view: "plot",
@@ -106,7 +104,6 @@ const PREVIEW_BY_MODE: Record<CardMode, PreviewKind> = {
   "project-edit": "plot",
   customise: "plot",
   founder: "plot",
-  building: "building",
   billboard: "billboard",
 };
 
@@ -149,7 +146,6 @@ export function ProjectCard({
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [projectType, setProjectType] = useState<ProjectType>("website");
   const [showcase, setShowcase] = useState(false);
-  const [color, setColor] = useState(development.building.color);
   const [billboardTextColor, setBillboardTextColor] = useState(development.billboard.textColor);
   const [billboardBackgroundColor, setBillboardBackgroundColor] = useState(development.billboard.backgroundColor);
 
@@ -257,7 +253,6 @@ export function ProjectCard({
   async function saveAppearance(event: FormEvent<HTMLFormElement>, next: CardMode) {
     event.preventDefault();
     const formData = new FormData();
-    formData.set("buildingColor", color);
     formData.set("billboardTextColor", billboardTextColor);
     formData.set("billboardBackgroundColor", billboardBackgroundColor);
     if (await send("/api/plot-claim/appearance", { method: "PATCH", body: formData })) goTo(next);
@@ -335,15 +330,10 @@ export function ProjectCard({
           >
             {previewKind === "billboard" ? (
               <BillboardPreview card={billboardCard} />
-            ) : previewKind === "building" ? (
-              <BuildingPreview assetId={development.building.assetId} buildingColor={color} />
             ) : plotEntity ? (
-              <PlotPreview
-                plotEntity={plotEntity}
-                development={{ ...development, building: { ...development.building, color } }}
-              />
+              <PlotPreview plotEntity={plotEntity} development={development} />
             ) : (
-              <BuildingPreview assetId={development.building.assetId} buildingColor={color} />
+              <BuildingPreview assetId={development.building.assetId} />
             )}
           </PreviewStage>
         </Modal.Preview>
@@ -622,7 +612,6 @@ export function ProjectCard({
                 legend="Customise"
                 items={[
                   { id: "founder", title: "Founder details", description: "Your name and X handle." },
-                  { id: "building", title: "Building colour", description: "The paint on your building." },
                   { id: "billboard", title: "Billboard design", description: "The colours on your board." },
                 ]}
                 onSelect={(id) => goTo(id as CardMode)}
@@ -648,22 +637,6 @@ export function ProjectCard({
               <div className={styles.formActions}>
                 <Button variant="tertiary" disabled={isSaving} onClick={() => goTo("customise")}>← Back</Button>
                 <Button size="lg" type="submit" disabled={isSaving}>{isSaving ? "Saving…" : "Save details"}</Button>
-              </div>
-            </form>
-          ) : mode === "building" ? (
-            <form className={styles.pane} onSubmit={(event) => void saveAppearance(event, "customise")} aria-busy={isSaving}>
-              <div className={styles.stepIntro}>
-                <strong id="project-card-title">Building colour</strong>
-                <span>Your building shape was set when you claimed the plot.</span>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.swatchLabel} id="edit-color-label">Building colour</label>
-                <SwatchGroup options={BUILDING_COLOR_OPTIONS} value={color} onChange={setColor} labelledBy="edit-color-label" />
-              </div>
-              {error ? <Alert>{error}</Alert> : null}
-              <div className={styles.formActions}>
-                <Button variant="tertiary" disabled={isSaving} onClick={() => goTo("customise")}>← Back</Button>
-                <Button size="lg" type="submit" disabled={isSaving}>{isSaving ? "Saving…" : "Save colour"}</Button>
               </div>
             </form>
           ) : (

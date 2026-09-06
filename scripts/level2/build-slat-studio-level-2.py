@@ -34,11 +34,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = ROOT / "artwork/3d/v3/level2/slat-studio-level-2.blend"
 OUTPUT_PATH = ROOT / "public/assets/city/v3/level2/slat-studio-level-2.glb"
 
-# The runtime recolours a building by matching this material name exactly, the way
-# BUILDING_WALL_MATERIAL does for the level-1 assets in src/components/city-map/city-assets.ts.
-# It is the render plane behind the battens, not the battens themselves: leaving the timber a fixed
-# accent keeps the two-tone look at any founder colour, where recolouring the slats would flatten
-# the whole building to a single hue.
+# The render plane behind the battens. Nothing recolours it: founder-chosen building colours were
+# removed from the app entirely, so every shell now renders in the palette authored here. The name
+# is kept for legibility and because the GLB already ships with it.
 WALL_MATERIAL = "Slat Studio Walls"
 # Named distinctly so a future pass can exclude it from castShadow. ModelPreview sets castShadow on
 # every mesh in an asset, and a transparent pane casting a solid shadow puts a dark slab through

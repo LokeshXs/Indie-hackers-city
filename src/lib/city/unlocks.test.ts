@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LADDER, currentLeg, unlocksFor, type LadderEntry } from "./unlocks";
+import { LADDER, canChoosePremises, currentLeg, unlocksFor, type LadderEntry } from "./unlocks";
 
 describe("unlocksFor", () => {
   it("derives every unlock from xp alone", () => {
@@ -52,5 +52,36 @@ describe("currentLeg", () => {
     // from <= xp < to. It takes a first threshold of zero or less, and an xp below it.
     const degenerate: LadderEntry[] = [{ threshold: 0 }, { threshold: 100 }];
     expect(currentLeg(-5, degenerate)?.progress).toBe(1);
+  });
+});
+
+describe("the levelTwo rung", () => {
+  // Pinned from this side because the same number is hardcoded in SQL, in
+  // supabase/migrations/20260907120000_upgrade_plot_premises.sql. That RPC is granted to
+  // `authenticated` and so must gate on XP itself; it cannot import this file. Moving the
+  // threshold means moving this test and the pgTAP one with it -- which is the point of both.
+  it("unlocks new premises at exactly 490 XP", () => {
+    expect(LADDER.find((entry) => entry.reward?.key === "levelTwo")?.threshold).toBe(490);
+    expect(unlocksFor(489).levelTwo).toBe(false);
+    expect(unlocksFor(490).levelTwo).toBe(true);
+  });
+});
+
+describe("canChoosePremises", () => {
+  it("stays shut until the reward is earned", () => {
+    expect(canChoosePremises(489, "startup-building-level-1")).toBe(false);
+    expect(canChoosePremises(490, "startup-building-level-1")).toBe(true);
+  });
+
+  it("closes for good once a level-2 shell is standing", () => {
+    // The asset id is the only record that the reward has been spent, so this is what stops the
+    // chooser reopening on every load. A founder who keeps earning must not be asked twice.
+    expect(canChoosePremises(490, "slat-studio-level-2")).toBe(false);
+    expect(canChoosePremises(9999, "teal-brow-level-2")).toBe(false);
+  });
+
+  it("offers the upgrade from any of the three claim-time shells", () => {
+    expect(canChoosePremises(490, "corner-studio-level-1")).toBe(true);
+    expect(canChoosePremises(490, "indie-garage-level-1")).toBe(true);
   });
 });

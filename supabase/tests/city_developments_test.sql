@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(68);
+select plan(77);
 
 select has_table('public', 'plots', 'plots table exists');
 select has_table('public', 'projects', 'projects table exists');
@@ -12,8 +12,8 @@ select has_table('public', 'plot_xp_events', 'plot XP ledger exists');
 select has_view('public', 'city_developments', 'public city projection exists');
 select results_eq(
   $$ select level, required_xp from public.building_level_milestones order by level $$,
-  $$ values (1::smallint, 0), (2::smallint, 100), (3::smallint, 300), (4::smallint, 700), (5::smallint, 1500) $$,
-  'building milestones use the initial five-level XP curve'
+  $$ values (1::smallint, 0), (2::smallint, 490), (3::smallint, 690), (4::smallint, 1090), (5::smallint, 1890) $$,
+  'building levels start where the rewards do, level two at the 490 XP premises unlock'
 );
 select results_eq(
   $$ select count(*) from public.plots where is_active $$,
@@ -47,8 +47,8 @@ select ok(not has_table_privilege('anon', 'public.plot_xp_events', 'SELECT'), 'a
 select ok(not has_table_privilege('authenticated', 'public.plot_xp_events', 'INSERT'), 'authenticated clients cannot insert XP events');
 select ok(not has_table_privilege('authenticated', 'public.plot_xp_events', 'UPDATE'), 'authenticated clients cannot edit XP events');
 select ok(not has_table_privilege('authenticated', 'public.plot_xp_events', 'DELETE'), 'authenticated clients cannot delete XP events');
-select ok(has_function_privilege('authenticated', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'authenticated users can call claim RPC');
-select ok(not has_function_privilege('anon', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'anonymous users cannot call claim RPC');
+select ok(has_function_privilege('authenticated', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'authenticated users can call claim RPC');
+select ok(not has_function_privilege('anon', 'public.claim_plot(uuid,text,text,text,text,text,text,text,text,text)', 'EXECUTE'), 'anonymous users cannot call claim RPC');
 select ok(not has_function_privilege('authenticated', 'public.award_plot_xp(uuid,integer,text,text,text,jsonb)', 'EXECUTE'), 'authenticated clients cannot award XP');
 select ok(not has_function_privilege('anon', 'public.award_plot_xp(uuid,integer,text,text,text,jsonb)', 'EXECUTE'), 'anonymous visitors cannot award XP');
 select ok(not has_function_privilege('authenticated', 'public.apply_plot_xp(uuid,integer,text,text,text,jsonb)', 'EXECUTE'), 'authenticated clients cannot apply XP directly');
@@ -75,7 +75,6 @@ select lives_ok(
     'https://one.example/',
     'website',
     'indie-garage-level-1',
-    '#d1ad6e',
     '#f7e0a6', '#1b3a4b'
   ) $$,
   'first claim atomically creates its project and claim'
@@ -92,7 +91,7 @@ select results_eq(
 );
 select results_eq(
   $$ select xp_total, building_level, current_level_xp, next_level_xp from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values (10, 1::smallint, 0, 100) $$,
+  $$ values (10, 1::smallint, 0, 490) $$,
   'new claims are publicly projected with the claim XP reward at level one'
 );
 select results_eq(
@@ -104,7 +103,7 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '10000000-0000-4000-8000-000000000002', 'pioneer:jobs:north:02', 'Founder One',
     'Founder_One', 'Second Project', 'https://two.example/', 'app',
-    'corner-studio-level-1', '#e2775c',
+    'corner-studio-level-1',
     '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
@@ -117,7 +116,7 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '20000000-0000-4000-8000-000000000001', 'pioneer:jobs:north:01', 'Founder Two',
     'Founder_Two', 'Race Project', 'https://race.example/', 'website',
-    'startup-building-level-1', '#5fa8d3',
+    'startup-building-level-1',
     '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
@@ -130,7 +129,7 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '30000000-0000-4000-8000-000000000099', 'pioneer:jobs:north:03', 'Founder Three',
     'Founder_Three', 'Unknown Building', 'https://unknown.example/', 'website',
-    'unknown-building-level-1', '#7fa87a',
+    'unknown-building-level-1',
     '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
@@ -141,7 +140,7 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '30000000-0000-4000-8000-000000000098', 'pioneer:jobs:north:03', 'Founder Three',
     'Founder_Three', 'Bad Billboard', 'https://badboard.example/', 'website',
-    'startup-building-level-1', '#7fa87a',
+    'startup-building-level-1',
     'wheat', '#1b3a4b'
   ) $$,
   'P0001',
@@ -152,7 +151,7 @@ select throws_ok(
   $$ select * from public.claim_plot(
     '30000000-0000-4000-8000-000000000001', 'pioneer:hopper:south-outer:04', 'Founder Three',
     'Founder_Three', 'Inactive Project', 'https://inactive.example/', 'website',
-    'startup-building-level-1', '#7fa87a',
+    'startup-building-level-1',
     '#f7e0a6', '#1b3a4b'
   ) $$,
   'P0001',
@@ -232,33 +231,33 @@ select results_eq(
 );
 select results_eq(
   $$ select xp_total, building_level from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 89, 'test:xp:99', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 479, 'test:xp:489', 'manual_award', null, '{}'::jsonb
   ) $$,
-  $$ values (99, 1::smallint) $$,
-  '99 XP keeps the building at level one'
+  $$ values (489, 1::smallint) $$,
+  '489 XP keeps the building at level one'
 );
 select results_eq(
   $$ select xp_total, building_level, level_changed from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 1, 'test:xp:100', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 1, 'test:xp:490', 'manual_award', null, '{}'::jsonb
   ) $$,
-  $$ values (100, 2::smallint, true) $$,
-  'reaching 100 XP upgrades the building to level two'
+  $$ values (490, 2::smallint, true) $$,
+  'reaching 490 XP upgrades the building to level two, the same rung that unlocks new premises'
 );
 select results_eq(
   $$ select current_level_xp, next_level_xp from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values (100, 300) $$,
+  $$ values (490, 690) $$,
   'level two exposes its current and next XP thresholds'
 );
 select results_eq(
   $$ select applied, xp_total from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 1, 'test:xp:100', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 1, 'test:xp:490', 'manual_award', null, '{}'::jsonb
   ) $$,
-  $$ values (false, 100) $$,
+  $$ values (false, 490) $$,
   'retrying an identical event key does not award XP twice'
 );
 select throws_ok(
   $$ select * from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 2, 'test:xp:100', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 2, 'test:xp:490', 'manual_award', null, '{}'::jsonb
   ) $$,
   'P0001',
   'xp_event_conflict',
@@ -266,47 +265,47 @@ select throws_ok(
 );
 select results_eq(
   $$ select xp_total, building_level from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 200, 'test:xp:300', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 200, 'test:xp:690', 'manual_award', null, '{}'::jsonb
   ) $$,
-  $$ values (300, 3::smallint) $$,
-  '300 XP upgrades the building to level three'
+  $$ values (690, 3::smallint) $$,
+  '690 XP upgrades the building to level three'
 );
 select results_eq(
   $$ select xp_total, building_level from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 400, 'test:xp:700', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 400, 'test:xp:1090', 'manual_award', null, '{}'::jsonb
   ) $$,
-  $$ values (700, 4::smallint) $$,
-  '700 XP upgrades the building to level four'
+  $$ values (1090, 4::smallint) $$,
+  '1090 XP upgrades the building to level four'
 );
 select results_eq(
   $$ select xp_total, building_level from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 800, 'test:xp:1500', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 800, 'test:xp:1890', 'manual_award', null, '{}'::jsonb
   ) $$,
-  $$ values (1500, 5::smallint) $$,
-  '1500 XP upgrades the building to level five'
+  $$ values (1890, 5::smallint) $$,
+  '1890 XP upgrades the building to level five'
 );
 select results_eq(
   $$ select current_level_xp, next_level_xp from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values (1500, null::integer) $$,
+  $$ values (1890, null::integer) $$,
   'level five exposes its threshold with no next level'
 );
 select results_eq(
   $$ select xp_total, building_level from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', 100, 'test:xp:1600', 'manual_award', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', 100, 'test:xp:1990', 'manual_award', null, '{}'::jsonb
   ) $$,
-  $$ values (1600, 5::smallint) $$,
+  $$ values (1990, 5::smallint) $$,
   'XP beyond the final milestone remains level five'
 );
 select results_eq(
   $$ select xp_total, building_level, level_changed from public.award_plot_xp(
     '00000000-0000-4000-8000-000000000001', -1000, 'test:xp:correction', 'correction', 'Correct an award', '{}'::jsonb
   ) $$,
-  $$ values (600, 3::smallint, true) $$,
+  $$ values (990, 3::smallint, true) $$,
   'a compensating event can reduce XP and downgrade the building'
 );
 select throws_ok(
   $$ select * from public.award_plot_xp(
-    '00000000-0000-4000-8000-000000000001', -700, 'test:xp:below-zero', 'correction', null, '{}'::jsonb
+    '00000000-0000-4000-8000-000000000001', -2000, 'test:xp:below-zero', 'correction', null, '{}'::jsonb
   ) $$,
   'P0001',
   'xp_total_below_zero',
@@ -327,7 +326,7 @@ select results_eq(
 );
 select results_eq(
   $$ select xp_total, building_level from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values (600, 3::smallint) $$,
+  $$ values (990, 3::smallint) $$,
   'public city developments expose the current XP and level'
 );
 
@@ -339,8 +338,77 @@ select lives_ok(
 );
 select results_eq(
   $$ select xp_total, building_level from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
-  $$ values (600, 3::smallint) $$,
+  $$ values (990, 3::smallint) $$,
   'switching showcased projects preserves plot progression'
+);
+
+-- The 490 XP levelTwo reward. building_asset_id was write-once until upgrade_plot_premises; these
+-- cover the three things that keep it nearly so.
+select ok(
+  has_function_privilege('authenticated', 'public.upgrade_plot_premises(text)', 'EXECUTE'),
+  'authenticated users can redeem the premises reward'
+);
+select ok(
+  not has_function_privilege('anon', 'public.upgrade_plot_premises(text)', 'EXECUTE'),
+  'anonymous users cannot redeem the premises reward'
+);
+
+-- Founder One is the only fixture holding a claim, so the locked case is made by dropping their
+-- total under the threshold and restoring it. The 490 here is the same number as the levelTwo rung
+-- in src/lib/city/unlocks.ts, which SQL cannot import -- src/lib/city/unlocks.test.ts pins the
+-- other side of that duplication.
+reset role;
+update public.plot_claims set xp_total = 489
+ where owner_id = '00000000-0000-4000-8000-000000000001';
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
+select throws_ok(
+  $$ select * from public.upgrade_plot_premises('teal-brow-level-2') $$,
+  'P0001',
+  'reward_locked',
+  'a founder one XP short of the reward cannot take new premises'
+);
+
+reset role;
+update public.plot_claims set xp_total = 990
+ where owner_id = '00000000-0000-4000-8000-000000000001';
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000001', true);
+select throws_ok(
+  $$ select * from public.upgrade_plot_premises('corner-studio-level-1') $$,
+  'P0001',
+  'invalid_building',
+  'the reward cannot be spent on a claim-time shell'
+);
+select throws_ok(
+  $$ select * from public.upgrade_plot_premises('not-a-building') $$,
+  'P0001',
+  'invalid_building',
+  'an unknown asset id is refused'
+);
+select lives_ok(
+  $$ select * from public.upgrade_plot_premises('teal-brow-level-2') $$,
+  'a founder past 490 XP can move into new premises'
+);
+select results_eq(
+  $$ select building_asset_id from public.plot_claims where owner_id = '00000000-0000-4000-8000-000000000001' $$,
+  array['teal-brow-level-2'::text],
+  'the new premises replace the claimed shell'
+);
+-- The choice is one-time, and this is the only thing enforcing it: there is no separate "upgraded"
+-- flag, so the guard is that the current shell is already level-2.
+select throws_ok(
+  $$ select * from public.upgrade_plot_premises('slat-studio-level-2') $$,
+  'P0001',
+  'premises_already_chosen',
+  'premises cannot be changed once chosen'
+);
+select results_eq(
+  $$ select xp_total, building_level from public.city_developments where owner_id = '00000000-0000-4000-8000-000000000001' $$,
+  $$ values (990, 3::smallint) $$,
+  'moving premises leaves XP and building level untouched'
 );
 
 select * from finish();

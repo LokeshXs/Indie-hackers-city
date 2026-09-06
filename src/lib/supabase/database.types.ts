@@ -96,7 +96,6 @@ export type Database = {
           billboard_background_color: string
           billboard_text_color: string
           building_asset_id: string
-          building_color: string
           building_level: number
           claimed_at: string
           owner_id: string
@@ -109,7 +108,6 @@ export type Database = {
           billboard_background_color?: string
           billboard_text_color?: string
           building_asset_id: string
-          building_color: string
           building_level?: number
           claimed_at?: string
           owner_id: string
@@ -122,7 +120,6 @@ export type Database = {
           billboard_background_color?: string
           billboard_text_color?: string
           building_asset_id?: string
-          building_color?: string
           building_level?: number
           claimed_at?: string
           owner_id?: string
@@ -374,7 +371,6 @@ export type Database = {
           billboard_background_color: string | null
           billboard_text_color: string | null
           building_asset_id: string | null
-          building_color: string | null
           building_level: number | null
           claimed_at: string | null
           current_level_xp: number | null
@@ -479,7 +475,6 @@ export type Database = {
           requested_billboard_background_color: string
           requested_billboard_text_color: string
           requested_building_asset_id: string
-          requested_building_color: string
           requested_plot_id: string
           requested_project_type: string
         }
@@ -488,7 +483,6 @@ export type Database = {
           billboard_background_color: string | null
           billboard_text_color: string | null
           building_asset_id: string | null
-          building_color: string | null
           building_level: number | null
           claimed_at: string | null
           current_level_xp: number | null
@@ -524,7 +518,6 @@ export type Database = {
           billboard_background_color: string | null
           billboard_text_color: string | null
           building_asset_id: string | null
-          building_color: string | null
           building_level: number | null
           claimed_at: string | null
           current_level_xp: number | null
@@ -568,7 +561,6 @@ export type Database = {
           billboard_background_color: string | null
           billboard_text_color: string | null
           building_asset_id: string | null
-          building_color: string | null
           building_level: number | null
           claimed_at: string | null
           current_level_xp: number | null
@@ -595,14 +587,12 @@ export type Database = {
         Args: {
           requested_billboard_background_color: string
           requested_billboard_text_color: string
-          requested_building_color: string
         }
         Returns: {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
           building_asset_id: string | null
-          building_color: string | null
           building_level: number | null
           claimed_at: string | null
           current_level_xp: number | null
@@ -638,7 +628,35 @@ export type Database = {
           billboard_background_color: string | null
           billboard_text_color: string | null
           building_asset_id: string | null
-          building_color: string | null
+          building_level: number | null
+          claimed_at: string | null
+          current_level_xp: number | null
+          founder_name: string | null
+          next_level_xp: number | null
+          owner_id: string | null
+          plot_id: string | null
+          project_id: string | null
+          project_name: string | null
+          project_type: string | null
+          updated_at: string | null
+          website_url: string | null
+          x_handle: string | null
+          xp_total: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "city_developments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      upgrade_plot_premises: {
+        Args: { requested_building_asset_id: string }
+        Returns: {
+          avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
+          building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
           current_level_xp: number | null

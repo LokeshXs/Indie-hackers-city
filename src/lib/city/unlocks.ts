@@ -17,6 +17,9 @@
  * LADDER is the single source of truth; the thresholds map and `unlocksFor` are derived from it, so
  * the two cannot drift apart. */
 
+import { STARTUP_BUILDING_ASSET_IDS } from "./constants";
+import type { PlotBuildingAssetId } from "./types";
+
 export interface LadderReward {
   key: UnlockKey;
   label: string;
@@ -121,4 +124,14 @@ export function currentLeg(xp: number, ladder: readonly LadderEntry[] = LADDER):
     // the bar rather than throwing. The clamp is the everyday one: negative xp.
     progress: span <= 0 ? 1 : Math.min(1, Math.max(0, (xp - from) / span)),
   };
+}
+
+/** Whether a founder has earned the 490 XP `levelTwo` reward and has not yet spent it.
+ *
+ * There is no stored flag for this and deliberately so. Redeeming writes a level-2 id into
+ * building_asset_id, so a founder still standing on one of the three claim-time shells is the
+ * whole of the record that the reward is outstanding. That keeps the promise made at the top of
+ * this file -- unlocks are derived, never stored -- true for this reward too. */
+export function canChoosePremises(xp: number, assetId: PlotBuildingAssetId): boolean {
+  return unlocksFor(xp).levelTwo && STARTUP_BUILDING_ASSET_IDS.some((id) => id === assetId);
 }

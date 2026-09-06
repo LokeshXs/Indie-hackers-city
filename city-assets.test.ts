@@ -31,6 +31,7 @@ describe("3D city asset kit", () => {
       "artwork/3d/v3/corner-studio-level-1.blend",
       "artwork/3d/v3/indie-garage-level-1.blend",
       "artwork/3d/v3/level2/slat-studio-level-2.blend",
+      "artwork/3d/v3/level2/teal-brow-level-2.blend",
     ]) {
       const path = join(process.cwd(), source);
       await access(path);

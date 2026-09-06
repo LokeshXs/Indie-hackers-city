@@ -1,12 +1,30 @@
 import type { Database } from "@/lib/supabase/database.types";
-import { DEFAULT_BILLBOARD_BACKGROUND_COLOR, DEFAULT_BILLBOARD_TEXT_COLOR } from "./constants";
-import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId, StartupBuildingLevel } from "./types";
+import {
+  DEFAULT_BILLBOARD_BACKGROUND_COLOR,
+  DEFAULT_BILLBOARD_TEXT_COLOR,
+  LEVEL_TWO_BUILDING_ASSET_IDS,
+  STARTUP_BUILDING_ASSET_IDS,
+} from "./constants";
+import type { CityDevelopment, CityDevelopmentRecord, PlotBuildingAssetId, ProjectType, StartupBuildingLevel } from "./types";
 
 export type CityDevelopmentRow = Database["public"]["Views"]["city_developments"]["Row"];
 
 function startupBuildingLevel(value: number | null): StartupBuildingLevel {
   if (value === 1 || value === 2 || value === 3 || value === 4 || value === 5) return value;
   return 1;
+}
+
+const KNOWN_BUILDING_ASSET_IDS: readonly PlotBuildingAssetId[] = [
+  ...STARTUP_BUILDING_ASSET_IDS,
+  ...LEVEL_TWO_BUILDING_ASSET_IDS,
+];
+
+/** The column is `text`, so the database can hand us anything. This used to be a bare `as` cast,
+ * which meant an unrecognised value type-checked cleanly and then threw further downstream, where
+ * CITY_ASSET_PATHS[assetId] resolves to undefined and useGLTF is handed it. Narrow here instead
+ * and fall back to the starter shell, the same shape as startupBuildingLevel above. */
+function plotBuildingAssetId(value: string | null): PlotBuildingAssetId {
+  return KNOWN_BUILDING_ASSET_IDS.find((id) => id === value) ?? "startup-building-level-1";
 }
 
 export function serializeCityDevelopment(row: CityDevelopmentRow): CityDevelopment {
@@ -27,8 +45,7 @@ export function serializeCityDevelopment(row: CityDevelopmentRow): CityDevelopme
     },
     building: {
       level: buildingLevel,
-      assetId: row.building_asset_id as StartupBuildingAssetId,
-      color: row.building_color!,
+      assetId: plotBuildingAssetId(row.building_asset_id),
     },
     billboard: {
       textColor: row.billboard_text_color ?? DEFAULT_BILLBOARD_TEXT_COLOR,

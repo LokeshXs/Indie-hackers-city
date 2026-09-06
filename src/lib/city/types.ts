@@ -1,6 +1,16 @@
 export type ProjectType = "website" | "app" | "chrome-extension";
 export type StartupBuildingLevel = 1 | 2 | 3 | 4 | 5;
+/** The three shells a founder picks from when claiming. Deliberately closed: level-2 premises are
+ * earned, never chosen at signup, so they are NOT members of this union -- widening it would put
+ * them in the claim carousel and in validateBuildingChoice. */
 export type StartupBuildingAssetId = "startup-building-level-1" | "corner-studio-level-1" | "indie-garage-level-1";
+
+/** The premises unlocked by the 490 XP `levelTwo` reward. */
+export type LevelTwoBuildingAssetId = "slat-studio-level-2" | "teal-brow-level-2";
+
+/** Anything that can stand on a claimed plot -- wider than StartupBuildingAssetId, because a
+ * founder who has redeemed the reward shows a shell that was never on the claim menu. */
+export type PlotBuildingAssetId = StartupBuildingAssetId | LevelTwoBuildingAssetId;
 
 export interface ClaimPlotDraft {
   plotId: string;
@@ -16,7 +26,6 @@ export interface ClaimPlotDraft {
   building: {
     level: StartupBuildingLevel;
     assetId: StartupBuildingAssetId;
-    color: string;
   };
 }
 
@@ -36,8 +45,7 @@ export interface CityDevelopment {
   };
   building: {
     level: StartupBuildingLevel;
-    assetId: StartupBuildingAssetId;
-    color: string;
+    assetId: PlotBuildingAssetId;
   };
   billboard: {
     textColor: string;
