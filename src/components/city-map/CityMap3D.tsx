@@ -24,7 +24,8 @@ import {
   createPlotDevelopmentEntities,
   getBuildingPlacement,
 } from "./plot-builds";
-import type { CityDistrict, CityEntity } from "./map-types";
+import { AssetInspectorModal } from "./AssetInspectorModal";
+import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
 import { FounderProgressCard } from "./FounderProgressCard";
@@ -346,6 +347,20 @@ const SceneReadySignal = memo(function SceneReadySignal({ onReady }: { onReady: 
   return null;
 });
 
+/** Assets that exist to be looked at, not to be part of the city.
+ *
+ * Kept out of the preload sweep below: a visitor should never download a model that nothing on
+ * their map renders. The only thing that renders this one is AssetInspectorModal, which is
+ * development-only, and its PreviewStage fetches the GLB on demand behind its own Suspense. */
+const PREVIEW_ONLY_ASSETS = new Set<CityAssetId>(["slat-studio-level-2"]);
+
+/** TEMPORARY asset inspector -- see AssetInspectorModal.tsx.
+ *
+ * A module-level constant rather than an inline check so the bundler folds it: in a production
+ * build this is statically false, the JSX below is dropped, and the import above tree-shakes out. */
+const SHOW_ASSET_INSPECTOR = process.env.NODE_ENV === "development";
+const INSPECTED_ASSET_ID: CityAssetId = "slat-studio-level-2";
+
 const Scene = memo(function Scene({
   entities,
   selectedPlotId,
@@ -520,6 +535,7 @@ export function CityMap3D({
   const [focusedPlotId, setFocusedPlotId] = useState<string | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [loadingComplete, setLoadingComplete] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(SHOW_ASSET_INSPECTOR);
   const [assetError, setAssetError] = useState<Error | null>(null);
   const [assetBoundaryResetKey] = useState(0);
   const [isClaimLimitAlertOpen, setIsClaimLimitAlertOpen] = useState(false);
@@ -666,7 +682,9 @@ export function CityMap3D({
   }
 
   useEffect(() => {
-    Object.values(CITY_ASSET_PATHS).forEach((path) => useGLTF.preload(path));
+    Object.entries(CITY_ASSET_PATHS)
+      .filter(([assetId]) => !PREVIEW_ONLY_ASSETS.has(assetId as CityAssetId))
+      .forEach(([, path]) => useGLTF.preload(path));
     useTexture.preload("/assets/city/v3/water-surface-tile.png");
     return () => {
       document.body.style.cursor = "auto";
@@ -1041,6 +1059,9 @@ export function CityMap3D({
           onComplete={handleLoadingComplete}
           onRetry={retryAssetLoading}
         />
+      ) : null}
+      {SHOW_ASSET_INSPECTOR && inspectorOpen && loadingComplete ? (
+        <AssetInspectorModal assetId={INSPECTED_ASSET_ID} onClose={() => setInspectorOpen(false)} />
       ) : null}
       {isClaimLimitAlertOpen ? (
         <Modal

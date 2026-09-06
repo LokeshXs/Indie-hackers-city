@@ -84,7 +84,12 @@ export const ModelInstance = memo(function ModelInstance({
     const wallMaterialName = BUILDING_WALL_MATERIAL[assetId];
     scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(assetId);
+      // A transparent material still casts a fully opaque shadow: the depth pass writes geometry,
+      // not alpha. Left alone, the level-2 studio's glazing lays a solid dark slab across the
+      // interior it exists to reveal. Keyed off the material rather than the asset id so any future
+      // glass gets the same treatment without another entry in the set above.
+      const material = Array.isArray(object.material) ? object.material[0] : object.material;
+      object.castShadow = !NON_SHADOW_CASTING_ASSETS.has(assetId) && !material?.transparent;
       object.receiveShadow = true;
       if (Array.isArray(object.material)) return;
       // clone() shares materials with the cached GLTF, so both branches below have to clone
@@ -231,10 +236,19 @@ export const PlotPreview = memo(function PlotPreview({
   );
 });
 
+/** Which lighting a preview stands in.
+ *
+ * "studio" is the flattering sell rig the claim flow uses: ambient 1.5 on top of a bright hemisphere
+ * and a strong key, which sums to roughly twice the light a building actually receives on the map.
+ * "city" mirrors CityMap3D's scene exactly -- no ambient at all -- so a preview can answer "how will
+ * this look once it is placed?" rather than "how good can this look?". Judging a palette in the
+ * studio rig reads about a stop lighter than the city will render it. */
+export type PreviewRig = "studio" | "city";
+
 /** The turntable both modals frame their preview in. The camera is a non-reactive prop, so `zoom`
  * is read once on mount — it sizes the framing to the pane, it does not animate. Previews that
  * don't fit are scaled to the camera, not the reverse. */
-export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, shadows = true, cameraPosition = [8, 6, 8], children }: { className?: string; zoom?: number; shadows?: boolean; cameraPosition?: [number, number, number]; children: ReactNode }) {
+export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, shadows = true, cameraPosition = [8, 6, 8], rig = "studio", children }: { className?: string; zoom?: number; shadows?: boolean; cameraPosition?: [number, number, number]; rig?: PreviewRig; children: ReactNode }) {
   return (
     <Canvas
       className={className}
@@ -243,9 +257,18 @@ export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, s
       camera={{ position: cameraPosition, zoom, near: 0.1, far: 100 }}
       dpr={[1, 1.5]}
     >
-      <ambientLight intensity={1.5} />
-      <hemisphereLight args={["#fffdf2", "#91b9b2", 1.8]} />
-      <directionalLight position={[-6, 9, 7]} intensity={2.8} castShadow={shadows} shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      {rig === "studio" ? (
+        <>
+          <ambientLight intensity={1.5} />
+          <hemisphereLight args={["#fffdf2", "#91b9b2", 1.8]} />
+          <directionalLight position={[-6, 9, 7]} intensity={2.8} castShadow={shadows} shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+        </>
+      ) : (
+        <>
+          <hemisphereLight args={["#fff3c8", "#174544", 1.35]} />
+          <directionalLight position={[-16, 24, 12]} intensity={2.65} castShadow={shadows} shadow-mapSize-width={1024} shadow-mapSize-height={1024} shadow-bias={-0.0004} />
+        </>
+      )}
       <MarqueeDriver />
       <Suspense fallback={null}>{children}</Suspense>
     </Canvas>
