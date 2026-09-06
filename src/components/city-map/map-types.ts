@@ -14,7 +14,8 @@ export type CityAssetId =
   | "district-sign-gantry"
   | "startup-building-level-1"
   | "corner-studio-level-1"
-  | "indie-garage-level-1";
+  | "indie-garage-level-1"
+  | "slat-studio-level-2";
 
 export interface WorldPosition {
   x: number;

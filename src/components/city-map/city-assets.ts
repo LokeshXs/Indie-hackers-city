@@ -18,6 +18,7 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "startup-building-level-1": "/assets/city/v3/startup-building-level-1.glb",
   "corner-studio-level-1": "/assets/city/v3/corner-studio-level-1.glb",
   "indie-garage-level-1": "/assets/city/v3/indie-garage-level-1.glb",
+  "slat-studio-level-2": "/assets/city/v3/level2/slat-studio-level-2.glb",
 };
 
 // Name of the mesh material representing each building's main wall surface,
@@ -30,6 +31,7 @@ export const BUILDING_WALL_MATERIAL: Partial<Record<CityAssetId, string>> = {
   "startup-building-level-1": "Warm cream walls",
   "corner-studio-level-1": "Warm studio cream",
   "indie-garage-level-1": "Garage shell",
+  "slat-studio-level-2": "Slat Studio Walls",
 };
 
 /** Where roof props sit on each building, in the building's own local space.
