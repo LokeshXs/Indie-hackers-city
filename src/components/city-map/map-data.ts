@@ -1,3 +1,4 @@
+import { getBuildingPlacement, PLOT_BUILDING_SCALE } from "./plot-builds";
 import type { CityDistrict, CityEntity, CityPlot } from "./map-types";
 
 const plotColumns = [-18, -6, 6, 18];
@@ -396,6 +397,36 @@ const cityCentre: CityDistrict["entities"] = [
   ...createAvenueArm("south", false, 1),
 ];
 
+/** Hopper Way's inner corner -- the plot nearest the map centre on the block diagonally opposite
+ * Lovelace. Its lot number reads 01 but the -outer rows sit closer to the origin than the inner
+ * ones, because every block is offset by BLOCK_OFFSET on both axes. */
+const COFFEE_SHOP_PLOT_ID = "pioneer:hopper:north-outer:01";
+
+/** The Coffee House: the one building in the district that belongs to nobody.
+ *
+ * The plot under it is marked `is_active = false` in the database, so it is never offered to a
+ * founder. The catalog still lists it: the catalog is the map's geometry, and the database is what
+ * decides who may build. It carries no `plotId` of its own -- with one, clicking it would open the
+ * claim flow for a plot nobody can hold.
+ *
+ * Positioned through getBuildingPlacement off the plot's own pad rather than at literal
+ * coordinates, so it takes the same setback, facing and scale as a founder's building and follows
+ * the row if the layout is ever moved. */
+function createCoffeeShop(blockEntities: readonly CityEntity[]): CityEntity[] {
+  const pad = blockEntities.find(
+    (entity) => entity.assetId === "grass-plot" && entity.plotId === COFFEE_SHOP_PLOT_ID,
+  );
+  if (!pad) throw new Error(`No plot pad found for the coffee shop: ${COFFEE_SHOP_PLOT_ID}`);
+  const { position, rotationY } = getBuildingPlacement(pad);
+  return [{
+    id: "coffee-shop",
+    assetId: "coffee-shop",
+    position,
+    rotationY,
+    scale: PLOT_BUILDING_SCALE,
+  }];
+}
+
 const plots: CityDistrict["plots"] = [...nw.plots, ...ne.plots, ...sw.plots, ...se.plots];
 const entities: CityDistrict["entities"] = [
   ...cityCentre,
@@ -403,6 +434,7 @@ const entities: CityDistrict["entities"] = [
   ...ne.entities,
   ...sw.entities,
   ...se.entities,
+  ...createCoffeeShop(se.entities),
 ];
 
 export const starterDistrict: CityDistrict = {

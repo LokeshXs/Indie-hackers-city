@@ -88,6 +88,32 @@ describe("plot claim modal", () => {
     expect(mockAuth.signInWithGoogle).toHaveBeenCalledWith(`/?claimPlot=${encodeURIComponent(plotId)}`);
   });
 
+  it("makes a plot outside activePlotIds inert rather than failing it on submit", async () => {
+    // The Coffee House stands on this one. It is reserved in the database, so it must not glow, must
+    // not open the claim form, and must not be reachable from the keyboard plot list -- previously
+    // is_active was enforced only by claim_plot, and a founder found out on submit.
+    const reserved = "pioneer:hopper:north-outer:01";
+    const activePlotIds = new Set(
+      starterDistrict.plots.map((plot) => plot.id).filter((id) => id !== reserved),
+    );
+    render(
+      <CityMap3D district={starterDistrict} initialDevelopments={{}} activePlotIds={activePlotIds} />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Hopper Way · North Ring Plot 01/ })).toBeNull();
+    // Every other plot is untouched, so the gate is the set and not an accident of rendering.
+    expect(screen.getByRole("button", { name: `${plotAddress}, available` })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /, available$/ })).toHaveLength(63);
+  });
+
+  it("treats every plot as claimable when activePlotIds is absent", async () => {
+    // page.tsx omits the prop when Supabase is unconfigured. Reading that as "nothing is
+    // claimable" would make the whole city inert in local dev.
+    render(<CityMap3D district={starterDistrict} initialDevelopments={{}} />);
+
+    expect(screen.getAllByRole("button", { name: /, available$/ })).toHaveLength(64);
+  });
+
   it("resumes an authenticated OAuth return and prefills the Google name", async () => {
     mockAuth.user = {
       id: "user-1",

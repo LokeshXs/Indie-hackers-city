@@ -20,6 +20,7 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "indie-garage-level-1": "/assets/city/v3/indie-garage-level-1.glb",
   "slat-studio-level-2": "/assets/city/v3/level2/slat-studio-level-2.glb",
   "teal-brow-level-2": "/assets/city/v3/level2/teal-brow-level-2.glb",
+  "coffee-shop": "/assets/city/v3/shops/coffee-shop.glb",
 };
 
 // Name of the mesh material representing each building's main wall surface,

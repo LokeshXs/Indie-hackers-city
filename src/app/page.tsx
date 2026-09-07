@@ -46,6 +46,7 @@ export default async function Home({ searchParams }: HomeProps) {
       initialDevelopmentLoadError={initialDevelopmentLoadError}
       initialClaimPlotId={requestedPlot?.id}
       initialAuthError={initialAuthError}
+      activePlotIds={activePlotIds}
     />
   );
 }
