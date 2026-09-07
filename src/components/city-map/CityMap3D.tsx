@@ -51,6 +51,14 @@ export interface CityMap3DProps {
   initialDevelopmentLoadError?: boolean;
   initialClaimPlotId?: string;
   initialAuthError?: "oauth";
+  /** Plots that can still be claimed. A plot outside this set is inert: not clickable, never
+   * highlighted, and absent from the keyboard plot list. Until now `is_active` was enforced only
+   * by claim_plot, so a reserved plot still glowed and still opened the claim form, and a founder
+   * found out it was unavailable only when their submit failed.
+   *
+   * Optional, and treated as "everything is claimable" when absent, which is what page.tsx falls
+   * back to when Supabase is unconfigured -- otherwise the whole city goes inert in local dev. */
+  activePlotIds?: ReadonlySet<string>;
 }
 
 const BUILDING_OPTIONS: ReadonlyArray<{ assetId: StartupBuildingAssetId; label: string }> = [
@@ -490,6 +498,7 @@ export function CityMap3D({
   initialDevelopmentLoadError,
   initialClaimPlotId,
   initialAuthError,
+  activePlotIds,
 }: CityMap3DProps) {
   const { user, isAuthenticated, isLoading: isAuthLoading, signInWithGoogle } = useAuth();
   const {
@@ -584,17 +593,25 @@ export function CityMap3D({
   const premisesAvailable = Boolean(
     ownPlot && canChoosePremises(ownPlot.progression.xp, ownPlot.building.assetId),
   );
+  /** Absent means unknown, not empty -- see the prop's note. Everything downstream asks this
+   * rather than activePlotIds directly, so the fallback lives in exactly one place. */
+  const isClaimablePlot = useCallback(
+    (plotId: string) => !activePlotIds || activePlotIds.has(plotId),
+    [activePlotIds],
+  );
   const selectablePlotIds = useMemo(
-    () => new Set(plotEntities.flatMap((entity) => entity.plotId ? [entity.plotId] : [])),
-    [plotEntities],
+    () => new Set(plotEntities.flatMap((entity) => (
+      entity.plotId && isClaimablePlot(entity.plotId) ? [entity.plotId] : []
+    ))),
+    [isClaimablePlot, plotEntities],
   );
   const highlightablePlotIds = useMemo(
     () => new Set(plotEntities.flatMap((entity) => {
-      if (!entity.plotId) return [];
+      if (!entity.plotId || !isClaimablePlot(entity.plotId)) return [];
       if (developments[entity.plotId]) return [entity.plotId];
       return ownerDevelopment || entity.plotId === reservedPlotId ? [] : [entity.plotId];
     })),
-    [developments, ownerDevelopment, plotEntities, reservedPlotId],
+    [developments, isClaimablePlot, ownerDevelopment, plotEntities, reservedPlotId],
   );
   const dynamicEntities = useMemo(
     () => plotEntities.flatMap((plotEntity) => {
@@ -1247,7 +1264,7 @@ export function CityMap3D({
         />
       ) : null}
       <VisuallyHidden aria-label="Empty buildable plots">
-        {district.plots.map((plot) => (
+        {district.plots.filter((plot) => isClaimablePlot(plot.id)).map((plot) => (
           <button id={`plot-control-${plot.id}`} key={plot.id} type="button" onClick={() => handlePlotInteraction(plot.id)}>
             {plot.label}, {developments[plot.id] ? "occupied" : "available"}
           </button>

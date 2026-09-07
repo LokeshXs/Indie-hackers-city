@@ -63,7 +63,8 @@ See [the Supabase workflow](docs/SUPABASE.md) for first-time linking, creating
 migrations, local Studio changes, environment separation, drift recovery, and a
 plain-language command glossary.
 
-After pushing, verify that Supabase contains 64 active plots, the three RPCs,
+After pushing, verify that Supabase contains 63 active plots (the 64th, Hopper
+Way's inner corner, is reserved for the Coffee House), the three RPCs,
 and Realtime publication entries for `profiles`, `projects`, and `plot_claims`.
 
 The profile migration:

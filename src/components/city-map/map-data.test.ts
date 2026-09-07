@@ -9,12 +9,35 @@ describe("starter district", () => {
     expect(starterDistrict.plots).toHaveLength(64);
     expect(new Set(starterDistrict.plots.map((plot) => plot.id)).size).toBe(64);
     expect(starterDistrict.plots.every((plot) => /^pioneer:(jobs|lovelace|turing|hopper):(north|south|north-outer|south-outer):0[1-4]$/.test(plot.id))).toBe(true);
-    expect(starterDistrict.entities).toHaveLength(318);
+    expect(starterDistrict.entities).toHaveLength(319);
     expect(starterDistrict.entities.filter((entity) => entity.plotId)).toHaveLength(64);
     expect(starterDistrict.entities.filter((entity) => entity.interactive)).toHaveLength(64);
     expect(new Set(starterDistrict.entities.map((entity) => entity.assetId))).toEqual(
-      new Set(["map-base", "road-straight", "sidewalk-straight", "grass-plot", "driveway-straight", "roundabout", "palm-tree", "canopy-tree", "street-lamp", "road-link", "launch-monument", "district-sign-gantry"]),
+      new Set(["map-base", "road-straight", "sidewalk-straight", "grass-plot", "driveway-straight", "roundabout", "palm-tree", "canopy-tree", "street-lamp", "road-link", "launch-monument", "district-sign-gantry", "coffee-shop"]),
     );
+  });
+
+  it("stands the coffee shop on Hopper's inner corner without making it claimable", () => {
+    const shop = starterDistrict.entities.find((entity) => entity.assetId === "coffee-shop");
+    // No plotId and not interactive: with either, clicking it would open the claim flow for a
+    // plot the database has already taken out of circulation.
+    expect(shop).toMatchObject({ id: "coffee-shop", scale: 1.4 });
+    expect(shop?.plotId).toBeUndefined();
+    expect(shop?.interactive).toBeUndefined();
+
+    // It takes the reserved plot's own building placement, so it sits where a founder's building
+    // would rather than at the pad's centre.
+    const pad = starterDistrict.entities.find(
+      (entity) => entity.assetId === "grass-plot" && entity.plotId === "pioneer:hopper:north-outer:01",
+    );
+    expect(pad?.position).toEqual({ x: 22, y: 0, z: 22 });
+    expect(shop?.position).toEqual({ x: 22, y: 0, z: 23.24 });
+    // The pad faces -z, so the shop is left unrotated: it is authored front-to--z.
+    expect(shop?.rotationY).toBeUndefined();
+
+    // The plot itself stays in the catalog. The catalog is the map's geometry; only the database
+    // decides who may build, and it is what marks this one inactive.
+    expect(starterDistrict.plots.some((plot) => plot.id === "pioneer:hopper:north-outer:01")).toBe(true);
   });
 
   it("uses memorable street names and canonical Pioneer addresses", () => {
