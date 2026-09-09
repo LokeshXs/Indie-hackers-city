@@ -252,6 +252,16 @@ def _at(x, y, yaw, dx, dy):
     return (x + dx * cos(yaw) - dy * sin(yaw), y + dx * sin(yaw) + dy * cos(yaw))
 
 
+def chair_at(x, y, yaw):
+    """Where the chair on a table's `yaw` side stands.
+
+    A chair at yaw faces (-sin yaw, cos yaw), so to face the table it has to sit the opposite way
+    along that line -- which is where the sign flip below comes from. This is stated once because
+    the patrons are placed by it too, and a chair and the person in it drifting apart is the one
+    error the merge would bake in silently."""
+    return x + 0.74 * sin(yaw), y - 0.74 * cos(yaw)
+
+
 def cafe_chair(x, y, floor, yaw, surface, frame_surface):
     """A ladder-back chair. yaw 0 puts its back on the -y side, so it faces +y.
 
@@ -276,10 +286,7 @@ def cafe_chair(x, y, floor, yaw, surface, frame_surface):
 
 
 def cafe_table(x, y, floor, seat_yaws, top_surface, frame_surface, half=0.44):
-    """A table with a chair on each of the given sides.
-
-    A chair at yaw faces (-sin yaw, cos yaw), so to face the table it has to sit the opposite way
-    along that line -- which is where the sign flip in the offset below comes from."""
+    """A table with a chair on each of the given sides."""
     box("cafe table top", x - half, x + half, y - half, y + half,
         floor + 0.32, floor + 0.38, top_surface, 0.025)
     box("cafe table apron", x - half + 0.06, x + half - 0.06, y - half + 0.06, y + half - 0.06,
@@ -289,7 +296,117 @@ def cafe_table(x, y, floor, seat_yaws, top_surface, frame_surface, half=0.44):
             box("cafe table leg", leg_x - 0.035, leg_x + 0.035, leg_y - 0.035, leg_y + 0.035,
                 floor, floor + 0.32, frame_surface)
     for yaw in seat_yaws:
-        cafe_chair(x + 0.74 * sin(yaw), y - 0.74 * cos(yaw), floor, yaw, top_surface, frame_surface)
+        cafe_chair(*chair_at(x, y, yaw), floor, yaw, top_surface, frame_surface)
+
+
+# The patron figure, in the chair's own local frame: +y is the direction the sitter faces, and
+# every height below is measured from the seat top rather than from the deck.
+#
+# SCALED TO THE CHAIR, NOT TO THE DOOR. These two give different answers -- the terrace furniture
+# is authored a little toy against a 2.26 shopfront -- and the chair is the one that matters,
+# because a patron is only ever seen sitting in one. Taking the chair back as a true 0.90m puts
+# this model at about 0.756 units per metre, which makes a seated adult 0.98 tall: the number
+# below. Sized off the door instead they would burst out of the seats.
+SEAT_TOP = 0.32          # cafe_chair's seat spans floor + 0.26 to floor + 0.32
+HEAD_RISE = 0.575        # seat top to head centre
+HEAD_RADIUS = 0.082
+
+
+def _lean(dy, dz, lean):
+    """A local (forward, up) offset pivoted about the hips by `lean` radians, forward positive.
+
+    cube() turns a box about its own centre, not about a pivot, so anything that leans has to be
+    handed the centre it ends up at. This is that calculation, and it has to agree with the X
+    rotation the caller passes -- which is -lean, because a Blender X rotation tips +z toward -y."""
+    return dy * cos(lean) + dz * sin(lean), dz * cos(lean) - dy * sin(lean)
+
+
+def seated_patron(x, y, floor, yaw, lean, arms, skin, hair_surface, top_surface, leg_surface):
+    """One person sitting in the chair at (x, y, yaw), built from the kit's boxes.
+
+    `lean` tips the upper body about the hips: forward for someone working, back for someone in
+    conversation. It is the whole difference between the two poses, and at this zoom it is enough
+    -- the pose reads as a silhouette against the deck, so the angle of the back and the position
+    of the head carry it, and finer articulation would be triangles nothing resolves.
+
+    `arms` is "table" or "lap". Legs, arms and hair carry no bevel, for the reason cafe_chair
+    gives: at these sections the modifier eats most of the stock."""
+    hip = floor + SEAT_TOP
+    spin = (0, 0, yaw)
+    tilt = (-lean, 0, yaw)
+
+    def upright(name, dx, dy, dz, half, surface, bevel=0.0):
+        """A part fixed to the hips and legs, which do not lean."""
+        cube(name, (*_at(x, y, yaw, dx, dy), hip + dz), half, surface, bevel, spin)
+
+    def leaning(name, dx, dy, dz, half, surface, bevel=0.0):
+        """A part carried by the upper body, so it moves and turns with the lean."""
+        ly, lz = _lean(dy, dz, lean)
+        cube(name, (*_at(x, y, yaw, dx, ly), hip + lz), half, surface, bevel, tilt)
+
+    upright("terrace patron hips", 0.0, 0.0, 0.06, (0.135, 0.115, 0.06), leg_surface, 0.03)
+    for dx in (-0.068, 0.068):
+        upright("terrace patron thigh", dx, 0.17, 0.055, (0.058, 0.17, 0.055), leg_surface, 0.02)
+        upright("terrace patron shin", dx, 0.30, -0.16, (0.05, 0.05, 0.16), leg_surface)
+        upright("terrace patron shoe", dx, 0.36, -0.2925, (0.055, 0.10, 0.0275), hair_surface, 0.02)
+
+    # 0.038 rather than 0.04: cube() spends a third bevel segment at 0.04 and up, and on the one
+    # patron box wide enough not to have its bevel capped that is 600 triangles across the terrace
+    # for a rounding nothing can see. Every other part here already caps below the threshold.
+    leaning("terrace patron torso", 0.0, 0.0, 0.28, (0.145, 0.105, 0.16), top_surface, 0.038)
+    leaning("terrace patron shoulders", 0.0, 0.0, 0.44, (0.165, 0.10, 0.045), top_surface, 0.04)
+    leaning("terrace patron neck", 0.0, 0.0, 0.50, (0.045, 0.045, 0.03), skin)
+
+    # Upper arms hang off the shoulders and lean with them. The forearms do not: they rest on the
+    # table or the lap, both of which stay put however far the sitter tips.
+    for dx in (-0.175, 0.175):
+        leaning("terrace patron arm", dx, 0.0, 0.30, (0.045, 0.05, 0.13), top_surface, 0.03)
+    # The table pose rides above the thigh line. That is the wrong height for the table -- this
+    # one's surface is only 0.06 above its seat, well under the thighs -- but forearms dropped to
+    # the true surface disappear INSIDE the legs from a camera looking down, and hands on a
+    # keyboard are what the pose is for.
+    #
+    # The lap pose has to go the other way and sit slightly INTO the thighs. Clear of them it
+    # reads as two pale planks floating over the sitter rather than as arms, because nothing
+    # joins them to the leg they are supposed to be resting on. They are also drawn shorter and
+    # closer to the body, so the hands gather in the lap instead of reaching for a table that
+    # this sitter is not using.
+    reach, lift, span, spread = (0.28, 0.15, 0.15, 0.155) if arms == "table" \
+        else (0.13, 0.13, 0.10, 0.125)
+    for dx in (-spread, spread):
+        upright("terrace patron forearm", dx, reach, lift, (0.042, span, 0.04), skin, 0.025)
+
+    hy, hz = _lean(0.0, HEAD_RISE, lean)
+    # foliage() is the kit's only icosphere; nothing about it is leaf-specific.
+    foliage("terrace patron head", (*_at(x, y, yaw, 0.0, hy), hip + hz), HEAD_RADIUS, skin)
+    # A cap over the crown and down the back, which is what turns a bare sphere into a head at
+    # city zoom. Bevelled almost to its own half-extent so it sits on the skull as a dome, and cut
+    # WIDER than HEAD_RADIUS on purpose: sized to the sphere it would be flush with it, and the
+    # skull would push through the sides of its own hair.
+    cy, cz = _lean(-0.012, HEAD_RISE + 0.052, lean)
+    cube("terrace patron hair", (*_at(x, y, yaw, 0.0, cy), hip + cz),
+         (0.090, 0.090, 0.045), hair_surface, 0.040, tilt)
+
+
+def terrace_laptop(x, y, floor, yaw, shell_surface, screen_surface):
+    """An open laptop on the table in front of the patron at (x, y, yaw).
+
+    This is the prop that actually says "working" from above. A hunched pose alone does not read
+    at city zoom, but a pale angled screen catches the key light and is legible at any distance the
+    shop itself is, which is why it carries a little emission of its own.
+
+    The screen is a flat plate stood up by an X rotation. At exactly 90 degrees it would be
+    vertical; short of that its top edge falls away from the sitter, which is the way a laptop
+    actually opens. Blender's default XYZ euler order applies that tilt before the yaw, so the
+    two compose in the plate's own frame rather than fighting."""
+    top = floor + 0.38                     # the table surface, from cafe_table
+    cube("terrace laptop base", (*_at(x, y, yaw, 0.0, 0.44), top + 0.01),
+         (0.11, 0.08, 0.01), shell_surface, 0.008, (0, 0, yaw))
+    hinge = radians(75)
+    # Hinged at the base's far edge, so the plate is offset half its height along the tilted axis.
+    cube("terrace laptop screen",
+         (*_at(x, y, yaw, 0.0, 0.52 + 0.075 * cos(hinge)), top + 0.02 + 0.075 * sin(hinge)),
+         (0.11, 0.075, 0.008), screen_surface, 0.006, (hinge, 0, yaw))
 
 
 def potted_tree(x, y, floor, pot_surface, soil_surface, trunk_surface, leaves):
@@ -421,6 +538,23 @@ def main():
     leaves = (material("Shrub deep green", (0.05, 0.29, 0.12)),
               material("Shrub green", (0.08, 0.48, 0.18)),
               material("Shrub highlight", (0.23, 0.68, 0.26)))
+    # Terrace patrons. The tops are held muted on purpose: four saturated shirts on a deck this
+    # size would out-shout the green fascia, and the building has to stay the thing you see first.
+    patron_tops = (material("Coffee House patron slate", (0.085, 0.135, 0.245), roughness=0.78),
+                   material("Coffee House patron rust", (0.355, 0.115, 0.045), roughness=0.78),
+                   material("Coffee House patron sage", (0.155, 0.235, 0.135), roughness=0.78),
+                   material("Coffee House patron mustard", (0.480, 0.320, 0.055), roughness=0.78))
+    patron_skins = (material("Coffee House patron skin deep", (0.290, 0.150, 0.082), roughness=0.80),
+                    material("Coffee House patron skin mid", (0.480, 0.270, 0.145), roughness=0.80),
+                    material("Coffee House patron skin light", (0.680, 0.450, 0.295), roughness=0.80))
+    patron_hair = (material("Coffee House patron hair dark", (0.028, 0.020, 0.016), roughness=0.66),
+                   material("Coffee House patron hair brown", (0.105, 0.055, 0.026), roughness=0.66))
+    patron_legs = material("Coffee House patron denim", (0.075, 0.092, 0.125), roughness=0.82)
+    laptop_shell = material("Coffee House laptop", (0.42, 0.44, 0.46), roughness=0.40, metallic=0.35)
+    # Lit, but barely. The screen is a 0.22-wide plate seen from above through ACES; at the
+    # strength the OPEN sign carries it would blow to a white chip and lose its angle.
+    laptop_screen = material("Coffee House laptop screen", (0.105, 0.130, 0.155), roughness=0.30,
+                             emission=(0.180, 0.215, 0.250), emission_strength=0.55)
     paving_joint = material("Cool grey paving joint", (0.36, 0.39, 0.41), roughness=0.88)
     paving_path = material("Cool grey entrance paving", (0.56, 0.58, 0.59), roughness=0.82)
     deck_timber = material("Coffee House deck", (0.455, 0.310, 0.152), roughness=0.72)
@@ -646,16 +780,43 @@ def main():
     seating_y = (deck_back + deck_front) / 2
     # East: a four-top and a two-top. West: a pair of two-tops. Chairs are given as the sides they
     # sit on, so no table ever puts a back against the shop window.
-    cafe_table(east_deck[0] + 1.00, seating_y, DECK_TOP,
+    east_four, east_two = east_deck[0] + 1.00, east_deck[1] - 0.72
+    west_near, west_far = west_deck[0] + 0.72, west_deck[1] - 0.72
+    cafe_table(east_four, seating_y, DECK_TOP,
                (0.0, radians(180), radians(90), radians(-90)), timber, timber_dark)
-    cafe_table(east_deck[1] - 0.72, seating_y, DECK_TOP,
-               (0.0, radians(180)), timber, timber_dark)
-    cafe_table(west_deck[0] + 0.72, seating_y, DECK_TOP, (0.0, radians(180)), timber, timber_dark)
-    cafe_table(west_deck[1] - 0.72, seating_y, DECK_TOP, (0.0, radians(180)), timber, timber_dark)
+    cafe_table(east_two, seating_y, DECK_TOP, (0.0, radians(180)), timber, timber_dark)
+    cafe_table(west_near, seating_y, DECK_TOP, (0.0, radians(180)), timber, timber_dark)
+    cafe_table(west_far, seating_y, DECK_TOP, (0.0, radians(180)), timber, timber_dark)
     # Cups left on two of the tops, the way the reference dresses its tables.
-    for cup_x, cup_y in ((east_deck[0] + 1.14, seating_y + 0.12), (west_deck[1] - 0.60, seating_y - 0.10)):
+    for cup_x, cup_y in ((east_four + 0.14, seating_y + 0.12), (west_far - 0.60, seating_y - 0.10)):
         cylinder("terrace saucer", (cup_x, cup_y, DECK_TOP + 0.395), 0.075, 0.02, letter_cream, 12)
         cylinder("terrace cup", (cup_x, cup_y, DECK_TOP + 0.45), 0.052, 0.10, letter_cream, 12)
+
+    # --- Who is sitting out. Six of the ten chairs, never more: a terrace with every seat taken
+    # reads as a queue, and the empty chairs are what makes the full ones look chosen. The west
+    # far table is left clear on purpose -- it keeps its abandoned cup, which is the whole story
+    # of a table someone has just left.
+    #
+    # The two conversations are placed where the chairs genuinely face each other: across the
+    # four-top's short axis, and across the west near two-top. Talkers lean back and rest their
+    # hands in their laps; the ones working lean in over a laptop. Nothing here is tied to the
+    # cafe's presence channel -- this is dressing, and it is on whether the city is busy or not.
+    LEAN_IN, LEAN_BACK = radians(14), radians(-9)
+    patrons = (
+        # table,     yaw,           lean,      arms,    top, skin, hair
+        (east_four,  radians(90),   LEAN_BACK, "lap",   0, 1, 0),
+        (east_four,  radians(-90),  LEAN_BACK, "lap",   1, 0, 0),
+        (east_four,  radians(180),  LEAN_IN,   "table", 2, 2, 1),
+        (east_two,   radians(180),  LEAN_IN,   "table", 3, 1, 0),
+        (west_near,  0.0,           LEAN_BACK, "lap",   1, 2, 1),
+        (west_near,  radians(180),  LEAN_BACK, "lap",   2, 0, 0),
+    )
+    for table_x, yaw, lean, arms, top, skin, hair in patrons:
+        seat_x, seat_y = chair_at(table_x, seating_y, yaw)
+        seated_patron(seat_x, seat_y, DECK_TOP, yaw, lean, arms, patron_skins[skin],
+                      patron_hair[hair], patron_tops[top], patron_legs)
+        if arms == "table":
+            terrace_laptop(seat_x, seat_y, DECK_TOP, yaw, laptop_shell, laptop_screen)
 
     # Planter runs along the front of each deck, which is what bounds the terrace -- no railing,
     # no bollards, and it reads from directly above where a rail would not.
