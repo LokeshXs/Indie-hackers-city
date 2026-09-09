@@ -97,3 +97,37 @@ npm run start
 Project deletion, plot release/transfer, and the UI for creating additional
 projects are intentionally deferred. The schema already allows multiple projects
 per account while enforcing exactly one permanent plot claim per account.
+
+### Work from Cafe
+
+The map subscribes to a public Supabase Realtime Presence channel per cafe
+(`cafe:<entity.id>`). Visitors can view presence; the UI requires Google sign-in
+before publishing a seat. Presence contains only the displayed name, approved
+Google avatar URL, optional intention, account ID, and seat timestamps/ID. Treat
+it as ephemeral, client-reported social activity, not an authoritative record
+for rewards or access control. No database migration is needed; the configured
+Supabase project must allow public Realtime channels.
+
+Each account counts once across connected tabs/devices. A browser stores its
+seat choice locally for up to 12 hours to resume refreshes/reconnections; storage
+alone never counts as online. Leaving propagates to other tabs in that browser.
+Disconnected sockets disappear according to Supabase's connection timeout.
+Intentions are public while seated. The cafe soundtrack loads only after an
+explicit Play click: no audio element or source is created on map load, panel
+open, or joining a seat. The current `song1.mp3` loops, with personal pause,
+mute, and volume controls. Closing the panel keeps playback running; leaving
+the map stops it. Refreshing never automatically starts music.
+
+The track is not in the app bundle. It streams from the Cloudflare R2 bucket whose
+public base URL is `NEXT_PUBLIC_CAFE_SONG_URL`, and the player reports itself
+unconfigured rather than requesting a missing file when that is unset. At 128 kbps
+across 52 minutes it is ~50 MB, but `preload="none"` and R2's range support mean a
+listener only transfers the stretch they actually hear.
+
+Other map viewers receive silent, grouped join notices. Initial sync, known seat
+IDs, existing accounts, and the viewer's own arrivals do not produce notices.
+The cafe panel includes a notification preference saved in the browser.
+
+Run `node scripts/cafe-realtime-smoke.mjs` to verify join/update/leave delivery
+with two clients on a unique test channel, using the same environment configuration
+as the development app. It never publishes activity into a real cafe channel.

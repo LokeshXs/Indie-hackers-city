@@ -92,7 +92,7 @@ DOOR_BAY = (-0.80, 0.50)
 EAST_BAY = (0.80, 3.00)
 
 LETTERING_NAME = "coffee shop lettering"
-SIGN_TEXT = "Coffee House"
+SIGN_TEXT = "StandUp Cafe"
 # With the cup mark gone the name has the whole board, so it is set larger and heavier. The board
 # is still far wider than it is tall, so the fit stays height-limited in practice.
 TEXT_FIT_WIDTH = 5.40
