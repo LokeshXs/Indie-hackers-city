@@ -38,6 +38,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# wrangler: local simulated R2/KV state. Object commands default to this local store
+# unless given --remote, so a mistaken upload lands a full copy of the asset here.
+.wrangler
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -46,6 +50,11 @@ next-env.d.ts
 # Blender auto-backups: rewritten on every save of the matching .blend, which is the
 # real source and stays tracked.
 *.blend1
+
+# Cafe soundtracks: served from R2, never from the app bundle. One track is ~72 MB --
+# larger than every other asset in this repo put together, and a binary git could never
+# delta-compress. The played URL comes from NEXT_PUBLIC_CAFE_SONG_URL.
+public/assets/cafes/**/songs/
 
 # Agent skills
 .agents

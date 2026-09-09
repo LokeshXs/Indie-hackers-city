@@ -32,6 +32,7 @@ import { FounderProgressCard } from "./FounderProgressCard";
 import { RoofProps, type RoofPropPlacement } from "./RoofProps";
 import { ClaimSuccessOverlay } from "./ClaimSuccessOverlay";
 import { ProjectCard } from "./ProjectCard";
+import { CafeExperience } from "./CafeExperience";
 import {
   Alert,
   Button,
@@ -1025,7 +1026,7 @@ export function CityMap3D({
       <CityAssetErrorBoundary onError={handleAssetError} resetKey={assetBoundaryResetKey}>
         <Canvas
           className={styles.canvas}
-          shadows
+          shadows={{ type: THREE.PCFShadowMap }}
           orthographic
           camera={{ position: [600, 600, 600], zoom: 14, near: 0.1, far: 1900 }}
           dpr={[1, 2]}
@@ -1046,6 +1047,9 @@ export function CityMap3D({
               focusedPlotId={focusedPlotId}
             />
             <Preload all />
+            {district.entities.filter((entity) => entity.assetId === "coffee-shop").map((entity) => (
+              <CafeExperience key={entity.id} entity={entity} user={user} signInWithGoogle={signInWithGoogle} />
+            ))}
             <SceneReadySignal onReady={handleSceneReady} />
           </Suspense>
         </Canvas>
