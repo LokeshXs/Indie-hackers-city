@@ -16,7 +16,7 @@ import {
 import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId } from "@/lib/city/types";
 import { useCityDevelopments } from "@/hooks/useCityDevelopments";
 import { canChoosePremises } from "@/lib/city/unlocks";
-import { CITY_ASSET_PATHS } from "./city-assets";
+import { CITY_ASSET_PATHS, PEDESTRIAN_ASSET_PATH } from "./city-assets";
 import { PremisesUpgradeModal } from "./PremisesUpgradeModal";
 import { contrastRatio } from "./billboard-texture";
 import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
@@ -33,6 +33,7 @@ import { RoofProps, type RoofPropPlacement } from "./RoofProps";
 import { ClaimSuccessOverlay } from "./ClaimSuccessOverlay";
 import { ProjectCard } from "./ProjectCard";
 import { CafeExperience } from "./CafeExperience";
+import { Pedestrians } from "./Pedestrians";
 import {
   Alert,
   Button,
@@ -713,6 +714,7 @@ export function CityMap3D({
       .filter(([assetId]) => !DEFERRED_PRELOAD_ASSETS.has(assetId as CityAssetId))
       .forEach(([, path]) => useGLTF.preload(path));
     useTexture.preload("/assets/city/v3/water-surface-tile.png");
+    useGLTF.preload(PEDESTRIAN_ASSET_PATH);
     return () => {
       document.body.style.cursor = "auto";
       constructionTimersRef.current.forEach(window.clearTimeout);
@@ -1047,6 +1049,7 @@ export function CityMap3D({
               focusedPlotId={focusedPlotId}
             />
             <Preload all />
+            <Pedestrians entities={district.entities} />
             {district.entities.filter((entity) => entity.assetId === "coffee-shop").map((entity) => (
               <CafeExperience key={entity.id} entity={entity} user={user} signInWithGoogle={signInWithGoogle} />
             ))}

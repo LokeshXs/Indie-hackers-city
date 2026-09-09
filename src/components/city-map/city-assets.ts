@@ -23,6 +23,24 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "coffee-shop": "/assets/city/v3/shops/coffee-shop.glb",
 };
 
+/** The pedestrians who walk the pavements.
+ *
+ * Deliberately outside CITY_ASSET_PATHS. Every id in that record is a `CityEntity.assetId` -- a
+ * thing the district places at a position -- and a walker has no position to place: it is put on
+ * the map by a route, and the same glb serves every one of them. Listing it there would invite
+ * someone to drop a pedestrian into the entity list, where it would stand motionless forever. */
+export const PEDESTRIAN_ASSET_PATH = "/assets/city/v3/props/pedestrian.glb";
+
+/** How many colourways build-pedestrian.py writes into that glb, as `pedestrian-<n> <part>`. */
+export const PEDESTRIAN_VARIANTS = 6;
+
+/** The five nodes each colourway ships, kept separate so the runtime can swing the limbs.
+ *
+ * Underscored because three.js sanitises node names as it loads a glb, turning any whitespace
+ * into "_". These are the names as they arrive in the scene graph, which is the only spelling
+ * getObjectByName will match. */
+export const PEDESTRIAN_PARTS = ["body", "leg_left", "leg_right", "arm_left", "arm_right"] as const;
+
 // Name of the mesh material representing each building's main wall surface,
 // verified against the exported glb material names — used to recolor buildings at runtime.
 /** Mesh material on the billboard whose map the runtime replaces with the painted product card.
