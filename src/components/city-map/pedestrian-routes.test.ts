@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { starterDistrict } from "./map-data";
-import { closedRoute, pedestrianRoutes, pointAt, strip, stripHalfWidth } from "./pedestrian-routes";
+import { pedestrianRoutes, strip, stripHalfWidth } from "./pedestrian-routes";
+import { closedRoute, pointAt } from "./routes";
 
 const pavement = starterDistrict.entities.filter((entity) => entity.assetId === "sidewalk-straight");
 

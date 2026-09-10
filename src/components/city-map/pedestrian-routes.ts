@@ -1,20 +1,11 @@
-import type { CityEntity } from "./map-types";
+/** Every circuit a pedestrian walks, derived from the pavement entities themselves rather than
+ * written out as coordinates. The map is generated -- four blocks stamped from one template at an
+ * offset -- so literal numbers here would be a second copy of that arithmetic, and the kind that
+ * goes stale silently the first time a row moves. `pedestrianRoutes` reads the strips it is going
+ * to walk on and takes the corners from where they actually are. */
 
-/** A closed circuit a pedestrian walks, as a polyline of corners in world XZ.
- *
- * Every route is derived from the pavement entities themselves rather than written out as
- * coordinates. The map is generated -- four blocks stamped from one template at an offset -- so
- * literal numbers here would be a second copy of that arithmetic, and the kind that goes stale
- * silently the first time a row moves. `pedestrianRoutes` reads the strips it is going to walk on
- * and takes the corners from where they actually are. */
-export interface WalkRoute {
-  id: string;
-  /** Closed: the last corner joins back to the first. */
-  corners: ReadonlyArray<{ x: number; z: number }>;
-  /** Cumulative distance to each corner, plus the total as the final entry. */
-  distances: readonly number[];
-  length: number;
-}
+import type { CityEntity } from "./map-types";
+import { closedRoute, type Route } from "./routes";
 
 /** The pavement's top face. The slab is 0.18 deep about its origin and Y is never scaled. */
 export const PAVEMENT_Y = 0.09;
@@ -51,48 +42,13 @@ export function stripHalfWidth(entity: CityEntity): number {
   return (entity.scaleXZ?.z ?? 1) * SLAB_HALF_WIDTH;
 }
 
-function rectangle(id: string, xs: [number, number], zs: [number, number]): WalkRoute {
+function rectangle(id: string, xs: [number, number], zs: [number, number]): Route {
   const [west, east] = xs[0] <= xs[1] ? xs : [xs[1], xs[0]];
   const [north, south] = zs[0] <= zs[1] ? zs : [zs[1], zs[0]];
   return closedRoute(id, [
     { x: west, z: north }, { x: east, z: north },
     { x: east, z: south }, { x: west, z: south },
   ]);
-}
-
-export function closedRoute(id: string, corners: ReadonlyArray<{ x: number; z: number }>): WalkRoute {
-  const distances = [0];
-  for (let index = 0; index < corners.length; index += 1) {
-    const a = corners[index];
-    const b = corners[(index + 1) % corners.length];
-    distances.push(distances[index] + Math.hypot(b.x - a.x, b.z - a.z));
-  }
-  return { id, corners, distances, length: distances[distances.length - 1] };
-}
-
-/** Where a route puts a walker `travelled` units along it, and the heading to face.
- *
- * The model is authored facing +Y in Blender, which export_yup turns into -Z. Turning a -Z facing
- * group about Y by t aims it along (-sin t, -cos t), so BOTH components of the direction are
- * negated going into atan2 -- equivalently, it is the +Z heading plus half a turn. Negating only
- * one of them survives every leg that runs along Z and reverses every leg that runs along X,
- * which on these rectangular circuits means two sides of each block walked backwards. */
-export function pointAt(route: WalkRoute, travelled: number) {
-  const total = route.length;
-  const along = ((travelled % total) + total) % total;
-  let index = 0;
-  while (index < route.corners.length - 1 && route.distances[index + 1] <= along) index += 1;
-  const a = route.corners[index];
-  const b = route.corners[(index + 1) % route.corners.length];
-  const legLength = route.distances[index + 1] - route.distances[index];
-  const share = legLength > 0 ? (along - route.distances[index]) / legLength : 0;
-  const dx = b.x - a.x;
-  const dz = b.z - a.z;
-  return {
-    x: a.x + dx * share,
-    z: a.z + dz * share,
-    heading: Math.atan2(-dx, -dz),
-  };
 }
 
 const BLOCKS = ["nw", "ne", "sw", "se"] as const;
@@ -113,9 +69,9 @@ const BLOCKS = ["nw", "ne", "sw", "se"] as const;
  * The loops close through the inner connectors at x = +-24, which is why those are read for their
  * X rather than assumed: they are the only pavement joining a centre street to the row behind it,
  * and without them the circuit would cut across a plot. */
-export function pedestrianRoutes(entities: readonly CityEntity[]): WalkRoute[] {
+export function pedestrianRoutes(entities: readonly CityEntity[]): Route[] {
   const byId = new Map(entities.map((entity) => [entity.id, entity]));
-  const routes: WalkRoute[] = [];
+  const routes: Route[] = [];
 
   const centreOf = (id: string): number | null => {
     const entity = byId.get(id);

@@ -6,7 +6,8 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { CityEntity } from "./map-types";
 import { PEDESTRIAN_ASSET_PATH, PEDESTRIAN_PARTS, PEDESTRIAN_VARIANTS } from "./city-assets";
-import { PAVEMENT_Y, pedestrianRoutes, pointAt, type WalkRoute } from "./pedestrian-routes";
+import { PAVEMENT_Y, pedestrianRoutes } from "./pedestrian-routes";
+import { pointAt, type Route } from "./routes";
 
 /** Walkers on each circuit. Three is what a block's streets carry without reading as a crowd:
  * the interior loops are 138 units round, so three walkers sit about 46 apart and the default
@@ -38,7 +39,7 @@ function seededUnit(seed: number): number {
 }
 
 interface Walker {
-  route: WalkRoute;
+  route: Route;
   speed: number;
   /** Where on the circuit this walker starts, in units travelled. */
   start: number;
