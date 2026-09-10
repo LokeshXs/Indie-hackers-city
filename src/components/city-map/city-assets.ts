@@ -41,6 +41,19 @@ export const PEDESTRIAN_VARIANTS = 6;
  * getObjectByName will match. */
 export const PEDESTRIAN_PARTS = ["body", "leg_left", "leg_right", "arm_left", "arm_right"] as const;
 
+/** The traffic on the district's roads.
+ *
+ * Outside CITY_ASSET_PATHS for the same reason the pedestrians are: every id in that record is a
+ * `CityEntity.assetId`, a thing the district places at a position, and a car has no position to
+ * place -- it is put on the map by a circuit, and the same glb serves every one of them. Listing
+ * it there would invite someone to drop a car into the entity list, where it would sit parked in
+ * the middle of a road forever. */
+export const CAR_ASSET_PATH = "/assets/city/v3/vehicles/car.glb";
+
+/** How many colourways build-car.py writes into that glb, each as a single node named `car_<n>`.
+ * Unlike the pedestrians it ships no separate parts: a car's only moving part is the car. */
+export const CAR_VARIANTS = 4;
+
 // Name of the mesh material representing each building's main wall surface,
 // verified against the exported glb material names — used to recolor buildings at runtime.
 /** Mesh material on the billboard whose map the runtime replaces with the painted product card.

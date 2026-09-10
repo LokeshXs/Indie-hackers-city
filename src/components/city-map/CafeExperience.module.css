@@ -12,7 +12,7 @@
 .joinToast button { min-height: 32px; border: 0; background: transparent; color: #315337; font: inherit; font-size: var(--text-sm); font-weight: var(--weight-bold); cursor: pointer; }
 .joinToast > button { margin-left: auto; }
 .joinToast button:focus-visible { outline: 3px solid #bd923c; outline-offset: 2px; }
-.anchor { color: #24462b; font-family: var(--font-sans); text-align: center; width: max-content; transform: translate(-50%, calc(-100% - 12px)); }
+.anchor { color: #24462b; font-family: var(--font-sans); text-align: center; width: max-content; transform: translate(-50%, calc(-100% - 12px)) scale(.82); transform-origin: 50% 100%; }
 .bubble { position: relative; display: flex; align-items: center; padding-right: 9px; border: 2px solid #315337; border-radius: 20px; background: #fff8e5; box-shadow: 0 4px 0 #315337, 0 8px 18px #17332230; animation: float 4s ease-in-out infinite; }
 .bubble::after { content: ""; position: absolute; bottom: -9px; left: calc(50% - 6px); width: 12px; height: 12px; background: #fff8e5; border-right: 2px solid #315337; border-bottom: 2px solid #315337; transform: rotate(45deg); }
 .bubble button { border: 0; background: transparent; color: inherit; cursor: pointer; }
