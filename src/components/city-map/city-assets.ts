@@ -12,6 +12,7 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "palm-tree": "/assets/city/v3/trees/palm-tree.glb",
   "canopy-tree": "/assets/city/v3/trees/canopy-tree.glb",
   "street-lamp": "/assets/city/v3/props/street-lamp.glb",
+  "cafe-lamp": "/assets/city/v3/props/cafe-lamp.glb",
   "billboard": "/assets/city/v3/props/billboard.glb",
   "launch-monument": "/assets/city/v3/landmarks/launch-monument.glb",
   "district-sign-gantry": "/assets/city/v3/landmarks/district-sign-gantry.glb",
@@ -89,6 +90,10 @@ export const NIGHT_EMISSIVE_MATERIALS: Record<string, NightEmissive> = {
   // The street lamps. Already the brightest thing the kit ships at 1.8, because they read as lit
   // even at noon; after dark they carry the streets on their own.
   "Lamp globe glow": { boost: 3.4 },
+  // The Coffee House's own two lamps. Deliberately short of the street's 3.4: they ship warmer and
+  // dimmer than a carriageway globe, and the point of them is that the terrace is lit to be sat in
+  // rather than walked through.
+  "Cafe lamp glow": { boost: 2.4 },
 
   // Shopfront glazing, on each of the three level-1 shells. Daylight leaves these a cool tint
   // picked to sit against the sea; night walks them round to lamplight.
@@ -126,6 +131,16 @@ export const NIGHT_EMISSIVE_MATERIALS: Record<string, NightEmissive> = {
   // panel -- and it carries its small emission only so the brown holds its hue in a dark doorway.
   "Coffee House open sign": { boost: 2 },
   "Coffee House open lettering": { boost: 1.3 },
+  // The six people on the terrace, by way of what they are looking at. Their laptop screens are the
+  // only human activity anywhere on the map, and they were going dark at exactly the hour they read
+  // best. Held to a modest boost: the build script keeps these deliberately dim because the screen
+  // is a 0.22-wide plate seen from above, and pushed hard it blows to a white chip and loses its
+  // angle -- which after dark would be six white specks instead of six people working.
+  "Coffee House laptop screen": { boost: 2.6 },
+  // The awning, catching the shopfront's light from underneath. It carries no emission of its own,
+  // so this is the colour doing the work rather than a multiplier: unlit, a pale awning over a lit
+  // terrace stops reading as a canopy and starts reading as a lid.
+  "Awning stripe cream": { boost: 1, nightColor: "#6a5330" },
 
   // The district sign over the roundabout. The lettering ships unlit -- it is cream paint, lit by
   // the sun -- so a multiplier has nothing to work on and the colour is what does the job: after
@@ -198,6 +213,25 @@ export interface RoofAnchors {
 
 /** How far outside the roof tier the garland hangs, so bulbs clear the fascia. */
 const OVERHANG = 0.16;
+
+/** The Coffee House's own night fittings, in the shop's local space.
+ *
+ * Derived from scripts/shops/build-coffee-shop.py rather than read off it, because that script
+ * seats the model on its plot with a shift computed from the model's own bounds at build time --
+ * so the numbers in the source are pre-shift and none of them is the final coordinate. What is
+ * baked below is the arithmetic carried through: the rear wall lands at PLOT_BACK + REAR_MARGIN,
+ * which puts the shopfront plane at Blender y 1.18 and the terrace deck at 1.90..4.12, and the
+ * export's (x, y, z) -> (x, z, -y) turns that into the z range below.
+ *
+ * Being derived rather than transcribed, these are the one set of anchors in this file that a
+ * rebuild of the shop could silently invalidate. They are decoration -- a halo over a door lamp --
+ * so the failure is cosmetic and visible rather than a crash. */
+
+/** The two lamps flanking the shop door, where their halos hang. */
+export const CAFE_DOOR_LAMPS: ReadonlyArray<{ x: number; y: number; z: number }> = [
+  { x: -1.255, y: 1.865, z: -1.307 },
+  { x: 0.645, y: 1.865, z: -1.307 },
+];
 
 /** Where the founder's sign sits on each building's roof, in the building's own local space.
  *

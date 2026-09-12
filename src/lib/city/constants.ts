@@ -38,3 +38,7 @@ export const ACHIEVEMENT_TYPES = [
 /** Mirrors max_projects_per_founder in public.create_project. Until achievement approval exists,
  * this cap is the ceiling on how much XP a founder can mint. */
 export const MAX_PROJECTS_PER_FOUNDER = 10;
+
+/** The meta tag name a founder puts on their product's site to prove they control the domain.
+ * Mirrored by VERIFICATION_META_NAME in the admin console, which is what reads it. */
+export const VERIFICATION_META_NAME = "ihc-verify";

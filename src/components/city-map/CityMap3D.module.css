@@ -86,3 +86,63 @@
 @media (prefers-reduced-motion: reduce) {
   .constructionLabel, .constructionLabel i { animation: none; }
 }
+
+.onlineBubble {
+  animation: onlineBubbleBob 2.6s ease-in-out infinite;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #86bea0;
+  border-radius: 1rem;
+  background: #effbf1;
+  color: #23553c;
+  box-shadow: 0 2px 8px #102e3430;
+  font: 600 11px var(--font-sans);
+  white-space: nowrap;
+}
+.onlineBubble > span, .onlineDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #298856;
+  flex-shrink: 0;
+}
+
+@keyframes onlineBubbleBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onlineBubble { animation: none; }
+}
+.onlineToast {
+  position: fixed;
+  z-index: 25;
+  top: 5rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.8rem 1rem;
+  border: 1px solid #afc6ac;
+  border-radius: 0.8rem;
+  background: #fff8e5;
+  color: #24462b;
+  box-shadow: 0 5px 20px #17332230;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.onlineToast button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.4rem;
+  min-width: 32px;
+  min-height: 32px;
+  cursor: pointer;
+}
+.onlineToast button:focus-visible { outline: 2px solid #298856; outline-offset: 2px; }

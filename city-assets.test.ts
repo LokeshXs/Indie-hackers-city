@@ -64,6 +64,7 @@ describe("3D city asset kit", () => {
       "teal-brow-level-2",
       "coffee-shop",
       "street-lamp",
+      "cafe-lamp",
       "launch-monument",
       "district-sign-gantry",
     ] as const) {
@@ -89,6 +90,7 @@ describe("3D city asset kit", () => {
       "artwork/3d/v3/trees/palm-tree.blend",
       "artwork/3d/v3/trees/canopy-tree.blend",
       "artwork/3d/v3/props/street-lamp.blend",
+      "artwork/3d/v3/props/cafe-lamp.blend",
       "artwork/3d/v3/props/billboard.blend",
       "artwork/3d/v3/props/pedestrian.blend",
       "artwork/3d/v3/vehicles/car.blend",

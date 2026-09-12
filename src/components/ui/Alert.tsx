@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/ui/cn";
 import styles from "./Alert.module.css";
 
-export type AlertTone = "error" | "warning";
+export type AlertTone = "error" | "warning" | "notice";
 
 export interface AlertProps {
   tone?: AlertTone;

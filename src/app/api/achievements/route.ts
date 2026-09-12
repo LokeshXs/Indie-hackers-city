@@ -6,6 +6,29 @@ import type { StartupBuildingLevel } from "@/lib/city/types";
 import { isUuid } from "@/lib/city/validation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
+/** Trims the three evidence fields, turning blanks into the nulls the RPC expects. Returns null
+ * when a supplied value is the wrong type at all, which is a malformed request rather than a
+ * founder who forgot something. */
+function readEvidence(payload: {
+  evidenceLink?: unknown;
+  evidenceFilePath?: unknown;
+  evidenceNote?: unknown;
+}): { link?: string; filePath?: string; note?: string } | null {
+  const fields = [payload.evidenceLink, payload.evidenceFilePath, payload.evidenceNote];
+  if (fields.some((value) => value !== undefined && value !== null && typeof value !== "string")) {
+    return null;
+  }
+  const clean = (value: unknown) => {
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
+  return {
+    link: clean(payload.evidenceLink),
+    filePath: clean(payload.evidenceFilePath),
+    note: clean(payload.evidenceNote),
+  };
+}
+
 export async function POST(request: Request) {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -17,7 +40,15 @@ export async function POST(request: Request) {
   } catch {
     return errorResponse("invalid_request", "The achievement could not be read.");
   }
-  const payload = typeof body === "object" && body ? body as { achievementType?: unknown; projectId?: unknown } : {};
+  const payload = typeof body === "object" && body
+    ? body as {
+      achievementType?: unknown;
+      projectId?: unknown;
+      evidenceLink?: unknown;
+      evidenceFilePath?: unknown;
+      evidenceNote?: unknown;
+    }
+    : {};
   if (!isAchievementType(payload.achievementType)) {
     return errorResponse("invalid_request", "Choose a valid achievement.");
   }
@@ -28,27 +59,38 @@ export async function POST(request: Request) {
     return errorResponse("invalid_request", "Choose a valid project.");
   }
 
+  // Shape only. Whether the evidence is *enough* is the database's call (evidence_required) and
+  // then a human's, so nothing here tries to second-guess either.
+  const evidence = readEvidence(payload);
+  if (!evidence) return errorResponse("invalid_request", "Check the evidence you attached.");
+
   const result = await supabase.rpc("record_achievement", {
     requested_achievement_type: payload.achievementType,
     requested_project_id: projectId ?? undefined,
+    evidence_link: evidence.link,
+    evidence_file_path: evidence.filePath,
+    evidence_note: evidence.note,
   });
 
   if (result.error || !result.data?.[0]) {
     if (result.error) {
       const code = rpcErrorCode(result.error);
       return errorResponse(code, code === "achievement_already_claimed"
-        ? "That achievement is already logged for this project."
+        ? "That milestone is already logged or waiting to be reviewed."
         : code === "project_not_owned"
           ? "You can only log achievements for your own project."
-          : "The achievement could not be logged.",
+          : code === "evidence_required"
+            ? "Add a link or a screenshot so we can check this."
+            : "The achievement could not be logged.",
       code === "project_not_owned" ? 403 : undefined);
     }
     return errorResponse("unexpected_error", "The achievement could not be logged.");
   }
 
-  const awarded = result.data[0];
+  const submitted = result.data[0];
 
-  // The RPC returns the XP outcome but not the city row, so re-read the projection for the map.
+  // Filing moves no XP, so the development row is unchanged -- but the client's card still expects
+  // one, and re-reading keeps a concurrent approval from leaving a stale total on screen.
   const development = await supabase
     .from("city_developments")
     .select("*")
@@ -63,15 +105,15 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     achievement: {
-      achievementType: awarded.achievement_type,
-      projectId: awarded.project_id,
-      xpAwarded: awarded.xp_awarded,
-      xpTotal: awarded.xp_total,
-      buildingLevel: awarded.building_level as StartupBuildingLevel,
-      levelChanged: awarded.level_changed,
+      achievementType: submitted.achievement_type,
+      projectId: submitted.project_id,
+      status: submitted.status as "pending",
+      xpPending: submitted.xp_pending,
+      xpTotal: submitted.xp_total,
+      buildingLevel: submitted.building_level as StartupBuildingLevel,
     },
     development: serialized,
-    // Returned so the card can grey out the rungs it just claimed without waiting for a refetch.
+    // Returned so the card can mark the rung as awaiting review without waiting for a refetch.
     ...(await loadFounderPortfolio(supabase, user.id, serialized.project.id)),
   });
 }

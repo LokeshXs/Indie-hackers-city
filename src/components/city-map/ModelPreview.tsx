@@ -41,6 +41,7 @@ const NON_SHADOW_CASTING_ASSETS = new Set<CityAssetId>([
   "palm-tree",
   "canopy-tree",
   "street-lamp",
+  "cafe-lamp",
   "billboard",
   "district-sign-gantry",
   // Out on the block corner at r = 31, far past the same default frustum. It stands on its own
@@ -275,7 +276,7 @@ export const PlotPreview = memo(function PlotPreview({
  * light below has no counterpart in CityMap3D's scene, and the three sources together sum to
  * roughly twice what a building receives once placed — so a palette read in this pane runs about a
  * stop lighter than it will render on the map. */
-export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, shadows = true, cameraPosition = [8, 6, 8], children }: { className?: string; zoom?: number; shadows?: boolean; cameraPosition?: [number, number, number]; children: ReactNode }) {
+export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, shadows = true, cameraPosition = [8, 6, 8], children, onCapture }: { onCapture?: (image: string) => void; className?: string; zoom?: number; shadows?: boolean; cameraPosition?: [number, number, number]; children: ReactNode }) {
   return (
     <Canvas
       className={className}
@@ -288,7 +289,18 @@ export const PreviewStage = memo(function PreviewStage({ className, zoom = 48, s
       <hemisphereLight args={["#fffdf2", "#91b9b2", 1.8]} />
       <directionalLight position={[-6, 9, 7]} intensity={2.8} castShadow={shadows} shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
       <MarqueeDriver />
-      <Suspense fallback={null}>{children}</Suspense>
+      <Suspense fallback={null}>{children}{onCapture && <CaptureFrame onCapture={onCapture} />}</Suspense>
     </Canvas>
   );
 });
+
+/** Mounted inside the model Suspense boundary, so capture waits for every GLB to load.
+ * Render and copy in the same frame; no preserved drawing buffer or permanent render loop needed. */
+function CaptureFrame({ onCapture }: { onCapture(image: string): void }) {
+  const frames = useRef(0);
+  useFrame(({ gl, scene, camera }) => {
+    gl.render(scene, camera);
+    if (++frames.current === 2) onCapture(gl.domElement.toDataURL("image/png"));
+  }, 1);
+  return null;
+}

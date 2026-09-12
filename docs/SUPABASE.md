@@ -147,15 +147,19 @@ reset command, it destroys data in the linked hosted database.
 
 XP belongs to a founder's permanent plot claim, not to the project currently
 shown on that plot. Switching projects therefore keeps the same XP and building
-level. The initial cumulative milestones are:
+level. The cumulative milestones live in `building_level_milestones`, which the
+admin console can edit, and currently read:
 
 | Level | Required XP |
 | ---: | ---: |
 | 1 | 0 |
-| 2 | 100 |
-| 3 | 300 |
-| 4 | 700 |
-| 5 | 1,500 |
+| 2 | 490 |
+| 3 | 690 |
+| 4 | 1,090 |
+| 5 | 1,890 |
+
+Query the table rather than trusting this copy; moving a threshold re-levels
+every founder already past it.
 
 Never edit `plot_claims.xp_total`, `plot_claims.building_level`, or rows in
 `plot_xp_events` directly. Use `award_plot_xp`; it locks the claim, records an
@@ -248,10 +252,14 @@ stored total directly.
 
 ## Achievements
 
-Achievements are the only client-triggered source of XP. The catalog lives in
-`public.achievement_definitions`, each row carrying an `xp_reward` plus a
-`group_key` and a `tier`. The reward is read *inside* the award function and is
-never accepted as an argument, so a client cannot express an amount.
+Achievements are the only client-triggered source of XP, and since the approval
+gate landed they are **claims, not awards**: logging one records a `pending` row
+and moves nothing. An admin approving it is what writes the ledger.
+
+The catalog lives in `public.achievement_definitions`, each row carrying an
+`xp_reward` plus a `group_key`, a `tier` and a `scope`. The reward is read
+*inside* the award function and is never accepted as an argument, so neither a
+client nor a reviewer can express an amount.
 
 | Type | Group | Tier | Scope | Reward |
 | --- | --- | --- | --- | --- |
@@ -262,66 +270,194 @@ never accepted as an argument, so a client cannot express an amount.
 | `revenue_10` | revenue | 1 | **founder** | 50 |
 | `revenue_100` | revenue | 2 | **founder** | 150 |
 
-**Revenue is founder-scoped**: it is money the founder earned across everything they
-have built, claimable once ever, so its rows carry `project_id = null` and its
-event key ends in the owner uuid rather than a project uuid. Uniqueness is two
+**Revenue is founder-scoped**: it is money the founder earned across everything
+they have built, claimable once ever, so its rows carry `project_id = null` and
+its key ends in the owner uuid rather than a project uuid. Uniqueness is two
 partial indexes — `(project_id, achievement_type)` where a project is set, and
 `(owner_id, achievement_type)` where it is not.
 
-**Claiming a rung also grants every rung below it in the same group.** Picking
-`users_100` on a project holding none of them writes three rows and three ledger
-events, and reports `xp_awarded` as their sum, 80. Rungs already held are
-skipped, so claiming `users_100` after `users_10` awards 75. This exists because
-a founder knows how far a product has got, not which individual milestones they
-remembered to log.
+### The two halves
 
-Project-scoped rungs are claimed **once per project**; founder-scoped ones once per founder. `public.create_project`
-mints `product_launched` for the project it creates, in the same transaction, so
-a failed award rolls the project back. `public.record_achievement` handles every
-type — including `product_launched`, which stays claimable on the project that
-`claim_plot` created, since that one never received an award.
+| Step | Function | Callable by | Moves XP |
+| --- | --- | --- | --- |
+| File a claim | `record_achievement` | `authenticated` | No |
+| Approve it | `approve_achievement` | `service_role` | Yes |
+| Turn it down | `reject_achievement` | `service_role` | No |
+| Take an award back | `revoke_achievement` | `service_role` | Yes, negative |
 
-Awards write two rows: `public.project_achievements` and the XP ledger. The key
-is derived, not supplied:
+`record_achievement` records **one** rung and reports `xp_pending`, which is what
+approving it would be worth. `apply_project_achievement` is still the private
+applier behind it, still revoked from every role.
+
+**The cascade happens at approval, not submission.** Filing "100+ users" queues a
+single item, so the reviewer sees one claim rather than three. Approving it
+grants 100 and every rung beneath it that is not already approved — writing rows
+for rungs the founder never filed — which is where 5 + 25 + 50 is decided. This
+exists because a founder knows how far a product has got, not which individual
+milestones they remembered to log.
+
+`public.create_project` files `product_launched` for the project it creates, in
+the same transaction, so a failed claim rolls the project back. It no longer
+awards anything on its own.
+
+**Claiming a plot is not gated.** `claim_plot` still awards its 10 XP inside the
+claim transaction under `plot_claim:<owner-uuid>`. A founder who has just signed
+up should not sit at zero waiting for somebody to be at the console.
+
+### Rejection, resubmission and revocation
+
+A rejected rung is not a dead end: filing it again reopens the same row to
+`pending` rather than creating a second one, and the rejection survives in
+`public.achievement_reviews`. That table is the decision log — one row per
+approve, reject, revoke or reopen, naming the reviewer and the ledger event the
+decision wrote. Like `plot_xp_events`, every grant is revoked from the browser
+roles.
+
+`revoke_achievement` undoes an approval by posting a negative event under
+`correction:<ledger-key>:<n>` and setting the row back to `rejected`. The
+original ledger row stays. Only the named rung is revoked — taking back "100+
+users" says nothing about whether the founder has ten.
+
+Re-approving after a revocation writes a **new** ledger key,
+`<base-key>:reapproved:<n>`, because reusing the first one would make
+`apply_plot_xp` recognise it, report `applied = false` and silently grant
+nothing.
+
+### Keys
+
+The key on the `project_achievements` row is derived, not supplied:
 
 ```
-achievement:<achievement_type>:<project_uuid>
+achievement:<achievement_type>:<project_uuid or owner_uuid>
 ```
 
-`project_achievements_event_key_derived` forces the stored key to that exact
-expression, which is also what `apply_project_achievement` hands to
-`apply_plot_xp` — so the two idempotency guards cannot drift apart. The
-`(project_id, achievement_type)` unique constraint is checked first, so a replay
-raises `achievement_already_claimed` **before** the ledger is touched and awards
-nothing. Cascading does not weaken that: each rung keeps its own row, its own
-derived key and its own ledger event, and a claim where *every* rung is already
-held raises the same error.
+`project_achievements_event_key_derived` forces the stored key to exactly that
+expression, which is also the ledger key the first approval uses — so the two
+idempotency guards cannot drift apart.
 
-To revoke an achievement, delete the `project_achievements` row and post a
-compensating negative event under a *new* key, following the correction pattern
-above:
+### Deciding a claim by hand
 
-```
-correction:achievement:<type>:<project_uuid>:1
+The admin console is the intended surface, but the RPCs are reachable from an
+administrative session:
+
+```bash
+npx supabase db query --local \
+  "select * from public.approve_achievement(<id>, '<admin-uuid>', 'Checked the dashboard');"
 ```
 
-The original ledger row stays, so a re-claim finds the key already applied and
-awards no XP a second time. Revocation is permanent for XP, by design.
+`xp_awarded` on a `project_achievements` row records what the rung was worth when
+the claim was filed. It is **not** proof that XP moved — `plot_xp_events` is the
+only record of that, and a pending or rejected row has no ledger event at all.
 
 ### The XP ceiling
 
-Nothing verifies an achievement — there is no oracle for "100+ users" — so
-assume every founder claims every rung. A product is worth 180 (100 launch +
-80 users) and revenue pays 200 once, ever. The per-founder
-project cap in `create_project` (`max_projects_per_founder`, currently 10,
-mirrored by `MAX_PROJECTS_PER_FOUNDER` in `src/lib/city/constants.ts`) is
-therefore the real ceiling:
+Nothing verifies an achievement — there is no oracle for "100+ users" — which is
+why approval exists. Before it, the ceiling on client-minted XP was arithmetic:
 
 ```
 max client-mintable XP = 10 (claim) + 200 (revenue) + cap x 180
 ```
 
-`project_achievements.status` ships defaulting to `'approved'` and nothing reads
-it yet. When the admin console lands, flip that default to `'pending'` and move
-the `apply_plot_xp` call from submission to approval; the column exists now so
-rows written before then never have to be retro-classified.
+Now the only XP a founder can mint unaided is the 10 for claiming their plot.
+Everything else is a queue item until somebody approves it, so the per-founder
+project cap in `create_project` (`max_projects_per_founder`, currently 10,
+mirrored by `MAX_PROJECTS_PER_FOUNDER` in `src/lib/city/constants.ts`) now limits
+noise in the review queue rather than the XP supply.
+
+Editing a reward in `achievement_definitions` is **not** retroactive: past ledger
+events keep the amount they were written with, and a new `xp_reward` applies to
+claims approved afterwards. Editing a threshold in `building_level_milestones`
+**is** retroactive, because levels are derived from that table on every award.
+
+## Announcing an approval
+
+Approval is asynchronous: XP arrives when an admin decides, not when the founder
+acts. So the city has to be able to say "this landed while you were away" on the
+next load, and say it exactly once.
+
+The marker is `plot_claims.rewards_seen_at`. Everything in the ledger after that
+instant is unannounced. It is a column rather than something in the browser
+because a founder who files a claim on a laptop and opens the city on a phone
+should still be told, and `localStorage` would announce the same reward once per
+device and never again after a cache clear.
+
+| Function | Callable by | Effect |
+| --- | --- | --- |
+| `reward_announcement` | `authenticated` | Reads what is waiting. Marks nothing. |
+| `acknowledge_rewards` | `authenticated` | Stamps `rewards_seen_at = now()`. |
+
+Reading deliberately does not acknowledge, so a refresh part-way through the
+count-up shows the same news again rather than swallowing it. The client calls
+`acknowledge_rewards` when the founder dismisses the overlay.
+
+The total is summed from `plot_xp_events`, not from the approvals, so a
+revocation that followed an approval nets out and a manual correction is
+included. `plot_claimed` is excluded: the signup bonus has its own celebration —
+the deed of claim — and would otherwise fire a second one the moment a founder
+finished claiming. A window that nets to zero or less announces nothing; nobody
+is congratulated on a revocation.
+
+Existing claims were stamped at migration time, so nobody opened the city to a
+celebration of every reward they had ever earned.
+
+The window is `created_at > rewards_seen_at`, compared against transaction
+timestamps. Two events in the *same* transaction therefore carry the same
+`now()` — which is why the pgTAP tests move the watermark by hand to stand in for
+a founder having looked at some earlier point. In production the claim, the
+approval and the acknowledgement are three separate transactions and the
+timestamps order themselves.
+
+## Evidence
+
+Approval only means something if the reviewer has something to review, so every claim carries
+evidence: a link, an uploaded screenshot, or both. A note is optional and never sufficient on its
+own — it explains the evidence rather than standing in for it. A claim with neither a link nor a
+file is refused with `evidence_required`.
+
+**Evidence is private.** `public.project_achievements` is world-readable, so a revenue screenshot
+stored there would be public. It lives in `public.achievement_evidence`, which a founder can read
+for their own rows and nobody else can read at all. Uploads go to the private
+`achievement-evidence` storage bucket, one folder per founder, keyed on their uuid — enforced twice,
+by the storage policy on write and by `apply_project_achievement` before it records the path.
+
+**The ask is data, not code.** Each row of `achievement_definitions` carries `evidence_prompt` (the
+question) and `evidence_hint` (the note saying what is wanted), so re-wording an ask is an `UPDATE`.
+The users rungs all define what a user is, because otherwise every dispute is the same dispute.
+
+Creating a project files its launch claim, and a live product is its own evidence: `create_project`
+falls back to the project's own `website_url` when no launch post is supplied.
+
+### Site ownership
+
+Every project is born with a `verification_token`, to be placed on its own site:
+
+```html
+<meta name="ihc-verify" content="<verification_token>">
+```
+
+The token is public and that is harmless — knowing it does not help anyone put it on a site they do
+not control. Finding it is what proves ownership, which is the one thing a screenshot cannot fake.
+
+`record_site_verification` writes the outcome and is `service_role` only, because the fetch belongs
+to the admin console: a founder-triggered check that wrote its own result would be a founder marking
+their own homework, and pointing a server at a caller-supplied URL is a request-forgery surface best
+kept behind the console's allow-list. `verified_url` is stored alongside `verified_at`, so
+repointing a project at a different site leaves the verification behind rather than carrying it over.
+
+## Tuning the economy from the console
+
+Two tables decide what everything is worth, and they behave differently — the console says so on
+each page:
+
+| Table | Console page | Retroactive? |
+| --- | --- | --- |
+| `achievement_definitions` | Achievements | **No.** The XP ledger is append-only, so past awards keep the amount they were written with and a new price applies to claims approved afterwards. |
+| `building_level_milestones` | Level milestones | **Yes.** Levels are derived from the table, so `set_level_milestone` re-levels every founder in the same transaction and buildings change height. |
+
+`set_level_milestone` refuses anything that would stop the ladder climbing, and holds level 1 at 0 —
+`building_level_for_xp` finds the highest milestone at or below a total, so a non-zero floor would
+leave a new founder with no level at all.
+
+Every edit that moves a number lands in `public.admin_config_changes` with the admin who made it and
+how many founders it re-levelled, so a founder asking why their building shrank has an answer. Both
+RPCs are `service_role` only; the audit table is revoked from the browser roles.

@@ -46,7 +46,7 @@ const CATALOG = [
   { achievement_type: "product_launched", label: "Launched a new product", description: "Shipped it.", xp_reward: 100, sort_order: 1, group_key: "launch", tier: 1, scope: "project", requires_new_project: true },
   { achievement_type: "users_10", label: "10 users", description: "Ten people.", xp_reward: 5, sort_order: 2, group_key: "users", tier: 1, scope: "project", requires_new_project: false },
   { achievement_type: "users_50", label: "50 users", description: "Fifty people.", xp_reward: 25, sort_order: 3, group_key: "users", tier: 2, scope: "project", requires_new_project: false },
-  { achievement_type: "users_100", label: "100+ users", description: "A hundred or more.", xp_reward: 50, sort_order: 4, group_key: "users", tier: 3, scope: "project", requires_new_project: false },
+  { achievement_type: "users_100", label: "100+ users", description: "A hundred or more.", xp_reward: 50, sort_order: 4, group_key: "users", tier: 3, scope: "project", requires_new_project: false, evidence_prompt: "Show the count and where it came from", evidence_hint: "Leave the dashboard visible, not just the number." },
   { achievement_type: "revenue_10", label: "$10 earned", description: "First money.", xp_reward: 50, sort_order: 5, group_key: "revenue", tier: 1, scope: "founder", requires_new_project: false },
   { achievement_type: "revenue_100", label: "$100+ earned", description: "A hundred dollars.", xp_reward: 150, sort_order: 6, group_key: "revenue", tier: 2, scope: "founder", requires_new_project: false },
 ];
@@ -236,7 +236,7 @@ describe("ProjectCard achievements", () => {
 
   it("shrinks the preview for rungs already held and disables exhausted ones", async () => {
     mockRows.project_achievements = [
-      { project_id: development.project.id, achievement_type: "users_10" },
+      { project_id: development.project.id, achievement_type: "users_10", status: "approved" },
     ];
     const user = userEvent.setup();
     renderCard();
@@ -251,11 +251,249 @@ describe("ProjectCard achievements", () => {
     expect(screen.getByRole("radio", { name: /100\+ users.*\+75 XP/ })).toBeInTheDocument();
   });
 
+  it("says the claim goes to an admin, on every screen that can file one", async () => {
+    const note = /goes to an admin for approval.*XP lands on your plot once it is approved/;
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    expect(await screen.findByText(note)).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+    expect(await screen.findByText(note)).toBeInTheDocument();
+  });
+
+  it("marks a rung that is waiting on review rather than offering it again", async () => {
+    mockRows.project_achievements = [
+      { project_id: development.project.id, achievement_type: "users_10", status: "pending" },
+    ];
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+
+    // Filed but not granted, so it cannot be filed again -- and 100+ still counts it as unpaid,
+    // because nothing has been awarded yet.
+    expect(await screen.findByRole("radio", { name: /10 users.*Awaiting review/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /100\+ users.*\+80 XP on approval/ })).toBeInTheDocument();
+  });
+
+  it("treats a rejected rung as claimable again", async () => {
+    mockRows.project_achievements = [
+      { project_id: development.project.id, achievement_type: "users_10", status: "rejected" },
+    ];
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+
+    const rung = await screen.findByRole("radio", { name: /10 users.*\+5 XP on approval/ });
+    expect(rung).not.toBeDisabled();
+  });
+
+  it("tells the founder the claim is queued instead of showing an XP gain", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ development, achievement: { status: "pending", xpPending: 80 }, projects: [] }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )));
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+    await user.click(await screen.findByRole("radio", { name: /100\+ users/ }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByLabelText("Link"), "https://dash.example/users");
+    await user.click(screen.getByRole("button", { name: "Send for review" }));
+
+    // Naming the rung matters: the card returns to a view that is otherwise unchanged, so without
+    // it a founder cannot tell which of several claims they just filed.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "“100+ users” sent for review. It adds 80 XP once it is approved.",
+    );
+  });
+
+  async function addProduct(user: ReturnType<typeof userEvent.setup>) {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        development,
+        projectId: "new-project-1",
+        projects: [{
+          id: "new-project-1",
+          name: "Tideline",
+          websiteUrl: "https://tideline.example/",
+          type: "website",
+          isShowcased: false,
+          achievements: [],
+          pendingAchievements: ["product_launched"],
+          verificationToken: "abcdef0123456789abcdef0123456789",
+          isVerified: false,
+          createdAt: "2026-09-13T00:00:00.000Z",
+        }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )));
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Launched a new product/ }));
+    await user.type(screen.getByLabelText("Product name"), "Tideline");
+    await user.type(screen.getByLabelText("Product URL"), "https://tideline.example/");
+    await user.click(screen.getByRole("button", { name: "Add product" }));
+  }
+
+  it("asks for the verification tag straight after adding a product", async () => {
+    const user = userEvent.setup();
+    await addProduct(user);
+
+    // The token only exists once the project row does, which is why this is a step after the form
+    // rather than a field inside it.
+    expect(await screen.findByText(
+      '<meta name="ihc-verify" content="abcdef0123456789abcdef0123456789">',
+    )).toBeInTheDocument();
+    expect(screen.getByText(/This step is required/)).toBeInTheDocument();
+  });
+
+  it("lets the founder skip the tag, and says what skipping costs", async () => {
+    const user = userEvent.setup();
+    await addProduct(user);
+
+    await user.click(await screen.findByRole("button", { name: "Skip for now" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "“Tideline” added, and its launch sent for review. It adds 100 XP once it is approved."
+      + " Add the verification tag from your projects list before it can be approved.",
+    );
+  });
+
+  it("names the product whose launch was filed once the tag is dealt with", async () => {
+    const user = userEvent.setup();
+    await addProduct(user);
+
+    await user.click(await screen.findByRole("button", { name: "I’ve added it" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "“Tideline” added, and its launch sent for review. It adds 100 XP once it is approved."
+      + " We will look for the tag when we review it.",
+    );
+  });
+
+  it("keeps showing what is awaiting approval after the card is closed and reopened", async () => {
+    mockRows.project_achievements = [
+      { project_id: development.project.id, achievement_type: "users_100", status: "pending" },
+    ];
+    const { unmount } = renderCard();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "“100+ users” on Garageware is with an admin for approval. It adds 80 XP once approved.",
+    );
+
+    // The bug this covers: the message used to be component state, so reopening the plot lost it.
+    unmount();
+    renderCard();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "“100+ users” on Garageware is with an admin for approval.",
+    );
+  });
+
+  it("summarises rather than lists when several claims are waiting", async () => {
+    mockRows.project_achievements = [
+      { project_id: development.project.id, achievement_type: "users_100", status: "pending" },
+      { project_id: null, achievement_type: "revenue_100", status: "pending" },
+    ];
+    renderCard();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "2 achievements are with an admin for approval. They add 280 XP once approved.",
+    );
+  });
+
+  it("shows nothing to a visitor looking at someone else's plot", async () => {
+    mockRows.project_achievements = [
+      { project_id: development.project.id, achievement_type: "users_100", status: "pending" },
+    ];
+    render(
+      <ProjectCard
+        development={development}
+        address="Pioneer District · Jobs Avenue · North Plot 01"
+        currentUserId="someone-else"
+        onClose={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("shows the verification tag for an unverified project, and a badge once it is verified", async () => {
+    mockRows.projects = [{
+      id: development.project.id,
+      name: "Garageware",
+      website_url: "https://garageware.example/",
+      project_type: "app",
+      created_at: "2026-08-30T00:00:00.000Z",
+      verification_token: "0123456789abcdef0123456789abcdef",
+      verified_at: null,
+      verified_url: null,
+    }];
+    const user = userEvent.setup();
+    const { unmount } = renderCard();
+
+    await user.click(screen.getByRole("button", { name: "My projects" }));
+    await user.click(await screen.findByText("Verify you own this site"));
+    expect(screen.getByText(
+      '<meta name="ihc-verify" content="0123456789abcdef0123456789abcdef">',
+    )).toBeInTheDocument();
+    unmount();
+
+    // Verified, and still pointing at the site that was checked.
+    mockRows.projects = [{
+      ...mockRows.projects[0],
+      verified_at: "2026-09-13T00:00:00.000Z",
+      verified_url: "https://garageware.example/",
+    }];
+    renderCard();
+    await user.click(screen.getByRole("button", { name: "My projects" }));
+    expect(await screen.findByText("✓ Site verified")).toBeInTheDocument();
+  });
+
+  it("asks for evidence in the words of the rung, and will not send without it", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Add achievement" }));
+    await user.click(await screen.findByRole("button", { name: /Gained users/ }));
+    await user.click(await screen.findByRole("button", { name: /Garageware/ }));
+    await user.click(await screen.findByRole("radio", { name: /100\+ users/ }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    // The prompt and the note both come from the catalog, so a re-worded ask needs no deploy.
+    expect(screen.getByText("Show the count and where it came from")).toBeInTheDocument();
+    expect(screen.getByText("Leave the dashboard visible, not just the number.")).toBeInTheDocument();
+
+    const send = screen.getByRole("button", { name: "Send for review" });
+    expect(send).toBeDisabled();
+
+    // A note is the claim restated, not evidence for it.
+    await user.type(screen.getByLabelText("Anything else we should know"), "about a hundred");
+    expect(screen.getByRole("button", { name: "Send for review" })).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Link"), "https://dash.example/users");
+    expect(screen.getByRole("button", { name: "Send for review" })).toBeEnabled();
+  });
+
   it("posts the selected rung and returns to the card", async () => {
     const user = userEvent.setup();
     const onUpdated = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
-      JSON.stringify({ development, achievement: { xpAwarded: 80 }, projects: [] }),
+      JSON.stringify({ development, achievement: { status: "pending", xpPending: 80 }, projects: [] }),
       { status: 200, headers: { "content-type": "application/json" } },
     )));
 
@@ -273,7 +511,9 @@ describe("ProjectCard achievements", () => {
     await user.click(await screen.findByRole("button", { name: /Gained users/ }));
     await user.click(await screen.findByRole("button", { name: /Garageware/ }));
     await user.click(await screen.findByRole("radio", { name: /100\+ users/ }));
-    await user.click(screen.getByRole("button", { name: "Log achievement" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByLabelText("Link"), "https://dash.example/users");
+    await user.click(screen.getByRole("button", { name: "Send for review" }));
 
     await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
     const [url, request] = vi.mocked(fetch).mock.calls[0];
@@ -281,6 +521,7 @@ describe("ProjectCard achievements", () => {
     expect(JSON.parse(String(request?.body))).toEqual({
       achievementType: "users_100",
       projectId: development.project.id,
+      evidenceLink: "https://dash.example/users",
     });
   });
 
@@ -288,7 +529,12 @@ describe("ProjectCard achievements", () => {
     const user = userEvent.setup();
     const onUpdated = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
-      JSON.stringify({ development, achievement: { xpAwarded: 200 }, projects: [], founderAchievements: [] }),
+      JSON.stringify({
+        development,
+        achievement: { status: "pending", xpPending: 200 },
+        projects: [],
+        founderAchievements: [],
+      }),
       { status: 200, headers: { "content-type": "application/json" } },
     )));
 
@@ -310,11 +556,16 @@ describe("ProjectCard achievements", () => {
     expect(screen.queryByRole("button", { name: /Garageware/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /\$100\+ earned/ }));
-    await user.click(screen.getByRole("button", { name: "Log achievement" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByLabelText("Link"), "https://dash.example/users");
+    await user.click(screen.getByRole("button", { name: "Send for review" }));
 
     await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(development));
     const [, request] = vi.mocked(fetch).mock.calls[0];
     // No projectId at all: the RPC decides which types need one.
-    expect(JSON.parse(String(request?.body))).toEqual({ achievementType: "revenue_100" });
+    expect(JSON.parse(String(request?.body))).toEqual({
+      achievementType: "revenue_100",
+      evidenceLink: "https://dash.example/users",
+    });
   });
 });

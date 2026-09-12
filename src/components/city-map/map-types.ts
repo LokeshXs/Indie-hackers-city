@@ -9,6 +9,7 @@ export type CityAssetId =
   | "palm-tree"
   | "canopy-tree"
   | "street-lamp"
+  | "cafe-lamp"
   | "billboard"
   | "launch-monument"
   | "district-sign-gantry"
