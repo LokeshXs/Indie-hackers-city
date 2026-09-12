@@ -1,12 +1,27 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 
-/** Matches the board's 3.0 x 1.9 face, so nothing is stretched. */
-export const CARD_WIDTH = 640;
-export const CARD_HEIGHT = 405;
+/** Matches the card's face once the sign is fitted to a building, so nothing is stretched.
+ *
+ * The board is no longer a yard sign: it is mounted on the roof and scaled to the building's own
+ * width while its height is held fixed, which leaves the painted face about five times wider than
+ * it is tall — see SIGN_HEIGHT and SIGN_WIDTH_SHARE in plot-builds. The canvas has to carry that
+ * same ratio or the name is stretched across it, because the texture is painted in these
+ * proportions and then mapped onto whatever shape the face has become.
+ *
+ * The three shells that differ in width differ by about two percent, which is below noticing; one
+ * canvas serves all of them. */
+export const CARD_WIDTH = 1024;
+export const CARD_HEIGHT = 200;
 
-const MARGIN = 56;
-const MAX_FONT = 116;
+/** Separate now that the card is a ribbon: one margin that suited a 3:2 card either wastes most of
+ * the height or crowds the ends. Tight, because the name is the only thing on the card — there is
+ * no border for it to crowd. */
+const MARGIN_X = 40;
+const MARGIN_Y = 14;
+/** Raised with the new shape. On a card this shallow the height is what caps the type, so this is
+ * a ceiling for short names rather than the size most of them get. */
+const MAX_FONT = 136;
 const MIN_FONT = 30;
 const CARD_FONT_STACK = `800 %dpx ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
 
@@ -96,17 +111,9 @@ export function drawBillboardCard(ctx: CanvasRenderingContext2D, card: Billboard
     }
   }
 
-  // A hairline keyline in the text colour, so the card reads as a printed poster with a border.
-  ctx.save();
-  ctx.globalAlpha = 0.34;
-  ctx.strokeStyle = textColor;
-  ctx.lineWidth = 5;
-  ctx.strokeRect(22, 22, CARD_WIDTH - 44, CARD_HEIGHT - 44);
-  ctx.restore();
-
   const trimmed = name.trim() || "Untitled";
-  const maxWidth = CARD_WIDTH - MARGIN * 2;
-  const maxHeight = CARD_HEIGHT - MARGIN * 2;
+  const maxWidth = CARD_WIDTH - MARGIN_X * 2;
+  const maxHeight = CARD_HEIGHT - MARGIN_Y * 2;
 
   let lines = [trimmed];
   let size = fitSize(ctx, lines, maxWidth, maxHeight);

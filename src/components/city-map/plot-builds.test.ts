@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StartupBuildingAssetId } from "./plot-builds";
 import type { CityEntity } from "./map-types";
-import { createPlotDevelopmentEntities } from "./plot-builds";
+import { createPlotDevelopmentEntities, entityScale } from "./plot-builds";
 
 const plot = (z: number, rotationY: number | undefined): CityEntity => ({
   id: z < 0 ? "grass-plot-north-1" : "grass-plot-south-1",
@@ -87,28 +87,46 @@ describe("Level 1 plot development", () => {
     });
   });
 
-  it("stands a billboard in the front-yard pocket beside the driveway", () => {
+  it("mounts the sign on the building's roof rather than out on the lawn", () => {
     const entities = createPlotDevelopmentEntities(plot(-7.90, undefined), development("plot-north-1"));
+    const [building, sign] = entities;
     expect(entities).toHaveLength(2);
-    expect(entities[1]).toEqual({
+    expect(sign).toMatchObject({
       id: "plot-north-1-billboard",
       assetId: "billboard",
-      position: { x: -14.3, y: 0, z: -4 },
+      // The board's face points the opposite way to the shell's front, so it takes the opposite
+      // rotation and still looks out over the driveway.
       rotationY: undefined,
       plotId: "plot-north-1",
       suppressPlotHighlight: true,
       // Below the 240 XP marquee unlock, so the board is static.
       billboard: { name: "Xenith", textColor: "#f7e0a6", backgroundColor: "#1b3a4b", scrolling: false },
     });
+    // Up on the roof: the startup shell's deck tops out at 3.98 before its 1.4 scale, so the frame
+    // is seated well over three units up rather than standing on the ground.
+    expect(sign.position.y).toBeCloseTo(3.646, 2);
+    // Centred across the building, and forward of it — the shell faces +z here, so the sign sits on
+    // the road side of the building's own centre.
+    expect(sign.position.x).toBeCloseTo(building.position.x, 6);
+    expect(sign.position.z).toBeGreaterThan(building.position.z);
   });
 
-  it("turns the billboard to the road on a plot facing the other way", () => {
-    const entities = createPlotDevelopmentEntities(plot(7.90, Math.PI), development("plot-south-1"));
-    expect(entities[1]).toMatchObject({
-      id: "plot-south-1-billboard",
-      position: { x: -14.3, y: 0, z: 4 },
-      rotationY: Math.PI,
-    });
+  it("fits the sign to the building's width", () => {
+    const [, sign] = createPlotDevelopmentEntities(plot(-7.90, undefined), development("plot-north-1"));
+    // The billboard frame is 3.24 across in the glb, and the startup shell's roof is 8.16 wide
+    // before its 1.4 scale. The sign spans a shade under that, so it never oversails the walls.
+    expect((sign.scaleXZ?.x ?? 1) * 3.24).toBeCloseTo(8.16 * 1.4 * 0.98, 5);
+    // Height is fixed rather than fitted, so a founder's board keeps its shape across a move.
+    expect((sign.scale ?? 1) * 2.12).toBeCloseTo(2.2, 5);
+    expect(sign.scaleXZ?.z).toBe(sign.scale);
+  });
+
+  it("turns the sign to the road on a plot facing the other way", () => {
+    const [building, sign] = createPlotDevelopmentEntities(plot(7.90, Math.PI), development("plot-south-1"));
+    expect(sign).toMatchObject({ id: "plot-south-1-billboard", rotationY: Math.PI });
+    // This shell faces -z, so "forward" is the other way round and the sign moves with it.
+    expect(sign.position.z).toBeLessThan(building.position.z);
+    expect(sign.position.x).toBeCloseTo(building.position.x, 6);
   });
 
   it("faces inward on a south-outer-style plot despite sitting on the positive-z side", () => {
@@ -127,7 +145,7 @@ describe("Level 1 plot development", () => {
   it("leaves the plot outline to the plot pad so it is not stamped once per asset", () => {
     const entities = createPlotDevelopmentEntities(plot(-7.90, undefined), development("plot-north-1"));
     // Both stand on the plot and share its id to stay clickable, but the building is scaled 1.4
-    // and the billboard sits out in the yard, so either drawing the outline would misplace it.
+    // and the sign rides on its roof, so either drawing the outline would misplace it.
     expect(entities.every((entity) => entity.suppressPlotHighlight)).toBe(true);
   });
 
@@ -138,5 +156,26 @@ describe("Level 1 plot development", () => {
     };
     const [, billboard] = createPlotDevelopmentEntities(plot(-7.90, undefined), earned);
     expect(billboard.billboard?.scrolling).toBe(true);
+  });
+});
+
+describe("entityScale", () => {
+  it("keeps a plain scale uniform", () => {
+    expect(entityScale({ scale: 1.4 })).toEqual([1.4, 1.4, 1.4]);
+    expect(entityScale({})).toEqual([1, 1, 1]);
+  });
+
+  it("puts scaleXZ on the outer axes and leaves scale as the height", () => {
+    // The order is the contract every renderer depends on, and the rooftop sign is the first entity
+    // where getting it wrong is visible rather than merely wrong.
+    expect(entityScale({ scale: 2, scaleXZ: { x: 5, z: 3 } })).toEqual([5, 2, 3]);
+  });
+
+  it("gives the sign the width its entity asked for", () => {
+    const [, sign] = createPlotDevelopmentEntities(plot(-7.90, undefined), development("plot-north-1"));
+    const [x, y, z] = entityScale(sign);
+    expect(x).toBeGreaterThan(3);
+    expect(y).toBeCloseTo(2.2 / 2.12, 6);
+    expect(z).toBe(y);
   });
 });

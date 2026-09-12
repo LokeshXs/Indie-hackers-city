@@ -113,4 +113,23 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur-fast: 140ms;
   --dur-base: 220ms;
+
+  /* --- The HUD surface, and what it becomes after dark -----------------
+   * The map runs a day/night cycle, and cream glass at midnight reads as a
+   * lightbox taped over the city. These four are the whole of the night
+   * treatment, and only Panel consumes them.
+   *
+   * DELIBERATELY NOT A DARK MODE. Everything a founder reads or types — the
+   * claim flow, the project card, the modals — keeps its daylight palette at
+   * every hour, because those are documents held up in front of the city
+   * rather than part of it, and a form that restyles itself twice every ten
+   * minutes while being filled in is a worse experience than a bright one. */
+  --panel-surface: rgb(255 249 228 / 92%);
+  --panel-border: color-mix(in srgb, var(--ink) 48%, transparent);
+  --night-panel-surface: rgb(9 20 40 / 88%);
+  --night-panel-border: color-mix(in srgb, #8fb7ff 34%, transparent);
+  --night-panel-ink: #dce9ff;      /* headings on the night panel */
+  --night-panel-ink-soft: #b9cdea; /* body copy */
+  --night-panel-slate: #8ba3c4;    /* captions */
+  --night-panel-accent: #7fd4e8;   /* the eyebrow, which is teal by day */
 }

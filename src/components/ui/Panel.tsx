@@ -2,7 +2,7 @@ import { createElement, type CSSProperties, type ElementType, type ReactNode } f
 import { cn } from "@/lib/ui/cn";
 import styles from "./Panel.module.css";
 
-export type PanelPlacement = "topLeft" | "topRight" | "bottomRight" | "bottomCenter";
+export type PanelPlacement = "topLeft" | "topRight" | "bottomLeft" | "bottomRight" | "bottomCenter";
 
 export interface PanelProps {
   placement?: PanelPlacement;

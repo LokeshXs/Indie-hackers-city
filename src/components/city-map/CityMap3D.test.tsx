@@ -76,6 +76,27 @@ describe("plot claim modal", () => {
     })));
   });
 
+  it("switches the city between day and night and dresses the HUD to match", async () => {
+    const user = userEvent.setup();
+    render(<CityMap3D district={starterDistrict} initialDevelopments={{}} />);
+
+    // The label names where pressing it takes you; aria-pressed carries where you already are.
+    const toNight = screen.getByRole("button", { name: "Switch the city to night" });
+    expect(toNight).toHaveAttribute("aria-pressed", "false");
+    expect(document.querySelector("main")).toHaveAttribute("data-city-phase", "morning");
+
+    await user.click(toNight);
+
+    const toDay = screen.getByRole("button", { name: "Switch the city to day" });
+    expect(toDay).toHaveAttribute("aria-pressed", "true");
+    // The attribute is what the HUD panels are styled from, so it is the contract worth asserting.
+    expect(document.querySelector("main")).toHaveAttribute("data-city-phase", "night");
+
+    await user.click(toDay);
+    expect(screen.getByRole("button", { name: "Switch the city to night" })).toHaveAttribute("aria-pressed", "false");
+    expect(document.querySelector("main")).toHaveAttribute("data-city-phase", "morning");
+  });
+
   it("gates an anonymous plot with Google sign-in", async () => {
     mockAuth.user = null;
     mockAuth.isAuthenticated = false;

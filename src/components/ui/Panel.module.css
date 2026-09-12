@@ -5,12 +5,33 @@
 .panel {
   position: absolute;
   z-index: var(--ui-panel-z, 2);
-  border: 1px solid color-mix(in srgb, var(--ink) 48%, transparent);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
-  background: rgb(255 249 228 / 92%);
+  background: var(--panel-surface);
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(10px);
   color: var(--ink-soft);
+  transition: background var(--dur-base) var(--ease), border-color var(--dur-base) var(--ease), color var(--dur-base) var(--ease);
+}
+
+/* After dark.
+ *
+ * The overrides are made ON THE PANEL rather than on :root, which is what confines them to the HUD:
+ * a modal is a child of the same element carrying the phase, and redefining --ink globally would
+ * take the claim form and the project card down with it. Here, only panels can see the new values.
+ *
+ * Scoped to the map shell's attribute, set from the city clock — see CityMap3D. */
+[data-city-phase="night"] .panel {
+  --ink: var(--night-panel-ink);
+  --ink-soft: var(--night-panel-ink-soft);
+  --slate: var(--night-panel-slate);
+  --teal-600: var(--night-panel-accent);
+  --panel-surface: var(--night-panel-surface);
+  --panel-border: var(--night-panel-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { transition: none; }
 }
 
 /* Placement. The HUD corners are fixed inset points, so they live here rather than at each call
@@ -18,6 +39,7 @@
 .topLeft { top: 1.25rem; left: 1.25rem; }
 .topRight { top: 1.25rem; right: 1.25rem; }
 .bottomRight { right: 1.25rem; bottom: 1.25rem; }
+.bottomLeft { bottom: 1.25rem; left: 1.25rem; }
 .bottomCenter { bottom: 1.25rem; left: 50%; transform: translateX(-50%); }
 
 /* Readouts, not controls: they must never swallow a drag meant for the map. */

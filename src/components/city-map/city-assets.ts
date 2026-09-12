@@ -60,6 +60,115 @@ export const CAR_VARIANTS = 4;
  * Verified against the exported glb material names. */
 export const BILLBOARD_FACE_MATERIAL = "Billboard Dynamic Face";
 
+/** How a material behaves after dark.
+ *
+ * `boost` multiplies whatever emissive strength the glb already carries, so a material that ships
+ * dark stays dark and one that ships lit gets brighter -- which is why these are multipliers and
+ * not absolute values. Blender's exporter folds any emission strength below 1 into the emissive
+ * colour and leaves the strength at 1, so the authored number is not recoverable at runtime; a
+ * multiplier does not need it.
+ *
+ * `nightColor` is for the surfaces that ship no emission at all, where a multiplier has nothing to
+ * work on: it fades the emissive from whatever the asset authored (usually black) to this. It is
+ * also what turns daylight glazing into lit windows, by walking the blue-green tint the glass wears
+ * at noon round to the warm colour of a room with its lamps on. */
+export interface NightEmissive {
+  boost: number;
+  nightColor?: string;
+}
+
+/** Everything that lights up after dark, keyed by the material name in the glb.
+ *
+ * These names are load-bearing and are verified against the build scripts under `scripts/` -- a
+ * typo here is silent, and shows up as one building that never turns its lights on. Adding a new
+ * asset to the kit means adding its lit surfaces here, or it stands dark in a lit street.
+ *
+ * The values are all any of this is: the whole look of the city at night is tuned from this table
+ * and the palettes in lib/city/time-of-day.ts, and nowhere else. */
+export const NIGHT_EMISSIVE_MATERIALS: Record<string, NightEmissive> = {
+  // The street lamps. Already the brightest thing the kit ships at 1.8, because they read as lit
+  // even at noon; after dark they carry the streets on their own.
+  "Lamp globe glow": { boost: 3.4 },
+
+  // Shopfront glazing, on each of the three level-1 shells. Daylight leaves these a cool tint
+  // picked to sit against the sea; night walks them round to lamplight.
+  "Warm blue glass": { boost: 2.2, nightColor: "#a9702f" },
+  "Deep aqua glass": { boost: 2.2, nightColor: "#a9702f" },
+  "Garage aqua glass": { boost: 2.2, nightColor: "#a9702f" },
+
+  // The garage's lit interior, which is the one level-1 shell you can see inside.
+  "Monitor glow": { boost: 1.5 },
+  "Warm work light": { boost: 1.45 },
+  "Server alert red": { boost: 1.4 },
+
+  // Level-2 premises. Both ship a furnished room behind glass, lit just enough to be legible in
+  // the building's own shadow -- after dark that room becomes the point of the building.
+  "Studio back wall": { boost: 3.4 },
+  "Laptop screen": { boost: 1.5 },
+  "Brow wall light": { boost: 2.6 },
+  "Brow room wall": { boost: 3.6 },
+  "Brow laptop screen": { boost: 1.5 },
+  "Brow whiteboard": { boost: 2.2 },
+
+  // The Coffee House. It is the one building on the map that is somewhere to go rather than
+  // somewhere someone works, so it gets the warmest window in the city and the fullest signage.
+  "Coffee House glazing": { boost: 3.2, nightColor: "#b4742c" },
+  // The fascia: raised cream type on a green board. The type is what lights, the board behind it
+  // lifts just enough to stay a board -- letters glowing in front of an unlit panel read as type
+  // floating off the building, which is the thing a real fascia sign never does. The shade tone
+  // moves with the face by the same small amount, so the board keeps its own modelling.
+  "Coffee House lettering": { boost: 1.6, nightColor: "#c9ad7c" },
+  "Coffee House green": { boost: 1, nightColor: "#153d1c" },
+  "Coffee House green shade": { boost: 1, nightColor: "#0d2712" },
+  // The OPEN sign in the doorway, which is the one thing on this building that is already an
+  // illuminated sign at noon. The panel comes up; the lettering is deliberately held back, because
+  // on a real OPEN sign the letters are the part that does NOT glow -- they are cut out of the lit
+  // panel -- and it carries its small emission only so the brown holds its hue in a dark doorway.
+  "Coffee House open sign": { boost: 2 },
+  "Coffee House open lettering": { boost: 1.3 },
+
+  // The district sign over the roundabout. The lettering ships unlit -- it is cream paint, lit by
+  // the sun -- so a multiplier has nothing to work on and the colour is what does the job: after
+  // dark the name is an illuminated sign rather than a dark board. The trim picks up a low neon
+  // edge behind it, which is what stops the lettering floating unattached in the dark.
+  "District sign lettering": { boost: 1.6, nightColor: "#b09256" },
+  "District sign trim": { boost: 1.8, nightColor: "#1e6f74" },
+
+  // The launch monument at the centre of the roundabout. The flame and the portholes are the
+  // rocket's own lights and simply come up; the hull is lifted a little as though floodlit from
+  // the island below it, because a monument that only glows at its engine reads as a candle
+  // floating in the dark rather than as a lit landmark.
+  "Launch flame": { boost: 2.2 },
+  "Launch flame core": { boost: 2.2 },
+  "Porthole glass": { boost: 2.2, nightColor: "#a87a35" },
+  // The hull is lifted only a little, as though floodlit from the island below it. The red — the
+  // nose cone, the band under it, the hull studs and the four stabiliser fins, which are all one
+  // material — is lit properly instead, so the rocket keeps its markings after dark rather than
+  // fading to a pale shape. It is held under the bloom threshold on purpose: a red bright enough
+  // to bloom at this size stops being a painted fin and becomes a lamp.
+  "Rocket white": { boost: 1, nightColor: "#3a3630" },
+  "Rocket red": { boost: 2.8, nightColor: "#c8341a" },
+
+  // Traffic. Both already carry a little emission so the lenses read at noon; at night they are
+  // the only moving lights on the map.
+  "Car headlight": { boost: 3.6 },
+  "Car taillight": { boost: 2.8 },
+};
+
+/** The founder signs, which are lit rather than boosted.
+ *
+ * Every board carries a different painted card, so there is no shared material to put in the table
+ * above: the runtime clones one per board to hang the card on. The clone is lit by routing that
+ * same card into the emissive channel -- a flat emissive colour would glow the whole face evenly
+ * and swallow the product name, which is the one thing the sign exists to show.
+ *
+ * Bright, and deliberately the brightest thing on a plot after dark: this is the one surface in the
+ * city that belongs to a founder, it now sits on their roof where a shop's name belongs, and a
+ * rooftop sign that merely catches the moonlight is not a sign. Only the face takes this -- the
+ * navy frame around it stays unlit, which is what an illuminated sign actually looks like and what
+ * keeps the card's own colours reading as the lit part. */
+export const BILLBOARD_NIGHT_EMISSIVE = "#d8d8d8";
+
 /** Where roof props sit on each building, in the building's own local space.
  *
  * The Blender sources create no empties, so there is nothing in the glb to hang a prop off, and no
@@ -89,6 +198,51 @@ export interface RoofAnchors {
 
 /** How far outside the roof tier the garland hangs, so bulbs clear the fascia. */
 const OVERHANG = 0.16;
+
+/** Where the founder's sign sits on each building's roof, in the building's own local space.
+ *
+ * THE FRONT OF EVERY SHELL IS ITS -Z FACE. The build scripts are authored Z-up and exported with
+ * export_yup=True, which turns a Blender (x, y, z) into a three (x, z, -y) -- so the storefront the
+ * scripts put at Blender +y arrives facing -z. Every z below is therefore negative: the sign stands
+ * at the front of the roof, above the entrance, looking out over the driveway.
+ *
+ * `width` is the roof's own width at that point, and the sign is fitted to it rather than to a
+ * fixed size -- a sign narrower than its building reads as a placard someone propped up there, and
+ * one wider oversails the walls. What the sign actually spans is a shade under this: see
+ * SIGN_WIDTH_SHARE in plot-builds.
+ *
+ * Measured off the same roof tiers as BUILDING_ROOF_ANCHORS above, and set back from the front edge
+ * by about half a unit so the frame stands on roof rather than overhanging the facade. */
+export interface SignAnchor {
+  /** Centre of the sign across the frontage. Zero unless the roof itself is off-centre. */
+  x: number;
+  /** The roof tier the sign stands on. */
+  y: number;
+  /** How far forward, always negative -- see above. */
+  z: number;
+  /** The roof's width at the sign, edge to edge. */
+  width: number;
+}
+
+export const BUILDING_SIGN_ANCHORS: Record<PlotBuildingAssetId, SignAnchor> = {
+  // One mass. The sign stands on the flat deck at 3.98, NOT on the 3.75 shadow tier the garland
+  // above is hung from -- that band is the eave below the deck, and a sign seated on it sinks a
+  // fifth of a unit into the roof. Width is taken from the eave, which is what reads as the
+  // building's width from outside.
+  "startup-building-level-1": { x: 0, y: 3.98, z: -2.05, width: 8.16 },
+  // The L, and the only shell where the sign cannot simply span the frontage: the tower juts
+  // forward to -3.29 and occupies x 1.30..3.80, so a full-width sign on the low block would run
+  // straight through it. The sign takes the low block's own frontage instead, from its west corner
+  // to the tower's flank -- narrower than the others, and the only placement that is not clipped.
+  "corner-studio-level-1": { x: -1.40, y: 3.67, z: -0.62, width: 5.40 },
+  // One mass, deck at 4.02 over a 3.81 eave. The raised roof bay sits behind the sign, not under it.
+  "indie-garage-level-1": { x: 0, y: 4.02, z: -2.02, width: 8.00 },
+  // Two tiers stepped front to back. The sign sits on the lower bay that forms the frontage, and
+  // still clears the main roof behind it, which is only 1.22 higher.
+  "slat-studio-level-2": { x: 0, y: 3.12, z: -2.14, width: 8.10 },
+  // One slab oversailing the walls, front edge at -3.05.
+  "teal-brow-level-2": { x: 0, y: 7.20, z: -2.50, width: 8.10 },
+};
 
 export const BUILDING_ROOF_ANCHORS: Record<PlotBuildingAssetId, RoofAnchors> = {
   // One mass. Roof shadow tier: top 3.75, X +-4.08, Z +-2.58.

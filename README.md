@@ -98,6 +98,33 @@ Project deletion, plot release/transfer, and the UI for creating additional
 projects are intentionally deferred. The schema already allows multiple projects
 per account while enforcing exactly one permanent plot claim per account.
 
+### Day and night
+
+The map has two lighting phases, switched by hand from the control in the
+bottom-left corner of the HUD. There is no clock: the city stays where it is put,
+and every visitor starts in daylight.
+
+A switch takes about 1.4 seconds, and the whole city crosses together — sky, fog,
+the sun becoming the moon, the sea, every lit window, and the HUD panels. Visitors
+who ask their system for reduced motion get the two phases with no travel between
+them.
+
+Daylight is unchanged from before the feature existed: `MORNING_ENVIRONMENT` in
+`src/lib/city/time-of-day.ts` holds the exact values the scene used to hardcode, so
+anything that looks different in daylight is a bug rather than a decision.
+
+What lights up after dark is driven by material name, listed in
+`NIGHT_EMISSIVE_MATERIALS` in `src/components/city-map/city-assets.ts`. Those names
+are the ones the Blender scripts under `scripts/` give their lit surfaces, and
+`city-assets.test.ts` checks every one of them against the shipped `.glb` files —
+a name matching nothing is otherwise silent, and shows up only as one dark building
+in a lit street. Adding a model to the kit means adding its lit surfaces there.
+
+The street lamps also carry a halo and a pool of light, and bloom is added at night
+only: the effect pass is mounted when the city is dark and unmounted when it is not,
+so daylight renders down exactly the path it always did. Tuning the look is a matter
+of that material table and the two palettes, and nothing else.
+
 ### Work from Cafe
 
 The map subscribes to a public Supabase Realtime Presence channel per cafe
