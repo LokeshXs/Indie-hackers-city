@@ -1,12 +1,15 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import type { CityEntity } from "./map-types";
 import { CAR_ASSET_PATH, CAR_VARIANTS } from "./city-assets";
 import { ROAD_Y, carRoutes } from "./car-routes";
+import { nightLitMaterial } from "./night-materials";
+import { useNightBlend } from "./TimeOfDay";
 import { pointAt, type Route } from "./routes";
 
 /** How many cars are on the map at once -- the one dial for how busy the district feels. */
@@ -73,7 +76,7 @@ interface Car {
  * clone() copies transforms and shares geometry and materials with the cached GLTF, which is what
  * keeps a city's worth of traffic off the GPU's budget: it is four cars drawn many times, not many
  * cars. Nothing here mutates a material, so the sharing is safe. */
-function variantTemplate(scene: THREE.Object3D, variant: number): THREE.Group | null {
+function variantTemplate(scene: THREE.Object3D, variant: number, nightAware: boolean): THREE.Group | null {
   const source = scene.getObjectByName(`car_${variant}`);
   if (!source) return null;
   const group = new THREE.Group();
@@ -86,6 +89,14 @@ function variantTemplate(scene: THREE.Object3D, variant: number): THREE.Group | 
     // cars nearest the monument are outside it and toggling this would change nothing for them.
     object.castShadow = false;
     object.receiveShadow = true;
+    // The lamps the glb already carries -- build-car.py models a headlight and a taillight on every
+    // colourway and gives both a little emission, so they read at noon. After dark the same two
+    // materials are turned up, and they become the only moving lights in the district. All four
+    // colourways share them, so this is two materials for the whole of the traffic.
+    if (nightAware) {
+      const lit = nightLitMaterial("car", object.material);
+      if (lit) object.material = lit;
+    }
   });
   group.add(copy);
   return group;
@@ -93,21 +104,14 @@ function variantTemplate(scene: THREE.Object3D, variant: number): THREE.Group | 
 
 export const Cars = memo(function Cars({ entities }: { entities: readonly CityEntity[] }) {
   const { scene } = useGLTF(CAR_ASSET_PATH);
-  const [stillness, setStillness] = useState(false);
-
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setStillness(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setStillness(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
+  const stillness = usePrefersReducedMotion();
+  const nightAware = useNightBlend() !== null;
 
   const cars = useMemo<Car[]>(() => {
     const routes = carRoutes(entities);
     const traffic = allocate(routes.map((route) => route.length), CAR_COUNT);
     const templates = Array.from({ length: CAR_VARIANTS },
-      (_, variant) => variantTemplate(scene, variant));
+      (_, variant) => variantTemplate(scene, variant, nightAware));
     const built: Car[] = [];
     routes.forEach((route, routeIndex) => {
       const share = traffic[routeIndex];
@@ -126,7 +130,7 @@ export const Cars = memo(function Cars({ entities }: { entities: readonly CityEn
       }
     });
     return built;
-  }, [entities, scene]);
+  }, [entities, nightAware, scene]);
 
   useFrame(({ clock }) => {
     const elapsed = stillness ? 0 : clock.elapsedTime;

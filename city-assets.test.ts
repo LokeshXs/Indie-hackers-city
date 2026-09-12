@@ -1,7 +1,30 @@
-import { access, stat } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CAR_ASSET_PATH, CITY_ASSET_PATHS, PEDESTRIAN_ASSET_PATH } from "./src/components/city-map/city-assets";
+import {
+  BILLBOARD_FACE_MATERIAL,
+  CAR_ASSET_PATH,
+  CITY_ASSET_PATHS,
+  NIGHT_EMISSIVE_MATERIALS,
+  PEDESTRIAN_ASSET_PATH,
+} from "./src/components/city-map/city-assets";
+
+/** Every material name inside a .glb.
+ *
+ * A GLB is a 12-byte header followed by length-prefixed chunks, the first of which is always the
+ * glTF JSON. Reading it directly rather than through a loader keeps this test free of three.js and
+ * of a WebGL context, neither of which exists in jsdom. */
+async function materialNames(assetPath: string): Promise<string[]> {
+  const file = await readFile(join(process.cwd(), "public", assetPath.replace(/^\//, "")));
+  expect(file.toString("utf8", 0, 4)).toBe("glTF");
+  const chunkLength = file.readUInt32LE(12);
+  const chunkType = file.toString("utf8", 16, 20);
+  expect(chunkType.trim()).toBe("JSON");
+  const gltf = JSON.parse(file.toString("utf8", 20, 20 + chunkLength)) as {
+    materials?: Array<{ name?: string }>;
+  };
+  return (gltf.materials ?? []).flatMap((material) => (material.name ? [material.name] : []));
+}
 
 describe("3D city asset kit", () => {
   it("ships every retained map model as a non-empty GLB asset", async () => {
@@ -15,6 +38,41 @@ describe("3D city asset kit", () => {
       await access(path);
       expect((await stat(path)).size).toBeGreaterThan(1000);
     }));
+  });
+
+  // The night lighting is wired to materials BY NAME, and a name that matches nothing is silent:
+  // the city simply renders one dark building in a lit street, with no error anywhere. These two
+  // cases are what turn that into a failing test instead of a bug report.
+  it("names only materials that the shipped models actually carry", async () => {
+    const assets = [...Object.values(CITY_ASSET_PATHS), CAR_ASSET_PATH];
+    const shipped = new Set((await Promise.all(assets.map(materialNames))).flat());
+
+    const missing = Object.keys(NIGHT_EMISSIVE_MATERIALS).filter((name) => !shipped.has(name));
+    expect(missing).toEqual([]);
+    expect(shipped.has(BILLBOARD_FACE_MATERIAL)).toBe(true);
+  });
+
+  it("lights something on every building and landmark the city places", async () => {
+    // A plot shell with no lit surface is a house with its lights off in a lit street, and an
+    // unlit landmark is a hole in the middle of the map. The billboard is exempt: its face is lit
+    // per board at runtime, from the founder's own card.
+    for (const assetId of [
+      "startup-building-level-1",
+      "corner-studio-level-1",
+      "indie-garage-level-1",
+      "slat-studio-level-2",
+      "teal-brow-level-2",
+      "coffee-shop",
+      "street-lamp",
+      "launch-monument",
+      "district-sign-gantry",
+    ] as const) {
+      const names = await materialNames(CITY_ASSET_PATHS[assetId]);
+      expect(
+        names.filter((name) => name in NIGHT_EMISSIVE_MATERIALS),
+        `${assetId} has no night-lit material`,
+      ).not.toEqual([]);
+    }
   });
 
   it("keeps editable Blender sources for the base and straight road", async () => {

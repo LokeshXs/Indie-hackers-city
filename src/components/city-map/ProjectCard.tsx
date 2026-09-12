@@ -329,7 +329,7 @@ export function ProjectCard({
             cameraPosition={previewKind === "plot" ? PLOT_PREVIEW_CAMERA : undefined}
           >
             {previewKind === "billboard" ? (
-              <BillboardPreview card={billboardCard} />
+              <BillboardPreview card={billboardCard} assetId={development.building.assetId} />
             ) : plotEntity ? (
               <PlotPreview plotEntity={plotEntity} development={development} />
             ) : (

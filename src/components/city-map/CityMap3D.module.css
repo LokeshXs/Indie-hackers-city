@@ -4,6 +4,15 @@
 .eyebrow { margin: 0 0 0.25rem; color: var(--teal-600); font-size: 0.72rem; font-weight: var(--weight-bold); letter-spacing: 0.12em; text-transform: uppercase; }
 .header h1 { margin: 0; font-size: clamp(1.4rem, 3.2vw, 2.2rem); line-height: 1; }
 .header p:last-child { margin: 0.5rem 0 0; font-size: var(--text-base); }
+/* The day/night switch. Same padding as the camera controls opposite it, so the two read as one
+   family of map controls sitting in opposite corners. */
+.dayNight { display: flex; padding: 0.45rem; }
+.dayNightMark { width: 1.05rem; height: 1.05rem; transition: transform var(--dur-base) var(--ease); }
+.dayNight button:hover .dayNightMark { transform: rotate(18deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dayNightMark, .dayNight button:hover .dayNightMark { transition: none; transform: none; }
+}
 .controls { display: flex; gap: var(--space-1); padding: 0.45rem; }
 .hint { padding: 0.65rem 0.95rem; font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; }
 .buildStatus { max-width: min(22rem, calc(100% - 2.5rem)); margin: 0; padding: 0.7rem 0.9rem; font-size: var(--text-sm); font-weight: var(--weight-bold); }

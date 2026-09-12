@@ -5,9 +5,11 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { CityDevelopment, PlotBuildingAssetId } from "@/lib/city/types";
-import { BILLBOARD_FACE_MATERIAL, CITY_ASSET_PATHS } from "./city-assets";
+import { BILLBOARD_FACE_MATERIAL, BILLBOARD_NIGHT_EMISSIVE, CITY_ASSET_PATHS } from "./city-assets";
 import { MARQUEE_SPEED, useBillboardTexture } from "./billboard-texture";
-import { PLOT_BUILDING_SCALE, createPlotDevelopmentEntities, getBuildingPlacement } from "./plot-builds";
+import { nightLitMaterial, registerNightMaterial } from "./night-materials";
+import { useNightBlend } from "./TimeOfDay";
+import { PLOT_BUILDING_SCALE, createPlotDevelopmentEntities, entityScale, getBuildingPlacement, getSignPreviewScale } from "./plot-builds";
 import { RoofProps } from "./RoofProps";
 import type { CityAssetId, CityEntity } from "./map-types";
 
@@ -73,6 +75,9 @@ export const ModelInstance = memo(function ModelInstance({
 }: Pick<CityEntity, "assetId" | "billboard">) {
   const model = useGLTF(CITY_ASSET_PATHS[assetId]);
   const cardTexture = useBillboardTexture(billboard);
+  /** Whether this copy stands in a city that has a night. The preview stages do not provide the
+   * cycle, which is what keeps their windows lit at 3am — see NightBlend. */
+  const nightAware = useNightBlend() !== null;
 
   useEffect(() => {
     if (!cardTexture || !billboard?.scrolling) return;
@@ -83,6 +88,9 @@ export const ModelInstance = memo(function ModelInstance({
   }, [cardTexture, billboard?.scrolling]);
   const instance = useMemo(() => {
     const scene = model.scene.clone(true);
+    // Held on an object rather than in a plain `let`: TypeScript does not track assignments made
+    // inside a callback, and narrows a `let` initialised to null straight back to null afterwards.
+    const board: { face: THREE.MeshStandardMaterial | null } = { face: null };
     scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       // A transparent material still casts a fully opaque shadow: the depth pass writes geometry,
@@ -96,21 +104,44 @@ export const ModelInstance = memo(function ModelInstance({
       // clone() shares materials with the cached GLTF, so the branch below has to clone before
       // mutating or every instance in the city picks up the change.
       if (billboard && cardTexture && object.material.name === BILLBOARD_FACE_MATERIAL) {
-        const material = object.material.clone();
-        if (material instanceof THREE.MeshStandardMaterial) {
-          material.map = cardTexture;
+        const face = object.material.clone();
+        if (face instanceof THREE.MeshStandardMaterial) {
+          face.map = cardTexture;
           // The card carries its own colour; leaving the white base tint would be a no-op but
           // setting it explicitly keeps the board honest if the source material ever changes.
-          material.color.set("#ffffff");
-          material.needsUpdate = true;
+          face.color.set("#ffffff");
+          if (nightAware) {
+            // The card again, this time as the emissive map, so that after dark the board lights
+            // its own face in the founder's own colours. A flat emissive would glow the whole
+            // panel evenly and swallow the product name printed on it.
+            face.emissiveMap = cardTexture;
+            face.emissive.set("#000000");
+            face.emissiveIntensity = 1;
+            board.face = face;
+          }
+          face.needsUpdate = true;
         }
-        object.material = material;
+        object.material = face;
+        return;
       }
+      if (!nightAware) return;
+      // Everything else that lights up is shared, so this hands back one clone per asset rather
+      // than one per instance — eighteen street lamps still cost a single material.
+      const lit = nightLitMaterial(assetId, object.material);
+      if (lit) object.material = lit;
     });
-    return scene;
-  }, [assetId, billboard, cardTexture, model.scene]);
+    return { scene, boardFace: board.face };
+  }, [assetId, billboard, cardTexture, model.scene, nightAware]);
 
-  return <primitive object={instance} />;
+  // Boards are the one lit surface that cannot be shared, so unlike the rest they have to be taken
+  // back out again when the board goes: the city re-renders these as projects are claimed and
+  // renamed, and a registry that only grew would pin every board ever shown.
+  useEffect(() => {
+    if (!instance.boardFace) return;
+    return registerNightMaterial(instance.boardFace, 1, BILLBOARD_NIGHT_EMISSIVE);
+  }, [instance]);
+
+  return <primitive object={instance.scene} />;
 });
 
 export const BuildingPreview = memo(function BuildingPreview({ assetId }: { assetId: PlotBuildingAssetId }) {
@@ -133,7 +164,13 @@ export const BuildingPreview = memo(function BuildingPreview({ assetId }: { asse
   );
 });
 
-export const BillboardPreview = memo(function BillboardPreview({ card }: { card: NonNullable<CityEntity["billboard"]> }) {
+export const BillboardPreview = memo(function BillboardPreview({
+  card,
+  assetId,
+}: {
+  card: NonNullable<CityEntity["billboard"]>;
+  assetId: PlotBuildingAssetId;
+}) {
   const boardRef = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
@@ -147,8 +184,11 @@ export const BillboardPreview = memo(function BillboardPreview({ card }: { card:
         <meshStandardMaterial color="#c9e4df" roughness={0.78} />
       </mesh>
       {/* The Canvas camera is a non-reactive prop framed for a ~5-unit building, so the board is
-          scaled up to it rather than the camera being moved. */}
-      <group ref={boardRef} position={[0, -1.58, 0]} scale={1.85}>
+          scaled to it rather than the camera being moved.
+          Non-uniform, and taken from the same function that fits the sign to the roof: the board is
+          stretched to the chosen building's width up there, and a preview showing the founder a 3:2
+          card would be showing them a card that does not exist. */}
+      <group ref={boardRef} position={[0, -1.58, 0]} scale={getSignPreviewScale(assetId)}>
         <ModelInstance assetId="billboard" billboard={card} />
       </group>
     </>
@@ -200,13 +240,12 @@ export const PlotPreview = memo(function PlotPreview({
         <group rotation={[0, -(plotEntity.rotationY ?? 0), 0]}>
         <group position={[-plotEntity.position.x, 0, -plotEntity.position.z]}>
         {entities.map((entity) => {
-          const scale = entity.scale ?? 1;
           return (
             <group
               key={entity.id}
               position={[entity.position.x, entity.position.y, entity.position.z]}
               rotation={[0, entity.rotationY ?? 0, 0]}
-              scale={[scale, scale, scale]}
+              scale={entityScale(entity)}
             >
               <ModelInstance assetId={entity.assetId} billboard={entity.billboard} />
             </group>

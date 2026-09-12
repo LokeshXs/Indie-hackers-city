@@ -23,6 +23,7 @@ import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, Previe
 import {
   PLOT_BUILDING_SCALE,
   createPlotDevelopmentEntities,
+  entityScale,
   getBuildingPlacement,
 } from "./plot-builds";
 import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
@@ -35,6 +36,8 @@ import { ProjectCard } from "./ProjectCard";
 import { CafeExperience } from "./CafeExperience";
 import { Cars } from "./Cars";
 import { Pedestrians } from "./Pedestrians";
+import { CityBloom, CityTimeProvider, StreetLampGlow, TimeOfDayLighting, useNightBlend } from "./TimeOfDay";
+import { MORNING_ENVIRONMENT, NIGHT_ENVIRONMENT, type CityPhase } from "@/lib/city/time-of-day";
 import {
   Alert,
   Button,
@@ -140,12 +143,13 @@ const PlotHighlight = memo(function PlotHighlight({ selected }: { selected: bool
   );
 });
 
-const WATER_SHALLOW_COLOR = new THREE.Color("#7ff2ea");
-const WATER_MID_COLOR = new THREE.Color("#2a90c9");
-const WATER_DEEP_COLOR = new THREE.Color("#1c5f96");
-const WATER_HIGHLIGHT_COLOR = new THREE.Color("#f4fffd");
+/** The sea, at both ends of the cycle. Index 0 is the morning, 1 the night — the pairs are walked
+ * across once a frame and the result is what the depth gradient below is mixed from. */
+const WATER_SHALLOW = [new THREE.Color(MORNING_ENVIRONMENT.water.shallow), new THREE.Color(NIGHT_ENVIRONMENT.water.shallow)] as const;
+const WATER_MID = [new THREE.Color(MORNING_ENVIRONMENT.water.mid), new THREE.Color(NIGHT_ENVIRONMENT.water.mid)] as const;
+const WATER_DEEP = [new THREE.Color(MORNING_ENVIRONMENT.water.deep), new THREE.Color(NIGHT_ENVIRONMENT.water.deep)] as const;
+const WATER_HIGHLIGHT = [new THREE.Color(MORNING_ENVIRONMENT.water.highlight), new THREE.Color(NIGHT_ENVIRONMENT.water.highlight)] as const;
 const WHITE_COLOR = new THREE.Color("#ffffff");
-const WATER_TINT_STRENGTH = 0.6;
 // Water depth is measured as distance OUTSIDE the island rectangle (0 exactly at the shore),
 // so the shallow band hugs all four edges and the corners evenly. A radial-from-origin metric
 // would break up at the corners, which sit ~97 units out versus ~69 at the edge midpoints.
@@ -179,6 +183,16 @@ const WaterSurface = memo(function WaterSurface() {
   const geometryRef = useRef<THREE.PlaneGeometry>(null);
   const basePositionsRef = useRef<Float32Array | null>(null);
   const scratchColor = useRef(new THREE.Color());
+  const blend = useNightBlend();
+  /** The four depth colours at the current hour, mixed once a frame rather than once per vertex —
+   * the loop below runs four thousand times, and the sea is all one hour. */
+  const palette = useRef({
+    shallow: new THREE.Color(),
+    mid: new THREE.Color(),
+    deep: new THREE.Color(),
+    highlight: new THREE.Color(),
+    tint: MORNING_ENVIRONMENT.water.tint,
+  });
   const loadedWaterTexture = useTexture("/assets/city/v3/water-surface-tile.png");
   const waterTexture = useMemo(() => {
     const texture = loadedWaterTexture.clone();
@@ -200,6 +214,15 @@ const WaterSurface = memo(function WaterSurface() {
     const colors = geometry.getAttribute("color") as THREE.BufferAttribute;
     const base = basePositionsRef.current;
     const time = clock.elapsedTime;
+
+    const night = blend?.current ?? 0;
+    const water = palette.current;
+    water.shallow.lerpColors(WATER_SHALLOW[0], WATER_SHALLOW[1], night);
+    water.mid.lerpColors(WATER_MID[0], WATER_MID[1], night);
+    water.deep.lerpColors(WATER_DEEP[0], WATER_DEEP[1], night);
+    water.highlight.lerpColors(WATER_HIGHLIGHT[0], WATER_HIGHLIGHT[1], night);
+    water.tint = THREE.MathUtils.lerp(MORNING_ENVIRONMENT.water.tint, NIGHT_ENVIRONMENT.water.tint, night);
+
     for (let index = 0; index < positions.count; index += 1) {
       const offset = index * 3;
       const x = base[offset];
@@ -213,13 +236,13 @@ const WaterSurface = memo(function WaterSurface() {
 
       const depthColor = scratchColor.current;
       if (distance < WATER_MID_DISTANCE) {
-        depthColor.copy(WATER_SHALLOW_COLOR).lerp(WATER_MID_COLOR, THREE.MathUtils.smoothstep(distance, WATER_SHORE_START, WATER_MID_DISTANCE));
+        depthColor.copy(water.shallow).lerp(water.mid, THREE.MathUtils.smoothstep(distance, WATER_SHORE_START, WATER_MID_DISTANCE));
       } else {
-        depthColor.copy(WATER_MID_COLOR).lerp(WATER_DEEP_COLOR, THREE.MathUtils.smoothstep(distance, WATER_MID_DISTANCE, WATER_DEEP_DISTANCE));
+        depthColor.copy(water.mid).lerp(water.deep, THREE.MathUtils.smoothstep(distance, WATER_MID_DISTANCE, WATER_DEEP_DISTANCE));
       }
       const crestBlend = THREE.MathUtils.clamp((wave + 0.18) / 0.36, 0, 1) ** 4;
-      depthColor.lerp(WATER_HIGHLIGHT_COLOR, crestBlend * 0.65);
-      depthColor.lerp(WHITE_COLOR, 1 - WATER_TINT_STRENGTH);
+      depthColor.lerp(water.highlight, crestBlend * 0.65);
+      depthColor.lerp(WHITE_COLOR, 1 - water.tint);
       colors.setXYZ(index, depthColor.r, depthColor.g, depthColor.b);
     }
     positions.needsUpdate = true;
@@ -285,10 +308,7 @@ const CityAsset = memo(function CityAsset({
   onHover: (plotId: string | null) => void;
   revealing?: boolean;
 }) {
-  const scale = entity.scale ?? 1;
-  const scaleVector: [number, number, number] = entity.scaleXZ
-    ? [entity.scaleXZ.x, scale, entity.scaleXZ.z]
-    : [scale, scale, scale];
+  const scaleVector = entityScale(entity);
   const groupRef = useRef<THREE.Group>(null);
   const revealStartedAt = useRef<number | null>(null);
 
@@ -298,7 +318,14 @@ const CityAsset = memo(function CityAsset({
     const progress = Math.min((clock.elapsedTime - revealStartedAt.current) / 0.85, 1);
     const eased = 1 - Math.pow(1 - progress, 3);
     groupRef.current.position.y = entity.position.y - 3.8 * (1 - eased);
-    groupRef.current.scale.setScalar(scale * (0.86 + eased * 0.14));
+    // Grown from the entity's OWN scale on each axis, not setScalar. The rooftop sign is stretched
+    // to its building's width, so a uniform scale here does not merely animate it wrongly -- it
+    // leaves it wrong. React re-renders once the reveal ends, but the scale prop's numbers have not
+    // changed, so nothing re-applies them and the sign keeps whatever the last frame set. A founder
+    // watching their own plot go up got a sign a third of the width everyone else sees, until they
+    // next reloaded.
+    const growth = 0.86 + eased * 0.14;
+    groupRef.current.scale.set(scaleVector[0] * growth, scaleVector[1] * growth, scaleVector[2] * growth);
   });
 
   return (
@@ -430,12 +457,10 @@ const Scene = memo(function Scene({
 
   return (
     <>
-      <color attach="background" args={["#0a3a63"]} />
-      {/* Fog is distance-from-camera, so this range is the original [90, 190] offset by the
-          camera's +995.93 move — reproduces the previous look exactly. */}
-      <fog attach="fog" args={["#0a3a63", 1086, 1186]} />
-      <hemisphereLight args={["#fff3c8", "#174544", 1.35]} />
-      <directionalLight position={[-16, 24, 12]} intensity={2.65} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0004} />
+      {/* Sky, fog, sun and moon, all driven from the city clock. At noon this renders exactly the
+          five fixed lines it replaced — see MORNING_ENVIRONMENT. */}
+      <TimeOfDayLighting />
+      <StreetLampGlow entities={entities} />
       <WaterSurface />
       <IslandShoreline halfX={CITY_PAVED_HALF_X} halfZ={CITY_PAVED_HALF_Z} />
       <OrbitControls
@@ -486,6 +511,64 @@ const Scene = memo(function Scene({
   );
 });
 
+/** The day/night switch, in the bottom-left corner of the HUD.
+ *
+ * A single button rather than a pair, because the map only has two states and the one it is not in
+ * is always the one you want: the icon shows where pressing it takes you. `aria-pressed` is what
+ * carries the current state to a screen reader, which is the part an icon cannot do.
+ *
+ * It owns nothing. The phase lives in the map above it, because the HUD chrome is dressed from the
+ * same value — see the shell's data-city-phase. */
+const DayNightToggle = memo(function DayNightToggle({
+  phase,
+  onToggle,
+}: {
+  phase: CityPhase;
+  onToggle: () => void;
+}) {
+  const night = phase === "night";
+  return (
+    <Panel placement="bottomLeft" className={styles.dayNight}>
+      <Button
+        variant="secondary"
+        size="sm"
+        icon
+        aria-pressed={night}
+        aria-label={night ? "Switch the city to day" : "Switch the city to night"}
+        title={night ? "Switch to day" : "Switch to night"}
+        onClick={onToggle}
+      >
+        {night ? (
+          // A crescent, cut by offsetting a second disc rather than drawn as an arc, so it keeps
+          // its shape at the 1rem this renders at.
+          <svg className={styles.dayNightMark} viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M20.7 14.4a8.6 8.6 0 0 1-11.1-11 8.8 8.8 0 1 0 11.1 11Z"
+            />
+          </svg>
+        ) : (
+          <svg className={styles.dayNightMark} viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.6" fill="currentColor" />
+            {[0, 45, 90, 135, 180, 225, 270, 315].map((degrees) => (
+              <rect
+                key={degrees}
+                x="11.1"
+                y="1.6"
+                width="1.8"
+                height="3.6"
+                rx="0.9"
+                fill="currentColor"
+                transform={`rotate(${degrees} 12 12)`}
+              />
+            ))}
+          </svg>
+        )}
+      </Button>
+    </Panel>
+  );
+});
+
 /** What the deed needs. Captured from the claim response rather than looked up afterwards, so the
  * document cannot render half-filled if the development record arrives late. */
 interface ClaimedDeed {
@@ -514,6 +597,13 @@ export function CityMap3D({
   } = useCityDevelopments(
     initialDevelopments,
     initialDevelopmentLoadError,
+  );
+  // Which way the city is set. The only thing React knows about the lighting: the travel between
+  // the two phases happens inside the frame loop — see NightBlend.
+  const [cityPhase, setCityPhase] = useState<CityPhase>("morning");
+  const toggleCityPhase = useCallback(
+    () => setCityPhase((current) => (current === "night" ? "morning" : "night")),
+    [],
   );
   const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
   const [inspectedPlotId, setInspectedPlotId] = useState<string | null>(null);
@@ -1020,7 +1110,8 @@ export function CityMap3D({
   }
 
   return (
-    <main ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete}>
+    // The phase dresses the HUD panels, and nothing else — see Panel.module.css.
+    <main ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete} data-city-phase={cityPhase}>
       <Panel as="header" placement="topLeft" inert className={styles.header}>
         <p className={styles.eyebrow}>{district.name}</p>
         <h1>Indie Hackers City</h1>
@@ -1035,6 +1126,7 @@ export function CityMap3D({
           camera={{ position: [600, 600, 600], zoom: 14, near: 0.1, far: 1900 }}
           dpr={[1, 2]}
         >
+          <CityTimeProvider phase={cityPhase}>
           <Suspense fallback={null}>
             <Scene
               entities={sceneEntities}
@@ -1058,8 +1150,12 @@ export function CityMap3D({
             ))}
             <SceneReadySignal onReady={handleSceneReady} />
           </Suspense>
+          {/* Last child, and mounted only after dark — see CityBloom. */}
+          <CityBloom />
+          </CityTimeProvider>
         </Canvas>
       </CityAssetErrorBoundary>
+      <DayNightToggle phase={cityPhase} onToggle={toggleCityPhase} />
       <Panel placement="topRight" className={styles.controls} aria-label="Camera controls">
         <Button variant="secondary" size="sm" icon aria-label="Zoom out" onClick={() => zoomBy(-3)}>−</Button>
         <Button variant="secondary" size="sm" icon aria-label="Zoom in" onClick={() => zoomBy(3)}>+</Button>
@@ -1151,7 +1247,7 @@ export function CityMap3D({
               </div>
               <PreviewStage className={styles.previewCanvas}>
                 {formStep === "billboard"
-                  ? <BillboardPreview card={billboardCard} />
+                  ? <BillboardPreview card={billboardCard} assetId={selectedBuildingAssetId} />
                   : <BuildingPreview key={selectedBuildingAssetId} assetId={selectedBuildingAssetId} />}
               </PreviewStage>
               {formStep !== "billboard" && (

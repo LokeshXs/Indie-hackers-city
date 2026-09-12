@@ -1,9 +1,10 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import type { CityEntity } from "./map-types";
 import { PEDESTRIAN_ASSET_PATH, PEDESTRIAN_PARTS, PEDESTRIAN_VARIANTS } from "./city-assets";
 import { PAVEMENT_Y, pedestrianRoutes } from "./pedestrian-routes";
@@ -78,15 +79,7 @@ function variantTemplate(scene: THREE.Object3D, variant: number): THREE.Group | 
 
 export const Pedestrians = memo(function Pedestrians({ entities }: { entities: readonly CityEntity[] }) {
   const { scene } = useGLTF(PEDESTRIAN_ASSET_PATH);
-  const [stillness, setStillness] = useState(false);
-
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setStillness(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setStillness(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
+  const stillness = usePrefersReducedMotion();
 
   const walkers = useMemo<Walker[]>(() => {
     const routes = pedestrianRoutes(entities);
