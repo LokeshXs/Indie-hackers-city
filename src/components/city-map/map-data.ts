@@ -110,6 +110,99 @@ function createBlockOuterPathways(connectedSides: readonly BlockSide[]): CityEnt
   });
 }
 
+/** Lamps down a block's centre street, three to each pavement: one at its middle and one at each
+ * end.
+ *
+ * The avenues have been lit since the lamps were planted; the streets inside the blocks -- the ones
+ * every founder's building actually faces -- had nothing, which after dark left the plots lit only
+ * by whatever their owners had earned. These are cafe-lamps rather than the avenue's street-lamps:
+ * a block's centre street is a residential lane between two rows of front gardens, and the shorter,
+ * warmer post is the one that belongs there.
+ *
+ * One at the midpoint and one at each end, which with the corners below is three to a pavement.
+ * X sits in a gap BETWEEN the four driveways, which stand at -18, -6, 6 and 18: a lamp on a
+ * driveway would be a lamp in a founder's way in. Z is the pavement's outer edge rather than its
+ * centre line, because the walkers' circuits run down that centre -- see pedestrian-routes -- and
+ * the strip is only 0.6 wide, so the edge is the whole of the room there is to give them.
+ *
+ * Local block coordinates, so createCityBlock offsets and re-ids these with everything else. */
+const CENTRE_STREET_LAMP_X = [0] as const;
+/** The pavement runs from 2.15 to 2.75 either side of the centre street. */
+const CENTRE_STREET_LAMP_Z = 2.68;
+/** The sidewalk slab's top face, so the lamps stand on the paving rather than in it. */
+const CENTRE_STREET_LAMP_Y = 0.18;
+
+/** The four corners of the centre street's pavements.
+ *
+ * Each pavement ends where the connector running back to the outer row turns off it, and that L is
+ * the darkest point on the block: the run of three lamps above covers the middle and stops well
+ * short of both ends.
+ *
+ * Sat on the OUTER corner of the junction, away from the block, which is the one spot there that is
+ * on neither walking line -- the centre pavement's runs down z 2.45 and the connector's down
+ * x 24.0, and a lamp on either is a lamp in a walker's path. */
+const CENTRE_STREET_CORNER_X = 24.3;
+const CENTRE_STREET_CORNER_Z = 2.75;
+
+function createCentreStreetLamps(): CityEntity[] {
+  const sides = [["north", -1], ["south", 1]] as const;
+  const ends = [["west", -1], ["east", 1]] as const;
+
+  return [
+    ...CENTRE_STREET_LAMP_X.flatMap((x, index) => (
+      sides.map(([side, sign]) => ({
+        id: `centre-lamp-${side}-${index + 1}`,
+        assetId: "cafe-lamp" as const,
+        position: { x, y: CENTRE_STREET_LAMP_Y, z: sign * CENTRE_STREET_LAMP_Z },
+      }))
+    )),
+    ...sides.flatMap(([side, sideSign]) => (
+      ends.map(([end, endSign]) => ({
+        id: `centre-lamp-corner-${side}-${end}`,
+        assetId: "cafe-lamp" as const,
+        position: {
+          x: endSign * CENTRE_STREET_CORNER_X,
+          y: CENTRE_STREET_LAMP_Y,
+          z: sideSign * CENTRE_STREET_CORNER_Z,
+        },
+      }))
+    )),
+  ];
+}
+
+/** Lamps along the two sides of each block that face open water.
+ *
+ * Every block has four outer pathways; the two facing the map centre are cut for the link roads
+ * that reach the avenues, and the other two run unbroken along the shore. Those two are the
+ * district's waterfront, they carry no plots and no walking circuit, and until now they carried no
+ * light either -- so at night the island simply ended in a dark rim.
+ *
+ * Three to a side, matching the centre streets, and set on the pathway's SEAWARD edge so the light
+ * falls out over the shoreline rather than back into the block. Nothing walks these, which is why
+ * that edge is free to use -- see the note in pedestrian-routes about the waterfront being left
+ * deliberately empty. */
+const SHORE_LAMP_ALONG = [-24, 0, 24] as const;
+const SHORE_LAMP_OUTSET = 0.23;
+
+function createShorePathwayLamps(connectedSides: readonly BlockSide[]): CityEntity[] {
+  return BLOCK_OUTER_PATHWAYS
+    .filter(({ side }) => !connectedSides.includes(side))
+    .flatMap(({ side, position, alongX }) => {
+      // The pathway's outward normal is whichever axis it does not run along, pointing away from
+      // the block -- which on these two sides is the way out to sea.
+      const outward = Math.sign(alongX ? position.z : position.x);
+      return SHORE_LAMP_ALONG.map((along, index) => ({
+        id: `shore-lamp-${side}-${index + 1}`,
+        assetId: "cafe-lamp" as const,
+        position: {
+          x: alongX ? along : position.x + outward * SHORE_LAMP_OUTSET,
+          y: CENTRE_STREET_LAMP_Y,
+          z: alongX ? position.z + outward * SHORE_LAMP_OUTSET : along,
+        },
+      }));
+    });
+}
+
 /** One full city block (center street, ring road, 4 plot rows, shoreline-adjacent pathways),
  * built in local block-relative coordinates with unprefixed ids. */
 function createLocalBlock(connectedSides: readonly BlockSide[]): { plots: CityPlot[]; entities: CityEntity[] } {
@@ -155,6 +248,8 @@ function createLocalBlock(connectedSides: readonly BlockSide[]): { plots: CityPl
     { id: "road-ring-west", assetId: "road-straight", position: { x: -26.45, y: 0, z: 0 }, rotationY: Math.PI / 2, scaleXZ: { x: 1.118, z: 1 } },
     { id: "road-ring-east", assetId: "road-straight", position: { x: 26.45, y: 0, z: 0 }, rotationY: -Math.PI / 2, scaleXZ: { x: 1.118, z: 1 } },
     ...createBlockOuterPathways(connectedSides),
+    ...createCentreStreetLamps(),
+    ...createShorePathwayLamps(connectedSides),
     ...createRowXConnectors("north", -8.20, 10.90),
     ...createRowXConnectors("south", 8.20, 10.90),
     ...createRowXConnectors("north-outer", -18.30, 10.70),
@@ -412,19 +507,57 @@ const COFFEE_SHOP_PLOT_ID = "pioneer:hopper:north-outer:01";
  * Positioned through getBuildingPlacement off the plot's own pad rather than at literal
  * coordinates, so it takes the same setback, facing and scale as a founder's building and follows
  * the row if the layout is ever moved. */
+/** The two lamps either side of the Coffee House's door, out at the front of its terrace.
+ *
+ * Given in the shop's own local space, where the front is -z and the entrance corridor runs out
+ * from the door between the two terrace decks. `x` flanks that corridor at the decks' inner edges,
+ * and both sit at the same `z`, out where the path meets the pavement -- a pair framing the way in,
+ * rather than a run of lamps down it.
+ *
+ * These are cafe-lamps, not street-lamps: a shorter, warmer, dimmer post that belongs to the shop.
+ * They are still ordinary entities, so LampGlow finds them and hangs a halo and a pool of light on
+ * them the same way it does for the avenues -- at the softer strength that asset is listed with. */
+const CAFE_PATH_LAMPS: ReadonlyArray<{ x: number; z: number }> = [
+  { x: -1.40, z: -3.70 },
+  { x: 0.79, z: -3.70 },
+];
+
+/** The terrace boards' top face, in the shop's local space. The lamps stand on the deck, so their
+ * footings sit here rather than on the ground the shop itself is seated on. */
+const CAFE_DECK_TOP = 0.19;
+
 function createCoffeeShop(blockEntities: readonly CityEntity[]): CityEntity[] {
   const pad = blockEntities.find(
     (entity) => entity.assetId === "grass-plot" && entity.plotId === COFFEE_SHOP_PLOT_ID,
   );
   if (!pad) throw new Error(`No plot pad found for the coffee shop: ${COFFEE_SHOP_PLOT_ID}`);
   const { position, rotationY } = getBuildingPlacement(pad);
+  // Both are 0 or pi, so these are exact.
+  const facingCos = Math.cos(rotationY ?? 0);
+  const facingSin = Math.sin(rotationY ?? 0);
+
   return [{
     id: "coffee-shop",
     assetId: "coffee-shop",
     position,
     rotationY,
     scale: PLOT_BUILDING_SCALE,
-  }];
+  }, ...CAFE_PATH_LAMPS.map((lamp, index) => {
+    // The anchors are in the shop's frame, so they take the shop's scale and its facing to reach
+    // the world. The lamps themselves stay unscaled: they are the district's own street furniture,
+    // and one shrunk to a building's scale would read as a model of a lamp.
+    const x = lamp.x * PLOT_BUILDING_SCALE;
+    const z = lamp.z * PLOT_BUILDING_SCALE;
+    return {
+      id: `coffee-shop-path-lamp-${index + 1}`,
+      assetId: "cafe-lamp" as const,
+      position: {
+        x: position.x + x * facingCos + z * facingSin,
+        y: position.y + CAFE_DECK_TOP * PLOT_BUILDING_SCALE,
+        z: position.z - x * facingSin + z * facingCos,
+      },
+    };
+  })];
 }
 
 const plots: CityDistrict["plots"] = [...nw.plots, ...ne.plots, ...sw.plots, ...se.plots];

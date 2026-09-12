@@ -13,6 +13,7 @@ export function useFounderProjects(ownerId: string | undefined, showcasedProject
   const [projects, setProjects] = useState<FounderProject[]>([]);
   const [catalog, setCatalog] = useState<AchievementDefinition[]>([]);
   const [founderAchievements, setFounderAchievements] = useState<AchievementType[]>([]);
+  const [pendingFounderAchievements, setPendingFounderAchievements] = useState<AchievementType[]>([]);
   const [isLoading, setIsLoading] = useState(() => Boolean(ownerId));
   const [hasError, setHasError] = useState(false);
   // Guards against a slow load overwriting a newer list handed back by a mutation.
@@ -36,6 +37,7 @@ export function useFounderProjects(ownerId: string | undefined, showcasedProject
         if (cancelled || requestId !== requestSequence.current) return;
         setProjects(portfolio.projects);
         setFounderAchievements(portfolio.founderAchievements);
+        setPendingFounderAchievements(portfolio.pendingFounderAchievements);
         setCatalog(definitions);
         setHasError(false);
       } catch {
@@ -52,13 +54,26 @@ export function useFounderProjects(ownerId: string | undefined, showcasedProject
 
   /** Accepts the list a mutation route returned. Bumping the sequence makes it win over any load
    * still in flight. */
-  const applyProjects = useCallback((next: FounderProject[], nextFounderAchievements?: AchievementType[]) => {
+  const applyProjects = useCallback((
+    next: FounderProject[],
+    nextFounderAchievements?: AchievementType[],
+    nextPendingFounderAchievements?: AchievementType[],
+  ) => {
     requestSequence.current += 1;
     setProjects(next);
     if (nextFounderAchievements) setFounderAchievements(nextFounderAchievements);
+    if (nextPendingFounderAchievements) setPendingFounderAchievements(nextPendingFounderAchievements);
     setHasError(false);
     setIsLoading(false);
   }, []);
 
-  return { projects, catalog, founderAchievements, isLoading, hasError, applyProjects };
+  return {
+    projects,
+    catalog,
+    founderAchievements,
+    pendingFounderAchievements,
+    isLoading,
+    hasError,
+    applyProjects,
+  };
 }

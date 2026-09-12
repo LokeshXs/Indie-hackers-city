@@ -12,8 +12,11 @@ import {
   fieldColorControlClass,
   fieldControlClass,
 } from "@/components/ui";
+import { summarisePendingClaims } from "@/lib/city/achievements";
+import { EVIDENCE_MIME_TYPES, uploadEvidence } from "@/lib/city/evidence";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useFounderProjects } from "@/hooks/useFounderProjects";
-import { X_HANDLE_PATTERN } from "@/lib/city/constants";
+import { VERIFICATION_META_NAME, X_HANDLE_PATTERN } from "@/lib/city/constants";
 import type {
   AchievementDefinition,
   AchievementGroup,
@@ -24,8 +27,9 @@ import type {
 } from "@/lib/city/types";
 import type { CityEntity } from "./map-types";
 import { contrastRatio } from "./billboard-texture";
-import { BillboardPreview, BuildingPreview, PLOT_PREVIEW_CAMERA, PlotPreview, PreviewStage } from "./ModelPreview";
+import { BillboardPreview, PreviewStage } from "./ModelPreview";
 import styles from "./ProjectCard.module.css";
+import { PlotSnapshot } from "./PlotSnapshot";
 
 const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   website: "Website",
@@ -47,12 +51,27 @@ const ACHIEVEMENT_GROUPS: ReadonlyArray<{
 
 const XP_FORMATTER = new Intl.NumberFormat("en-US");
 
-/** The lowest rung that would still award something, for preselecting the picker. */
+/** Stated on every screen that can file a claim. Nothing verifies a milestone automatically, so a
+ * founder needs to know before they pick one that the XP is not instant. */
+const APPROVAL_NOTE = "Every achievement goes to an admin for approval. The XP lands on your plot once it is approved.";
+
+/** A rung cannot be filed again while it is approved or already sitting in the review queue. A
+ * rejected one appears in neither list, which is what lets a founder come back to it. */
+function isFiled(
+  type: AchievementType,
+  approved: readonly AchievementType[],
+  pending: readonly AchievementType[],
+): boolean {
+  return approved.includes(type) || pending.includes(type);
+}
+
+/** The lowest rung still open to file, for preselecting the picker. */
 function firstGrantableRung(
   rungs: readonly AchievementDefinition[],
-  held: readonly AchievementType[],
+  approved: readonly AchievementType[],
+  pending: readonly AchievementType[],
 ): AchievementType | null {
-  return rungs.find((rung) => !held.includes(rung.type))?.type ?? null;
+  return rungs.find((rung) => !isFiled(rung.type, approved, pending))?.type ?? null;
 }
 
 /** Whether a group is claimed once per founder rather than once per project. */
@@ -65,16 +84,17 @@ function rungsOf(catalog: readonly AchievementDefinition[], group: AchievementGr
   return catalog.filter((entry) => entry.group === group).sort((a, b) => a.tier - b.tier);
 }
 
-/** What claiming `rung` would actually award: itself plus every rung below it the project does not
- * already hold. Zero means there is nothing left to grant. */
+/** What approving `rung` would award: itself plus every rung below it the project does not already
+ * hold *approved*. Counted against approved rungs only, so it matches the xp_pending the database
+ * reports and the number the reviewer will see. */
 function grantableXp(
   catalog: readonly AchievementDefinition[],
   group: AchievementGroup,
   tier: number,
-  held: readonly AchievementType[],
+  approved: readonly AchievementType[],
 ): number {
   return rungsOf(catalog, group)
-    .filter((entry) => entry.tier <= tier && !held.includes(entry.type))
+    .filter((entry) => entry.tier <= tier && !approved.includes(entry.type))
     .reduce((total, entry) => total + entry.xpReward, 0);
 }
 
@@ -83,8 +103,10 @@ type CardMode =
   | "view"
   | "achievements"
   | "launch-form"
+  | "verify-site"
   | "pick-project"
   | "achievement-tier"
+  | "achievement-evidence"
   | "projects"
   | "project-edit"
   | "customise"
@@ -98,8 +120,10 @@ const PREVIEW_BY_MODE: Record<CardMode, PreviewKind> = {
   view: "plot",
   achievements: "plot",
   "launch-form": "plot",
+  "verify-site": "plot",
   "pick-project": "plot",
   "achievement-tier": "plot",
+  "achievement-evidence": "plot",
   projects: "plot",
   "project-edit": "plot",
   customise: "plot",
@@ -128,8 +152,13 @@ export function ProjectCard({
   const [mode, setMode] = useState<CardMode>("view");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Survives the jump back to the view pane, so a founder is told what happened to the claim they
+  // just filed rather than being returned to an unchanged card.
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const { projects, catalog, founderAchievements, applyProjects } = useFounderProjects(
+  const {
+    projects, catalog, founderAchievements, pendingFounderAchievements, applyProjects,
+  } = useFounderProjects(
     isOwner ? development.ownerId : undefined,
     development.project.id,
   );
@@ -138,7 +167,19 @@ export function ProjectCard({
   const [pendingGroup, setPendingGroup] = useState<AchievementGroup | null>(null);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [pendingTier, setPendingTier] = useState<AchievementType | null>(null);
+  // The evidence being assembled for the rung above. Cleared whenever the flow restarts, so one
+  // claim's screenshot can never be filed against the next.
+  const [evidenceLink, setEvidenceLink] = useState("");
+  const [evidenceNote, setEvidenceNote] = useState("");
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [editingProject, setEditingProject] = useState<FounderProject | null>(null);
+  // The project whose verification tag the next step should show. Set only by a successful launch,
+  // because the token does not exist until the row does.
+  const [verifyingProjectId, setVerifyingProjectId] = useState<string | null>(null);
+  // Held rather than shown straight away: goTo clears the notice, and this belongs on the projects
+  // list the founder lands on *after* the verification step, not on the step itself.
+  const [launchNotice, setLaunchNotice] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState(development.founder.fullName);
   const [xHandle, setXHandle] = useState(development.founder.xHandle ?? "");
@@ -168,6 +209,7 @@ export function ProjectCard({
 
   function goTo(next: CardMode) {
     setError(null);
+    setNotice(null);
     setMode(next);
   }
 
@@ -180,13 +222,16 @@ export function ProjectCard({
         development?: CityDevelopment;
         projects?: FounderProject[];
         founderAchievements?: AchievementType[];
+        pendingFounderAchievements?: AchievementType[];
         error?: { message?: string };
       };
       if (!response.ok || !payload.development) {
         throw new Error(payload.error?.message || "That didn’t work. Try again.");
       }
       onUpdated(payload.development);
-      if (payload.projects) applyProjects(payload.projects, payload.founderAchievements);
+      if (payload.projects) {
+        applyProjects(payload.projects, payload.founderAchievements, payload.pendingFounderAchievements);
+      }
       return payload as Record<string, unknown>;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "That didn’t work. Try again.");
@@ -198,12 +243,22 @@ export function ProjectCard({
 
   async function launchProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const launchedName = projectName.trim();
     const formData = new FormData();
-    formData.set("projectName", projectName.trim());
+    formData.set("projectName", launchedName);
     formData.set("websiteUrl", websiteUrl.trim());
     formData.set("projectType", projectType);
     formData.set("showcase", String(showcase));
-    if (await send("/api/projects", { method: "POST", body: formData })) goTo("projects");
+    const result = await send("/api/projects", { method: "POST", body: formData });
+    if (result) {
+      const launchReward = rungsOf(catalog, "launch")[0]?.xpReward ?? 0;
+      setVerifyingProjectId(typeof result.projectId === "string" ? result.projectId : null);
+      setLaunchNotice(
+        `“${launchedName}” added, and its launch sent for review. `
+        + `It adds ${XP_FORMATTER.format(launchReward)} XP once it is approved.`,
+      );
+      goTo("verify-site");
+    }
   }
 
   async function saveProject(event: FormEvent<HTMLFormElement>) {
@@ -221,19 +276,68 @@ export function ProjectCard({
     if (result) goTo("projects");
   }
 
+  /** Leaves the verification step, either way, and lands on the portfolio with the launch
+   * confirmation. Skipping is allowed -- a founder may not be able to edit their site right now --
+   * but the message says what skipping costs. */
+  function finishVerification(added: boolean) {
+    const message = launchNotice ?? "";
+    setLaunchNotice(null);
+    setVerifyingProjectId(null);
+    goTo("projects");
+    setNotice(added
+      ? `${message} We will look for the tag when we review it.`
+      : `${message} Add the verification tag from your projects list before it can be approved.`);
+  }
+
+  function resetClaimDraft() {
+    setPendingGroup(null);
+    setPendingProjectId(null);
+    setPendingTier(null);
+    setEvidenceLink("");
+    setEvidenceNote("");
+    setEvidenceFile(null);
+  }
+
   async function logAchievement() {
     if (!pendingTier) return;
+
+    // The upload happens first and separately: a screenshot that fails to reach storage must not
+    // leave a claim on file pointing at nothing.
+    let filePath: string | undefined;
+    if (evidenceFile) {
+      setIsUploading(true);
+      const uploaded = await uploadEvidence(
+        getSupabaseBrowserClient(), development.ownerId, evidenceFile,
+      );
+      setIsUploading(false);
+      if (uploaded.error) {
+        setError(uploaded.error);
+        return;
+      }
+      filePath = uploaded.path;
+    }
+
     const result = await send("/api/achievements", {
       method: "POST",
       headers: { "content-type": "application/json" },
       // Omitted entirely for founder-scoped rungs; the RPC decides which types need one.
-      body: JSON.stringify({ achievementType: pendingTier, projectId: pendingProjectId ?? undefined }),
+      body: JSON.stringify({
+        achievementType: pendingTier,
+        projectId: pendingProjectId ?? undefined,
+        evidenceLink: evidenceLink.trim() || undefined,
+        evidenceFilePath: filePath,
+        evidenceNote: evidenceNote.trim() || undefined,
+      }),
     });
     if (result) {
-      setPendingGroup(null);
-      setPendingProjectId(null);
-      setPendingTier(null);
+      const submitted = result.achievement as { xpPending?: number } | undefined;
+      const worth = submitted?.xpPending ?? 0;
+      const label = catalog.find((entry) => entry.type === pendingTier)?.label ?? "That milestone";
+      resetClaimDraft();
       goTo("view");
+      setNotice(
+        `“${label}” sent for review. It adds ${XP_FORMATTER.format(worth)} XP once it is approved.`,
+      );
     }
   }
 
@@ -287,7 +391,9 @@ export function ProjectCard({
 
     if (isFounderScoped(catalog, group)) {
       // Nothing to attach it to — revenue belongs to the founder, so skip straight to the rungs.
-      setPendingTier(firstGrantableRung(rungsOf(catalog, group), founderAchievements));
+      setPendingTier(firstGrantableRung(
+        rungsOf(catalog, group), founderAchievements, pendingFounderAchievements,
+      ));
       goTo("achievement-tier");
       return;
     }
@@ -297,11 +403,25 @@ export function ProjectCard({
 
   function chooseProject(projectId: string) {
     const rungs = pendingGroup ? rungsOf(catalog, pendingGroup) : [];
-    const held = projects.find((project) => project.id === projectId)?.achievements ?? [];
+    const project = projects.find((entry) => entry.id === projectId);
+    const held = project?.achievements ?? [];
+    const waiting = project?.pendingAchievements ?? [];
     setPendingProjectId(projectId);
-    setPendingTier(firstGrantableRung(rungs, held));
+    setPendingTier(firstGrantableRung(rungs, held, waiting));
     goTo("achievement-tier");
   }
+
+  const pending = useMemo(
+    () => summarisePendingClaims(catalog, projects, founderAchievements, pendingFounderAchievements),
+    [catalog, projects, founderAchievements, pendingFounderAchievements],
+  );
+
+  const pendingMessage = pending.count === 0 ? null
+    : pending.count === 1
+      ? `“${pending.claims[0].label}”${pending.claims[0].projectName ? ` on ${pending.claims[0].projectName}` : ""}`
+        + ` is with an admin for approval. It adds ${XP_FORMATTER.format(pending.xp)} XP once approved.`
+      : `${pending.count} achievements are with an admin for approval.`
+        + ` They add ${XP_FORMATTER.format(pending.xp)} XP once approved.`;
 
   const previewKind = PREVIEW_BY_MODE[mode];
 
@@ -319,23 +439,18 @@ export function ProjectCard({
     >
       <Modal.Split previewColumn="minmax(0, 2fr)" actionColumn="minmax(24rem, 3fr)">
         <Modal.Preview>
-          {/* PreviewStage's zoom is a non-reactive camera prop, so each preview kind gets its own
-              Canvas via the key — the plot needs far wider framing than a single model. */}
-          <PreviewStage
-            key={previewKind}
-            className={styles.previewCanvas}
-            zoom={36}
-            shadows={previewKind !== "plot"}
-            cameraPosition={previewKind === "plot" ? PLOT_PREVIEW_CAMERA : undefined}
-          >
-            {previewKind === "billboard" ? (
+          {previewKind === "billboard" ? (
+            <PreviewStage className={styles.previewCanvas} zoom={36}>
               <BillboardPreview card={billboardCard} assetId={development.building.assetId} />
-            ) : plotEntity ? (
-              <PlotPreview plotEntity={plotEntity} development={development} />
-            ) : (
-              <BuildingPreview assetId={development.building.assetId} />
-            )}
-          </PreviewStage>
+            </PreviewStage>
+          ) : (
+            <PlotSnapshot
+              key={JSON.stringify([development, plotEntity])}
+              development={development}
+              plotEntity={plotEntity}
+              address={address}
+            />
+          )}
         </Modal.Preview>
 
         <Modal.Pane>
@@ -375,6 +490,10 @@ export function ProjectCard({
                 <div><dt className={styles.label}>Claimed</dt><dd>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(development.claimedAt))}</dd></div>
               </dl>
 
+              {notice || pendingMessage
+                ? <Alert tone="notice">{notice ?? pendingMessage}</Alert>
+                : null}
+
               {isOwner ? (
                 <div className={styles.actions}>
                   <Button size="lg" block onClick={() => goTo("achievements")}>Add achievement</Button>
@@ -389,7 +508,7 @@ export function ProjectCard({
             <div className={styles.pane}>
               <div className={styles.stepIntro}>
                 <strong id="project-card-title">Add an achievement</strong>
-                <span>Each one can be logged once per project.</span>
+                <span>Each one can be logged once.</span>
               </div>
               <ChoiceList
                 legend="Achievements"
@@ -401,15 +520,17 @@ export function ProjectCard({
                     ? false
                     : isFounderScoped(catalog, entry.group)
                       // Founder-scoped: held once and it is done, whatever the portfolio looks like.
-                      ? rungs.every((rung) => founderAchievements.includes(rung.type))
+                      ? rungs.every((rung) => isFiled(rung.type, founderAchievements, pendingFounderAchievements))
                       : projects.length > 0
-                        && projects.every((project) => rungs.every((rung) => project.achievements.includes(rung.type)));
+                        && projects.every((project) => rungs.every(
+                          (rung) => isFiled(rung.type, project.achievements, project.pendingAchievements),
+                        ));
                   return {
                     id: entry.group,
                     title: entry.label,
                     description: entry.description,
                     meta: exhausted
-                      ? "All logged"
+                      ? "Nothing left to log"
                       : rungs.length > 1
                         ? `up to +${XP_FORMATTER.format(total)} XP`
                         : `+${XP_FORMATTER.format(total)} XP`,
@@ -418,6 +539,7 @@ export function ProjectCard({
                 })}
                 onSelect={(id) => chooseGroup(id as AchievementGroup)}
               />
+              <Alert tone="notice">{APPROVAL_NOTE}</Alert>
               {error ? <Alert>{error}</Alert> : null}
               <div className={styles.formActions}>
                 <Button variant="tertiary" onClick={() => goTo("view")}>← Back</Button>
@@ -428,8 +550,9 @@ export function ProjectCard({
             <form className={styles.pane} onSubmit={launchProduct} aria-busy={isSaving}>
               <div className={styles.stepIntro}>
                 <strong id="project-card-title">Launched a new product</strong>
-                <span>It joins your portfolio and earns {XP_FORMATTER.format(rungsOf(catalog, "launch")[0]?.xpReward ?? 0)} XP.</span>
+                <span>It joins your portfolio and earns {XP_FORMATTER.format(rungsOf(catalog, "launch")[0]?.xpReward ?? 0)} XP once it is approved.</span>
               </div>
+              <Alert tone="notice">{APPROVAL_NOTE}</Alert>
               <Field label="Product name" htmlFor="launch-name">
                 {(field) => <input {...field} ref={firstFieldRef} className={fieldControlClass} value={projectName} maxLength={40} required onChange={(event) => setProjectName(event.target.value)} />}
               </Field>
@@ -455,6 +578,48 @@ export function ProjectCard({
                 <Button size="lg" type="submit" disabled={isSaving}>{isSaving ? "Adding…" : "Add product"}</Button>
               </div>
             </form>
+          ) : mode === "verify-site" ? (
+            <div className={styles.pane}>
+              {(() => {
+                const project = projects.find((entry) => entry.id === verifyingProjectId);
+                return (
+                  <>
+                    <div className={styles.stepIntro}>
+                      <strong id="project-card-title">Prove the site is yours</strong>
+                      <span>{project?.name}</span>
+                    </div>
+
+                    <p className={styles.verifyHelp}>
+                      Add this line inside the <code>&lt;head&gt;</code> of{" "}
+                      {project?.websiteUrl ?? "your site"}:
+                    </p>
+
+                    <code className={styles.verifyTag}>
+                      {`<meta name="${VERIFICATION_META_NAME}" content="${project?.verificationToken ?? ""}">`}
+                    </code>
+
+                    <Alert tone="warning">
+                      This step is required. We check for the tag when reviewing your launch, and
+                      without it the claim cannot be approved — so the XP will not land.
+                    </Alert>
+
+                    <p className={styles.verifyHelp}>
+                      No rush if you cannot edit your site right now. The tag stays on your projects
+                      list, and you can add it any time before we review.
+                    </p>
+
+                    <div className={styles.formActions}>
+                      <Button variant="tertiary" onClick={() => finishVerification(false)}>
+                        Skip for now
+                      </Button>
+                      <Button size="lg" onClick={() => finishVerification(true)}>
+                        I&rsquo;ve added it
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           ) : mode === "pick-project" ? (
             <div className={styles.pane}>
               <div className={styles.stepIntro}>
@@ -466,13 +631,15 @@ export function ProjectCard({
                 items={projects.map((project) => {
                   // Exhausted means every rung in the group is held, not just one type.
                   const rungs = pendingGroup ? rungsOf(catalog, pendingGroup) : [];
-                  const already = rungs.length > 0
-                    && rungs.every((rung) => project.achievements.includes(rung.type));
+                  const already = rungs.length > 0 && rungs.every(
+                    (rung) => isFiled(rung.type, project.achievements, project.pendingAchievements),
+                  );
+                  const waiting = rungs.some((rung) => project.pendingAchievements.includes(rung.type));
                   return {
                     id: project.id,
                     title: project.name,
                     description: PROJECT_TYPE_LABELS[project.type],
-                    meta: already ? "All logged" : undefined,
+                    meta: already ? (waiting ? "Awaiting review" : "All logged") : undefined,
                     disabled: already || isSaving,
                   };
                 })}
@@ -496,31 +663,40 @@ export function ProjectCard({
               </div>
               {(() => {
                 const rungs = pendingGroup ? rungsOf(catalog, pendingGroup) : [];
-                const held = pendingGroup && isFounderScoped(catalog, pendingGroup)
-                  ? founderAchievements
-                  : projects.find((project) => project.id === pendingProjectId)?.achievements ?? [];
-                const selectable = rungs.filter(
-                  (rung) => grantableXp(catalog, rung.group, rung.tier, held) > 0,
-                );
+                const founderScoped = Boolean(pendingGroup && isFounderScoped(catalog, pendingGroup));
+                const project = projects.find((entry) => entry.id === pendingProjectId);
+                const held = founderScoped ? founderAchievements : project?.achievements ?? [];
+                const waiting = founderScoped
+                  ? pendingFounderAchievements
+                  : project?.pendingAchievements ?? [];
+                const selectable = rungs.filter((rung) => !isFiled(rung.type, held, waiting));
                 return (
                   <>
                     <ChoiceList
                       legend="Milestone"
                       selectedId={pendingTier ?? ""}
                       items={rungs.map((rung) => {
-                        // What this rung would grant right now: itself plus any rung below it that
-                        // the project does not already hold. Shrinks as lower rungs get logged.
+                        // What approving this rung would grant: itself plus any rung below it not
+                        // already approved. Shrinks as lower rungs are granted, never as they are
+                        // merely filed -- a queued rung has been promised nothing yet.
                         const grant = grantableXp(catalog, rung.group, rung.tier, held);
+                        const isWaiting = waiting.includes(rung.type);
+                        const isHeld = held.includes(rung.type);
                         return {
                           id: rung.type,
                           title: rung.label,
                           description: rung.description,
-                          meta: grant > 0 ? `+${XP_FORMATTER.format(grant)} XP` : "Already logged",
-                          disabled: grant === 0 || isSaving,
+                          meta: isWaiting
+                            ? "Awaiting review"
+                            : isHeld
+                              ? "Already logged"
+                              : `+${XP_FORMATTER.format(grant)} XP on approval`,
+                          disabled: isWaiting || isHeld || isSaving,
                         };
                       })}
                       onSelect={(id) => setPendingTier(id as AchievementType)}
                     />
+                    <Alert tone="notice">{APPROVAL_NOTE}</Alert>
                     {error ? <Alert>{error}</Alert> : null}
                     <div className={styles.formActions}>
                       <Button
@@ -533,9 +709,87 @@ export function ProjectCard({
                       <Button
                         size="lg"
                         disabled={isSaving || !pendingTier || selectable.length === 0}
+                        onClick={() => goTo("achievement-evidence")}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          ) : mode === "achievement-evidence" ? (
+            <div className={styles.pane}>
+              {(() => {
+                const rung = catalog.find((entry) => entry.type === pendingTier);
+                const busy = isSaving || isUploading;
+                // At least one of the two. A note explains evidence, it does not replace it --
+                // the same rule apply_project_achievement enforces.
+                const hasEvidence = evidenceLink.trim().length > 0 || evidenceFile !== null;
+                return (
+                  <>
+                    <div className={styles.stepIntro}>
+                      <strong id="project-card-title">{rung?.evidencePrompt ?? "Show us"}</strong>
+                      <span>{rung?.label}</span>
+                    </div>
+
+                    <p className={styles.evidenceHint}>{rung?.evidenceHint}</p>
+
+                    <Field label="Link" htmlFor="evidence-link" hint="A dashboard, a post, a public page — anything we can open.">
+                      {(field) => (
+                        <input
+                          {...field}
+                          ref={firstFieldRef}
+                          className={fieldControlClass}
+                          type="url"
+                          value={evidenceLink}
+                          maxLength={2048}
+                          inputMode="url"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          placeholder="https://"
+                          onChange={(event) => setEvidenceLink(event.target.value)}
+                        />
+                      )}
+                    </Field>
+
+                    <Field label="Screenshot" htmlFor="evidence-file" hint="PNG, JPG or WebP, up to 5MB.">
+                      {(field) => (
+                        <input
+                          {...field}
+                          className={fieldControlClass}
+                          type="file"
+                          accept={EVIDENCE_MIME_TYPES.join(",")}
+                          onChange={(event) => setEvidenceFile(event.target.files?.[0] ?? null)}
+                        />
+                      )}
+                    </Field>
+
+                    <Field label="Anything else we should know" htmlFor="evidence-note">
+                      {(field) => (
+                        <textarea
+                          {...field}
+                          className={fieldControlClass}
+                          rows={2}
+                          value={evidenceNote}
+                          maxLength={500}
+                          onChange={(event) => setEvidenceNote(event.target.value)}
+                        />
+                      )}
+                    </Field>
+
+                    {error ? <Alert>{error}</Alert> : null}
+
+                    <div className={styles.formActions}>
+                      <Button variant="tertiary" disabled={busy} onClick={() => goTo("achievement-tier")}>
+                        ← Back
+                      </Button>
+                      <Button
+                        size="lg"
+                        disabled={busy || !hasEvidence}
                         onClick={() => void logAchievement()}
                       >
-                        {isSaving ? "Logging…" : "Log achievement"}
+                        {isUploading ? "Uploading…" : isSaving ? "Sending…" : "Send for review"}
                       </Button>
                     </div>
                   </>
@@ -555,11 +809,28 @@ export function ProjectCard({
                       <strong>{project.name}</strong>
                       <span className={styles.projectMeta}>{PROJECT_TYPE_LABELS[project.type]}</span>
                       {project.isShowcased ? <span className={styles.projectBadge}>On your billboard</span> : null}
+                      {project.isVerified ? (
+                        <span className={styles.verifiedBadge}>✓ Site verified</span>
+                      ) : (
+                        /* A native disclosure: one project in a list of ten needs this, and the
+                           other nine should not pay for it in vertical space. */
+                        <details className={styles.verify}>
+                          <summary>Verify you own this site</summary>
+                          <p className={styles.verifyHelp}>
+                            Add this to the <code>&lt;head&gt;</code> of {project.websiteUrl}. We check
+                            for it when reviewing your launch.
+                          </p>
+                          <code className={styles.verifyTag}>
+                            {`<meta name="${VERIFICATION_META_NAME}" content="${project.verificationToken}">`}
+                          </code>
+                        </details>
+                      )}
                     </div>
                     <Button variant="tertiary" size="sm" onClick={() => startEdit(project)}>Edit</Button>
                   </li>
                 ))}
               </ul>
+              {notice ? <Alert tone="notice">{notice}</Alert> : null}
               {error ? <Alert>{error}</Alert> : null}
               <div className={styles.formActions}>
                 <Button variant="tertiary" onClick={() => goTo("view")}>← Back</Button>

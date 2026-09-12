@@ -39,6 +39,8 @@ export type Database = {
           achievement_type: string
           created_at: string
           description: string
+          evidence_hint: string
+          evidence_prompt: string
           group_key: string
           label: string
           requires_new_project: boolean
@@ -51,6 +53,8 @@ export type Database = {
           achievement_type: string
           created_at?: string
           description: string
+          evidence_hint: string
+          evidence_prompt: string
           group_key: string
           label: string
           requires_new_project?: boolean
@@ -63,6 +67,8 @@ export type Database = {
           achievement_type?: string
           created_at?: string
           description?: string
+          evidence_hint?: string
+          evidence_prompt?: string
           group_key?: string
           label?: string
           requires_new_project?: boolean
@@ -70,6 +76,164 @@ export type Database = {
           sort_order?: number
           tier?: number
           xp_reward?: number
+        }
+        Relationships: []
+      }
+      achievement_evidence: {
+        Row: {
+          achievement_id: number
+          created_at: string
+          file_path: string | null
+          id: number
+          link: string | null
+          note: string | null
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          achievement_id: number
+          created_at?: string
+          file_path?: string | null
+          id?: never
+          link?: string | null
+          note?: string | null
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          achievement_id?: number
+          created_at?: string
+          file_path?: string | null
+          id?: never
+          link?: string | null
+          note?: string | null
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "achievement_evidence_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: true
+            referencedRelation: "project_achievements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "achievement_evidence_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "city_developments"
+            referencedColumns: ["owner_id"]
+          },
+          {
+            foreignKeyName: "achievement_evidence_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "plot_claims"
+            referencedColumns: ["owner_id"]
+          },
+        ]
+      }
+      achievement_reviews: {
+        Row: {
+          achievement_id: number
+          achievement_type: string
+          created_at: string
+          decision: string
+          id: number
+          ledger_event_key: string | null
+          note: string | null
+          owner_id: string
+          reviewer_id: string | null
+          reviewer_label: string
+          xp_delta: number
+        }
+        Insert: {
+          achievement_id: number
+          achievement_type: string
+          created_at?: string
+          decision: string
+          id?: never
+          ledger_event_key?: string | null
+          note?: string | null
+          owner_id: string
+          reviewer_id?: string | null
+          reviewer_label: string
+          xp_delta?: number
+        }
+        Update: {
+          achievement_id?: number
+          achievement_type?: string
+          created_at?: string
+          decision?: string
+          id?: never
+          ledger_event_key?: string | null
+          note?: string | null
+          owner_id?: string
+          reviewer_id?: string | null
+          reviewer_label?: string
+          xp_delta?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "achievement_reviews_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "project_achievements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "achievement_reviews_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "city_developments"
+            referencedColumns: ["owner_id"]
+          },
+          {
+            foreignKeyName: "achievement_reviews_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "plot_claims"
+            referencedColumns: ["owner_id"]
+          },
+        ]
+      }
+      admin_config_changes: {
+        Row: {
+          actor_id: string | null
+          actor_label: string
+          created_at: string
+          entity: string
+          entity_id: string
+          field: string
+          founders_affected: number
+          id: number
+          new_value: string
+          previous_value: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_label: string
+          created_at?: string
+          entity: string
+          entity_id: string
+          field: string
+          founders_affected?: number
+          id?: never
+          new_value: string
+          previous_value?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          actor_label?: string
+          created_at?: string
+          entity?: string
+          entity_id?: string
+          field?: string
+          founders_affected?: number
+          id?: never
+          new_value?: string
+          previous_value?: string | null
         }
         Relationships: []
       }
@@ -101,6 +265,7 @@ export type Database = {
           owner_id: string
           plot_id: string
           project_id: string
+          rewards_seen_at: string
           updated_at: string
           xp_total: number
         }
@@ -113,6 +278,7 @@ export type Database = {
           owner_id: string
           plot_id: string
           project_id: string
+          rewards_seen_at?: string
           updated_at?: string
           xp_total?: number
         }
@@ -125,6 +291,7 @@ export type Database = {
           owner_id?: string
           plot_id?: string
           project_id?: string
+          rewards_seen_at?: string
           updated_at?: string
           xp_total?: number
         }
@@ -271,6 +438,9 @@ export type Database = {
           id: number
           owner_id: string
           project_id: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           status: string
           xp_awarded: number
         }
@@ -281,6 +451,9 @@ export type Database = {
           id?: never
           owner_id: string
           project_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string
           xp_awarded: number
         }
@@ -291,6 +464,9 @@ export type Database = {
           id?: never
           owner_id?: string
           project_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string
           xp_awarded?: number
         }
@@ -333,6 +509,9 @@ export type Database = {
           owner_id: string
           project_type: string
           updated_at: string
+          verification_token: string
+          verified_at: string | null
+          verified_url: string | null
           website_url: string
         }
         Insert: {
@@ -342,6 +521,9 @@ export type Database = {
           owner_id: string
           project_type: string
           updated_at?: string
+          verification_token?: string
+          verified_at?: string | null
+          verified_url?: string | null
           website_url: string
         }
         Update: {
@@ -351,6 +533,9 @@ export type Database = {
           owner_id?: string
           project_type?: string
           updated_at?: string
+          verification_token?: string
+          verified_at?: string | null
+          verified_url?: string | null
           website_url?: string
         }
         Relationships: [
@@ -405,6 +590,7 @@ export type Database = {
       }
     }
     Functions: {
+      acknowledge_rewards: { Args: never; Returns: string }
       apply_plot_xp: {
         Args: {
           requested_description?: string
@@ -429,19 +615,37 @@ export type Database = {
       }
       apply_project_achievement: {
         Args: {
+          evidence_file_path?: string
+          evidence_link?: string
+          evidence_note?: string
           requested_achievement_type: string
           target_owner_id: string
           target_project_id: string
         }
         Returns: {
           awarded_project_id: string
+          awarded_status: string
           awarded_type: string
-          awarded_xp: number
+          awarded_xp_pending: number
           resulting_building_level: number
-          resulting_level_changed: boolean
           resulting_xp_total: number
         }[]
       }
+      approve_achievement: {
+        Args: {
+          reviewer_note?: string
+          reviewer_user_id?: string
+          target_achievement_id: number
+        }
+        Returns: {
+          approved_count: number
+          building_level: number
+          level_changed: boolean
+          xp_awarded: number
+          xp_total: number
+        }[]
+      }
+      assert_reviewer: { Args: never; Returns: string }
       award_plot_xp: {
         Args: {
           requested_description?: string
@@ -507,6 +711,8 @@ export type Database = {
       }
       create_project: {
         Args: {
+          evidence_link?: string
+          evidence_note?: string
           project_name: string
           project_uuid: string
           project_website_url: string
@@ -542,16 +748,80 @@ export type Database = {
       }
       record_achievement: {
         Args: {
+          evidence_file_path?: string
+          evidence_link?: string
+          evidence_note?: string
           requested_achievement_type: string
           requested_project_id?: string
         }
         Returns: {
           achievement_type: string
           building_level: number
-          level_changed: boolean
           project_id: string
-          xp_awarded: number
+          status: string
+          xp_pending: number
           xp_total: number
+        }[]
+      }
+      record_site_verification: {
+        Args: {
+          checked_url: string
+          tag_found: boolean
+          target_project_id: string
+        }
+        Returns: {
+          verified_at: string
+          verified_url: string
+        }[]
+      }
+      reject_achievement: {
+        Args: {
+          reviewer_note?: string
+          reviewer_user_id?: string
+          target_achievement_id: number
+        }
+        Returns: {
+          building_level: number
+          rejected_type: string
+          xp_total: number
+        }[]
+      }
+      revoke_achievement: {
+        Args: {
+          reviewer_note?: string
+          reviewer_user_id?: string
+          target_achievement_id: number
+        }
+        Returns: {
+          building_level: number
+          level_changed: boolean
+          revoked_type: string
+          xp_removed: number
+          xp_total: number
+        }[]
+      }
+      reward_announcement: {
+        Args: never
+        Returns: {
+          achievements: Json
+          building_level: number
+          level_changed: boolean
+          previous_building_level: number
+          previous_xp_total: number
+          xp_gained: number
+          xp_total: number
+        }[]
+      }
+      set_level_milestone: {
+        Args: {
+          actor_user_id?: string
+          new_required_xp: number
+          target_level: number
+        }
+        Returns: {
+          founders_relevelled: number
+          level: number
+          required_xp: number
         }[]
       }
       switch_claim_project: {
@@ -579,6 +849,37 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "city_developments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      update_achievement_definition: {
+        Args: {
+          actor_user_id?: string
+          new_description?: string
+          new_evidence_hint?: string
+          new_evidence_prompt?: string
+          new_label?: string
+          new_xp_reward?: number
+          target_achievement_type: string
+        }
+        Returns: {
+          achievement_type: string
+          created_at: string
+          description: string
+          evidence_hint: string
+          evidence_prompt: string
+          group_key: string
+          label: string
+          requires_new_project: boolean
+          scope: string
+          sort_order: number
+          tier: number
+          xp_reward: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "achievement_definitions"
           isOneToOne: false
           isSetofReturn: true
         }

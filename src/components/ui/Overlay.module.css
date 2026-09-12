@@ -26,6 +26,13 @@
   backdrop-filter: blur(10px) saturate(0.75);
 }
 
+/* Darker than the rest on purpose. The reward announcement has no surface of its own, so this
+   backdrop is what separates the figure from the city behind it. */
+.reward {
+  background: radial-gradient(circle at 50% 42%, rgb(12 46 48 / 72%), rgb(4 18 20 / 92%) 72%);
+  backdrop-filter: blur(10px) saturate(0.75);
+}
+
 .success {
   background: radial-gradient(circle, rgb(44 168 158 / 14%), rgb(10 35 38 / 62%));
   backdrop-filter: blur(8px) saturate(0.8);

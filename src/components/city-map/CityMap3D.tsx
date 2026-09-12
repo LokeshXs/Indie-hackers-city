@@ -1,6 +1,8 @@
 "use client";
 
-import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useCityPresence } from "@/hooks/useCityPresence";
+
+import { Fragment, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, Preload, useGLTF, useTexture } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -15,8 +17,9 @@ import {
 } from "@/lib/city/constants";
 import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId } from "@/lib/city/types";
 import { useCityDevelopments } from "@/hooks/useCityDevelopments";
+import { useRewardAnnouncement } from "@/hooks/useRewardAnnouncement";
 import { canChoosePremises } from "@/lib/city/unlocks";
-import { CAR_ASSET_PATH, CITY_ASSET_PATHS, PEDESTRIAN_ASSET_PATH } from "./city-assets";
+import { BUILDING_ROOF_ANCHORS, CAR_ASSET_PATH, CITY_ASSET_PATHS, PEDESTRIAN_ASSET_PATH } from "./city-assets";
 import { PremisesUpgradeModal } from "./PremisesUpgradeModal";
 import { contrastRatio } from "./billboard-texture";
 import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
@@ -32,11 +35,13 @@ import { CityLoadingScreen } from "./CityLoadingScreen";
 import { FounderProgressCard } from "./FounderProgressCard";
 import { RoofProps, type RoofPropPlacement } from "./RoofProps";
 import { ClaimSuccessOverlay } from "./ClaimSuccessOverlay";
+import { RewardAnnouncement } from "./RewardAnnouncement";
 import { ProjectCard } from "./ProjectCard";
 import { CafeExperience } from "./CafeExperience";
+import { CafeNightLights } from "./CafeNightLights";
 import { Cars } from "./Cars";
 import { Pedestrians } from "./Pedestrians";
-import { CityBloom, CityTimeProvider, StreetLampGlow, TimeOfDayLighting, useNightBlend } from "./TimeOfDay";
+import { CityBloom, CityTimeProvider, LampGlow, TimeOfDayLighting, useNightBlend } from "./TimeOfDay";
 import { MORNING_ENVIRONMENT, NIGHT_ENVIRONMENT, type CityPhase } from "@/lib/city/time-of-day";
 import {
   Alert,
@@ -405,9 +410,11 @@ const Scene = memo(function Scene({
   constructionPosition,
   focusedPlotId,
   roofProps,
+  onlineIds,
 }: {
   entities: CityEntity[];
   roofProps: RoofPropPlacement[];
+  onlineIds: Set<string>;
   selectedPlotId: string | null;
   hoveredPlotId: string | null;
   selectablePlotIds: Set<string>;
@@ -460,7 +467,7 @@ const Scene = memo(function Scene({
       {/* Sky, fog, sun and moon, all driven from the city clock. At noon this renders exactly the
           five fixed lines it replaced — see MORNING_ENVIRONMENT. */}
       <TimeOfDayLighting />
-      <StreetLampGlow entities={entities} />
+      <LampGlow entities={entities} />
       <WaterSurface />
       <IslandShoreline halfX={CITY_PAVED_HALF_X} halfZ={CITY_PAVED_HALF_Z} />
       <OrbitControls
@@ -488,6 +495,14 @@ const Scene = memo(function Scene({
           scale={PLOT_BUILDING_SCALE}
         >
           <RoofProps development={development} />
+          {onlineIds.has(development.ownerId) && (
+            <Html position={[0, BUILDING_ROOF_ANCHORS[development.building.assetId].bubbleY - 0.6, 0]}
+              center zIndexRange={[8, 1]} style={{ pointerEvents: "none" }}>
+              <span className={styles.onlineBubble} aria-label={`${development.founder.fullName} is online`}>
+                <span aria-hidden="true" />Online
+              </span>
+            </Html>
+          )}
         </group>
       ))}
       {entities.map((entity) => (
@@ -587,6 +602,12 @@ export function CityMap3D({
   activePlotIds,
 }: CityMap3DProps) {
   const { user, isAuthenticated, isLoading: isAuthLoading, signInWithGoogle } = useAuth();
+  const cityPresence = useCityPresence(user);
+  const otherOnlineIds = useMemo(() => {
+    const ids = new Set(cityPresence.onlineIds);
+    if (user) ids.delete(user.id);
+    return ids;
+  }, [cityPresence.onlineIds, user]);
   const {
     developments,
     applyDevelopment,
@@ -598,6 +619,12 @@ export function CityMap3D({
     initialDevelopments,
     initialDevelopmentLoadError,
   );
+  // Asked once per sign-in: approval is asynchronous, so anything an admin decided since the
+  // founder last looked has to be delivered on the next load rather than at the moment it happened.
+  const {
+    announcement: rewardAnnouncement,
+    dismiss: dismissRewardAnnouncement,
+  } = useRewardAnnouncement(user?.id);
   // Which way the city is set. The only thing React knows about the lighting: the travel between
   // the two phases happens inside the frame loop — see NightBlend.
   const [cityPhase, setCityPhase] = useState<CityPhase>("morning");
@@ -1118,6 +1145,15 @@ export function CityMap3D({
         <p>Choose a plot and found your first startup.</p>
       </Panel>
       <AccountMenu />
+      {cityPresence.notice.length > 0 && (
+        <aside className={styles.onlineToast} role="status" aria-live="polite">
+          <span className={styles.onlineDot} aria-hidden="true" />
+          <span>{cityPresence.notice.length === 1
+            ? `${cityPresence.notice[0].name} came online`
+            : `${cityPresence.notice[0].name} and ${cityPresence.notice.length - 1} others came online`}</span>
+          <button type="button" aria-label="Dismiss online notification" onClick={cityPresence.dismissNotice}>×</button>
+        </aside>
+      )}
       <CityAssetErrorBoundary onError={handleAssetError} resetKey={assetBoundaryResetKey}>
         <Canvas
           className={styles.canvas}
@@ -1131,6 +1167,7 @@ export function CityMap3D({
             <Scene
               entities={sceneEntities}
               roofProps={roofPropPlacements}
+              onlineIds={otherOnlineIds}
               selectedPlotId={selectedPlotId}
               hoveredPlotId={hoveredPlotId}
               selectablePlotIds={selectablePlotIds}
@@ -1146,7 +1183,10 @@ export function CityMap3D({
             <Pedestrians entities={district.entities} />
             <Cars entities={district.entities} />
             {district.entities.filter((entity) => entity.assetId === "coffee-shop").map((entity) => (
-              <CafeExperience key={entity.id} entity={entity} user={user} signInWithGoogle={signInWithGoogle} />
+              <Fragment key={entity.id}>
+                <CafeNightLights entity={entity} />
+                <CafeExperience entity={entity} user={user} signInWithGoogle={signInWithGoogle} />
+              </Fragment>
             ))}
             <SceneReadySignal onReady={handleSceneReady} />
           </Suspense>
@@ -1345,6 +1385,12 @@ export function CityMap3D({
           </Modal.Split>
         </Modal>
       )}
+      {/* Gated on loadingComplete like the premises modal. Without it the overlay mounts the moment
+          the RPC answers -- while the loading screen still covers the city -- and the XP counts
+          itself up to the final figure where nobody can see it. */}
+      {rewardAnnouncement && !completedProject && loadingComplete ? (
+        <RewardAnnouncement announcement={rewardAnnouncement} onDismiss={dismissRewardAnnouncement} />
+      ) : null}
       {completedProject && (
         <ClaimSuccessOverlay
           districtName={district.name}

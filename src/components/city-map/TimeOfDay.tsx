@@ -16,7 +16,7 @@ import {
   type CityPhase,
 } from "@/lib/city/time-of-day";
 import { applyNightBlend } from "./night-materials";
-import type { CityEntity } from "./map-types";
+import type { CityAssetId, CityEntity } from "./map-types";
 
 /** How night it is, right now, without re-rendering anything.
  *
@@ -153,16 +153,61 @@ export const TimeOfDayLighting = memo(function TimeOfDayLighting() {
   );
 });
 
-/** Height of a lamp's globe above its footing, measured off scripts/props/build-street-lamp.py. */
-const LAMP_GLOBE_HEIGHT = 3.14;
-/** Across the halo, and across the pool of light it throws on the pavement. */
-const LAMP_HALO_SIZE = 3.5;
-const LAMP_POOL_SIZE = 7;
-/** Opacity of each at full night. The pool stays the fainter of the two: the halo is the lamp
- * being bright, the pool is only where that brightness lands, and matching them turns eighteen
- * lamps into eighteen discs painted on the road. */
-const LAMP_HALO_OPACITY = 0.98;
-const LAMP_POOL_OPACITY = 0.34;
+/** How each kind of lamp in the kit throws its light, measured off its own build script.
+ *
+ * `lit` is the height of the light itself above the lamp's footing. The rest is how big the haze
+ * around it is, how far the pool on the ground spreads, and how strong each is at full night. The
+ * pool stays the fainter of the two throughout: the halo is the lamp being bright, the pool is only
+ * where that brightness lands, and matching them turns a street of lamps into a street of discs
+ * painted on the road.
+ *
+ * Both entries are placed unscaled, so these are world units. Anything not in this table simply
+ * gets no glow -- which is the right default for the rest of the kit. */
+interface LampGlowKind {
+  lit: number;
+  /** The bulb: small and bright, drawn over the haze. */
+  coreSize: number;
+  coreOpacity: number;
+  /** The haze in the air around it: several times the core, much softer, and deliberately kept
+   * tight. Haze is what you see looking AT a lamp, and it belongs close to the globe -- spread wide
+   * it stops being air catching the light and becomes a disc pasted over the buildings behind. The
+   * reach belongs to the pool below, which is on the ground where light actually travels. */
+  haloSize: number;
+  haloOpacity: number;
+  /** Where that light lands. The widest of the three and the faintest by area, because a pool as
+   * strong as its halo reads as a second lamp lying on the road.
+   *
+   * Opacity comes DOWN as these sizes go up, and has to: a quad's area grows with the square of
+   * its size, so widening the reach at a fixed strength does not spread the same light further --
+   * it pours several times as much onto the ground, and a street of overlapping pools washes out
+   * into one flat sheet. Reach is the size; brightness is the opposite adjustment. */
+  poolSize: number;
+  poolOpacity: number;
+}
+
+const LAMP_GLOW_KINDS: Partial<Record<CityAssetId, LampGlowKind>> = {
+  "street-lamp": {
+    lit: 3.14,
+    coreSize: 1.15,
+    coreOpacity: 0.95,
+    haloSize: 6.5,
+    haloOpacity: 0.52,
+    poolSize: 30,
+    poolOpacity: 0.165,
+  },
+  // Lower, smaller and softer on every axis. A carriageway lamp lights a road; these light the
+  // Coffee House's terrace and the lanes between the plots, and at the street's strength they
+  // would out-shine the shopfronts they stand outside.
+  "cafe-lamp": {
+    lit: 1.78,
+    coreSize: 0.78,
+    coreOpacity: 0.82,
+    haloSize: 4,
+    haloOpacity: 0.4,
+    poolSize: 18,
+    poolOpacity: 0.13,
+  },
+};
 
 /** A soft round gradient, painted once into a canvas.
  *
@@ -170,7 +215,7 @@ const LAMP_POOL_OPACITY = 0.34;
  * shader, and this is a 128px texture shared by every lamp on the map. Returns null where there is
  * no 2D canvas to paint into, which is jsdom -- the glow is then simply absent, and the tests that
  * render the map do not care. */
-function radialGlowTexture(): THREE.Texture | null {
+export function radialGlowTexture(stops: ReadonlyArray<readonly [number, string]>): THREE.Texture | null {
   const canvas = document.createElement("canvas");
   canvas.width = 128;
   canvas.height = 128;
@@ -178,10 +223,7 @@ function radialGlowTexture(): THREE.Texture | null {
   if (!context) return null;
 
   const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
-  gradient.addColorStop(0, "rgba(255, 236, 190, 1)");
-  gradient.addColorStop(0.22, "rgba(255, 216, 140, 0.72)");
-  gradient.addColorStop(0.55, "rgba(255, 186, 94, 0.22)");
-  gradient.addColorStop(1, "rgba(255, 170, 80, 0)");
+  for (const [offset, color] of stops) gradient.addColorStop(offset, color);
   context.fillStyle = gradient;
   context.fillRect(0, 0, 128, 128);
 
@@ -190,9 +232,56 @@ function radialGlowTexture(): THREE.Texture | null {
   return texture;
 }
 
-interface LampGlowAssets {
+/** The spill: a long, gentle falloff, warm all the way out.
+ *
+ * The shape of this curve is the whole difference between a lamp and a candle. The first version
+ * was down to a fifth of its strength by the halfway mark, which put nearly all the light in the
+ * middle few pixels -- a hot point with a quick edge, which is a flame. Real lamplight does the
+ * opposite: it holds most of its strength well out from the source and then takes a long time to
+ * reach nothing. Eight stops rather than four, because canvas interpolates linearly between them
+ * and a curve this shallow needs the samples to stay smooth. */
+const LAMP_GLOW_STOPS = [
+  [0, "rgba(255, 240, 200, 0.95)"],
+  [0.12, "rgba(255, 234, 182, 0.86)"],
+  [0.26, "rgba(255, 222, 154, 0.64)"],
+  [0.42, "rgba(255, 208, 128, 0.42)"],
+  [0.58, "rgba(255, 194, 106, 0.25)"],
+  [0.74, "rgba(255, 182, 90, 0.13)"],
+  [0.88, "rgba(255, 174, 82, 0.05)"],
+  [1, "rgba(255, 170, 80, 0)"],
+] as const;
+
+/** The core: the bulb itself, small and hot.
+ *
+ * Kept as a separate texture rather than folded into the spill above, and that split is the other
+ * half of the fix. One gradient cannot be both -- widen it and the source stops reading as a
+ * source, tighten it and the spill disappears -- so the lamp is drawn as two sprites: a small
+ * bright disc for the globe, sitting inside a much larger soft one for the light it throws. */
+const LAMP_CORE_STOPS = [
+  [0, "rgba(255, 252, 240, 1)"],
+  [0.3, "rgba(255, 242, 206, 0.78)"],
+  [0.62, "rgba(255, 224, 158, 0.22)"],
+  [1, "rgba(255, 214, 140, 0)"],
+] as const;
+
+/** A neutral falloff for anything that would rather tint its own glow through the material, which
+ * is what the traffic does -- one texture serving a warm headlight wash and a red tail wash. */
+export const NEUTRAL_GLOW_STOPS = [
+  [0, "rgba(255, 255, 255, 1)"],
+  [0.28, "rgba(255, 255, 255, 0.66)"],
+  [0.62, "rgba(255, 255, 255, 0.2)"],
+  [1, "rgba(255, 255, 255, 0)"],
+] as const;
+
+interface LampGlowMaterials {
+  core: THREE.SpriteMaterial;
   halo: THREE.SpriteMaterial;
   pool: THREE.MeshBasicMaterial;
+}
+
+interface LampGlowAssets {
+  /** One set of materials per kind of lamp, so each can be faded to its own strength. */
+  kinds: Map<CityAssetId, LampGlowMaterials>;
   plane: THREE.PlaneGeometry;
 }
 
@@ -201,55 +290,69 @@ let lampGlowAssets: LampGlowAssets | null | undefined;
 
 /** The texture, two materials and one quad every lamp on the map shares.
  *
+ * Exported so the Coffee House's door lamps can wear the same halo. Sharing the material also
+ * shares its fade: StreetLampGlow already drives this one's opacity every frame, so a borrower gets
+ * the cycle for free and cannot fall out of step with the street.
+ *
  * Module state rather than a useMemo, which is the same shape RoofProps' garland uses and for the
  * same two reasons: the assets are identical for every district, and building them on first use
  * keeps the cost off any test that merely imports this module. They are never disposed, because
  * there is exactly one set and the map holds it for as long as the page is open. */
-function getLampGlowAssets(): LampGlowAssets | null {
+export function getLampGlowAssets(): LampGlowAssets | null {
   if (lampGlowAssets !== undefined) return lampGlowAssets;
 
-  const map = radialGlowTexture();
-  lampGlowAssets = map
-    ? {
-      halo: new THREE.SpriteMaterial({
-        map,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        // Depth-tested on purpose: the lamps stand among trees and beside buildings, and a halo
-        // that survives them reads as a decal in front of the city rather than as light in the
-        // air around a globe.
-        depthTest: true,
-        toneMapped: false,
-      }),
+  const spill = radialGlowTexture(LAMP_GLOW_STOPS);
+  const core = radialGlowTexture(LAMP_CORE_STOPS);
+  if (!spill || !core) {
+    lampGlowAssets = null;
+    return lampGlowAssets;
+  }
+
+  const sprite = (map: THREE.Texture) => new THREE.SpriteMaterial({
+    map,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    // Depth-tested on purpose: the lamps stand among trees and beside buildings, and a halo that
+    // survives them reads as a decal in front of the city rather than as light in the air.
+    depthTest: true,
+    toneMapped: false,
+  });
+
+  const kinds = new Map<CityAssetId, LampGlowMaterials>();
+  for (const assetId of Object.keys(LAMP_GLOW_KINDS) as CityAssetId[]) {
+    kinds.set(assetId, {
+      core: sprite(core),
+      halo: sprite(spill),
       pool: new THREE.MeshBasicMaterial({
-        map,
+        map: spill,
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false,
       }),
-      plane: new THREE.PlaneGeometry(LAMP_POOL_SIZE, LAMP_POOL_SIZE),
-    }
-    : null;
+    });
+  }
+
+  lampGlowAssets = { kinds, plane: new THREE.PlaneGeometry(1, 1) };
   return lampGlowAssets;
 }
 
-/** The haze around each street lamp, and the light it puts on the pavement.
+/** The haze around each lamp, and the light it puts on the ground.
  *
  * The lamp glbs glow on their own -- that is the material table doing its work -- but a glowing
- * globe is a bright dot, not a light. This is what makes the street read as lit: a halo in the air
- * and a pool on the ground, both additive, both fading in with the switch.
+ * globe is a bright dot, not a light. This is what makes a street or a terrace read as lit: a halo
+ * in the air and a pool on the ground, both additive, both fading in with the switch.
  *
- * ALL EIGHTEEN LAMPS SHARE TWO MATERIALS, which is the whole reason this is affordable. Fading them
- * is two property writes a frame however many lamps the district grows to, and the thirty-six
- * objects they are worn by are small transparent quads that were going to be cheap regardless.
+ * EVERY LAMP OF A KIND SHARES ONE PAIR OF MATERIALS, which is the whole reason this is affordable.
+ * Fading them is two property writes per kind per frame however many lamps the district grows to,
+ * and the quads they are worn by are small and transparent.
  *
- * Deliberately not real point lights. Eighteen of those would recompile every material on the map
- * and cost more than the rest of the scene put together, to light a city that is already readable. */
-export const StreetLampGlow = memo(function StreetLampGlow({
+ * Deliberately not real point lights. Twenty of those would recompile every material on the map and
+ * cost more than the rest of the scene put together, to light a city that is already readable. */
+export const LampGlow = memo(function LampGlow({
   entities,
 }: {
   entities: readonly CityEntity[];
@@ -257,7 +360,10 @@ export const StreetLampGlow = memo(function StreetLampGlow({
   const blend = useNightBlend();
   const glow = getLampGlowAssets();
   const lamps = useMemo(
-    () => entities.filter((entity) => entity.assetId === "street-lamp"),
+    () => entities.flatMap((entity) => {
+      const kind = LAMP_GLOW_KINDS[entity.assetId];
+      return kind ? [{ entity, kind }] : [];
+    }),
     [entities],
   );
 
@@ -268,24 +374,37 @@ export const StreetLampGlow = memo(function StreetLampGlow({
     const assets = getLampGlowAssets();
     if (!assets) return;
     const t = blend?.current ?? 0;
-    assets.halo.opacity = LAMP_HALO_OPACITY * t;
-    assets.pool.opacity = LAMP_POOL_OPACITY * t;
     // Nothing to draw at noon, and a transparent quad still costs a draw call and a blend.
-    assets.halo.visible = t > 0.002;
-    assets.pool.visible = t > 0.002;
+    const lit = t > 0.002;
+    for (const [assetId, materials] of assets.kinds) {
+      const kind = LAMP_GLOW_KINDS[assetId];
+      if (!kind) continue;
+      materials.core.opacity = kind.coreOpacity * t;
+      materials.halo.opacity = kind.haloOpacity * t;
+      materials.pool.opacity = kind.poolOpacity * t;
+      materials.core.visible = lit;
+      materials.halo.visible = lit;
+      materials.pool.visible = lit;
+    }
   });
 
   if (!glow) return null;
 
   return (
-    <group name="street-lamp-glow">
-      {lamps.map((lamp) => (
-        <group key={`${lamp.id}-glow`} position={[lamp.position.x, lamp.position.y, lamp.position.z]}>
-          <sprite material={glow.halo} position={[0, LAMP_GLOBE_HEIGHT, 0]} scale={[LAMP_HALO_SIZE, LAMP_HALO_SIZE, 1]} />
-          {/* Just clear of the paving pad the lamp stands on, which is 0.10 deep. */}
-          <mesh material={glow.pool} geometry={glow.plane} position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={1} raycast={() => null} />
-        </group>
-      ))}
+    <group name="lamp-glow">
+      {lamps.map(({ entity, kind }) => {
+        const materials = glow.kinds.get(entity.assetId);
+        if (!materials) return null;
+        return (
+          <group key={`${entity.id}-glow`} position={[entity.position.x, entity.position.y, entity.position.z]}>
+            <sprite material={materials.halo} position={[0, kind.lit, 0]} scale={[kind.haloSize, kind.haloSize, 1]} />
+            {/* Drawn after the haze, so the bulb sits inside it rather than behind it. */}
+            <sprite material={materials.core} position={[0, kind.lit, 0]} scale={[kind.coreSize, kind.coreSize, 1]} renderOrder={2} />
+            {/* Just clear of whatever the lamp is footed on, so the pool never z-fights it. */}
+            <mesh material={materials.pool} geometry={glow.plane} position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[kind.poolSize, kind.poolSize, 1]} renderOrder={1} raycast={() => null} />
+          </group>
+        );
+      })}
     </group>
   );
 });

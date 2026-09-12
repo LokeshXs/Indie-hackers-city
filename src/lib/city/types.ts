@@ -88,6 +88,18 @@ export interface AchievementDefinition {
   tier: number;
   /** product_launched is claimed by creating a project, not by picking one. */
   requiresNewProject: boolean;
+  /** What the evidence step asks for, and the note under the field explaining what is wanted.
+   * Both live in the catalog so re-wording an ask is an UPDATE, not a deploy. */
+  evidencePrompt: string;
+  evidenceHint: string;
+}
+
+/** What a founder attaches to a claim. At least one of `link` or `filePath` is required -- a note
+ * on its own is the claim restated, not evidence for it. */
+export interface AchievementEvidence {
+  link?: string;
+  filePath?: string;
+  note?: string;
 }
 
 /** One row of the founder's portfolio. Assembled client-side from `projects` and
@@ -99,15 +111,28 @@ export interface FounderProject {
   type: ProjectType;
   /** True for the single project standing on the plot's billboard. */
   isShowcased: boolean;
+  /** Rungs an admin has approved. These are the ones that paid XP. */
   achievements: AchievementType[];
+  /** Rungs filed and waiting on a decision. Kept apart from `achievements` because the two read
+   * very differently to a founder: one is a badge, the other is a promise. */
+  pendingAchievements: AchievementType[];
+  /** Goes in a meta tag on the product's own site. Public by design: knowing a project's token is
+   * no help unless you can also put it on a site you do not control. */
+  verificationToken: string;
+  /** The tag was found, and the project still points at the site it was found on. */
+  isVerified: boolean;
   createdAt: string;
 }
 
-export interface AwardedAchievement {
+/** What filing a claim gets you: a place in the queue, and the number the reviewer will see.
+ * Deliberately carries no `xpAwarded` or `levelChanged` -- submission moves nothing, and a field
+ * that is always zero is an invitation to render it. */
+export interface SubmittedAchievement {
   achievementType: AchievementType;
-  projectId: string;
-  xpAwarded: number;
+  projectId: string | null;
+  status: "pending";
+  /** What approving this would grant, cascade included. */
+  xpPending: number;
   xpTotal: number;
   buildingLevel: StartupBuildingLevel;
-  levelChanged: boolean;
 }

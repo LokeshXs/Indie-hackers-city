@@ -15,6 +15,7 @@ export type CityApiErrorCode =
   | "project_url_taken"
   | "project_already_exists"
   | "showcase_required"
+  | "evidence_required"
   | "reward_locked"
   | "premises_already_chosen"
   | "unexpected_error";
@@ -39,6 +40,8 @@ const KNOWN_RPC_ERRORS = new Set([
   "project_not_owned",
   "claim_not_found",
   "invalid_achievement",
+  "invalid_evidence",
+  "evidence_required",
   "showcase_required",
   "reward_locked",
 ]);
@@ -54,9 +57,10 @@ export function rpcErrorCode(error: Pick<PostgrestError, "message">): CityApiErr
   if (code === "project_not_owned") return "project_not_owned";
   if (code === "claim_not_found") return "claim_not_found";
   if (code === "showcase_required") return "showcase_required";
+  if (code === "evidence_required") return "evidence_required";
   if (code === "reward_locked") return "reward_locked";
   if (code && CONFLICT_ERRORS.has(code)) return code as CityApiErrorCode;
-  if (code === "invalid_project" || code === "invalid_building" || code === "invalid_achievement") {
+  if (["invalid_project", "invalid_building", "invalid_achievement", "invalid_evidence"].includes(code ?? "")) {
     return "invalid_request";
   }
   return "unexpected_error";
@@ -67,7 +71,7 @@ export function errorResponse(code: CityApiErrorCode, message: string, status?: 
     code === "not_authenticated" ? 401
       : code === "reward_locked" ? 403
       : CONFLICT_ERRORS.has(code) ? 409
-        : ["invalid_request", "inactive_plot", "project_not_owned", "claim_not_found", "showcase_required"].includes(code) ? 400
+        : ["invalid_request", "inactive_plot", "project_not_owned", "claim_not_found", "showcase_required", "evidence_required"].includes(code) ? 400
           : 500
   );
   return NextResponse.json({ error: { code, message } }, { status: responseStatus });

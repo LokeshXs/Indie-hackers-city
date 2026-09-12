@@ -12,3 +12,5 @@
 
 .error { border-left-color: var(--rose); background: var(--rose-wash); color: #a92f51; }
 .warning { border-left-color: var(--gold); background: rgb(229 168 70 / 12%); color: var(--amber-ink); }
+/* Used for "filed, now waiting" -- an outcome, not a problem, so it reads calm rather than loud. */
+.notice { border-left-color: var(--teal-400); background: var(--teal-wash); color: var(--teal-600); }

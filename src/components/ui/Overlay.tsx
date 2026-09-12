@@ -3,7 +3,7 @@ import { cn } from "@/lib/ui/cn";
 import styles from "./Overlay.module.css";
 
 export type OverlayContainment = "absolute" | "fixed";
-export type OverlayTone = "plot" | "alert" | "success";
+export type OverlayTone = "plot" | "alert" | "success" | "reward";
 
 export interface OverlayProps {
   /** "absolute" scopes the overlay to the nearest positioned ancestor (the city

@@ -1,0 +1,31 @@
+/* An odometer. Each slot is a one-line window onto a ten-digit strip; only the strip moves. */
+
+.number {
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+  /* Every wheel is 1em tall, so the window has to be exactly one line however the text around it
+     is set. Without this an inherited line-height shows slivers of the neighbouring digits. */
+  line-height: 1;
+}
+
+.slot {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+}
+
+.cell {
+  display: block;
+  height: 1em;
+  line-height: 1;
+  text-align: center;
+  /* The window clips, and a shadow cast by a digit parked off-screen would be clipped to the
+     window's edges -- drawing a lit rectangle around the figure. The glow lives behind the whole
+     number instead, on .count::before, where nothing clips it. */
+  text-shadow: none;
+}
