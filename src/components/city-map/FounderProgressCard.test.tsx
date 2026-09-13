@@ -23,7 +23,7 @@ describe("FounderProgressCard", () => {
     const onViewBuilding = vi.fn();
     const buttonRef = createRef<HTMLButtonElement>();
     const user = userEvent.setup();
-    render(<FounderProgressCard development={development} buttonRef={buttonRef} onViewBuilding={onViewBuilding} />);
+    render(<FounderProgressCard onShare={vi.fn()} development={development} buttonRef={buttonRef} onViewBuilding={onViewBuilding} />);
 
     // 185 sits on the leg between the 100 and 240 rungs: 55 short of the scrolling billboard.
     const card = screen.getByRole("button", {
@@ -43,7 +43,7 @@ describe("FounderProgressCard", () => {
   // building level: the card ignores the level thresholds entirely, and drops the bar rather than
   // showing one that is full with nothing beyond it.
   it("drops the bar once every reward is earned, and ignores level thresholds", () => {
-    render(<FounderProgressCard
+    render(<FounderProgressCard onShare={vi.fn()}
       development={{
         ...development,
         building: { ...development.building, level: 5 },
@@ -62,15 +62,15 @@ describe("FounderProgressCard", () => {
   // a button, whose accessible name computation flattens its contents, so the distance travels in
   // the button's own label instead. Anyone adding the role here should have to delete this line.
   it("keeps the bar out of the accessibility tree, putting the reward in the label", () => {
-    render(<FounderProgressCard development={development} onViewBuilding={() => undefined} />);
+    render(<FounderProgressCard onShare={vi.fn()} development={development} onViewBuilding={() => undefined} />);
 
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-    expect(screen.getByRole("button")).toHaveAccessibleName(/Scrolling billboard, 55 XP to go/);
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveAccessibleName(/Scrolling billboard, 55 XP to go/);
   });
 
   it("measures the bar across the current leg, not from zero", () => {
     const { container } = render(
-      <FounderProgressCard development={development} onViewBuilding={() => undefined} />,
+      <FounderProgressCard onShare={vi.fn()} development={development} onViewBuilding={() => undefined} />,
     );
 
     // 85 of the 140 between the 100 and 240 rungs. From zero this would be 77%, which is the
@@ -82,25 +82,35 @@ describe("FounderProgressCard", () => {
 
   it("starts a new founder on a real leg from zero", () => {
     const { container } = render(
-      <FounderProgressCard
+      <FounderProgressCard onShare={vi.fn()}
         development={{ ...development, progression: { ...development.progression, xp: 10 } }}
         onViewBuilding={() => undefined}
       />,
     );
 
     expect(container.querySelector('[style*="--fill"]')).toHaveStyle({ "--fill": "10%" });
-    expect(screen.getByRole("button")).toHaveTextContent("Roof lights");
-    expect(screen.getByRole("button")).toHaveTextContent("90 XP to go");
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("Roof lights");
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("90 XP to go");
   });
 
   it("names a rung that has a threshold but no reward yet", () => {
-    render(<FounderProgressCard
+    render(<FounderProgressCard onShare={vi.fn()}
       development={{ ...development, progression: { ...development.progression, xp: 500 } }}
       onViewBuilding={() => undefined}
     />);
 
     // 570 is a placeholder: a real landing on the earning curve, with nothing designed for it yet.
-    expect(screen.getByRole("button")).toHaveTextContent("A new reward");
-    expect(screen.getByRole("button")).toHaveTextContent("570 XP");
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("A new reward");
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("570 XP");
   });
+});
+
+it("keeps Share and View my building independent without nested buttons", async () => {
+  const onShare = vi.fn(), onViewBuilding = vi.fn();
+  const user = userEvent.setup();
+  const { container } = render(<FounderProgressCard development={development} onShare={onShare} onViewBuilding={onViewBuilding} />);
+  await user.click(screen.getByRole("button", { name: "Share" }));
+  expect(onShare).toHaveBeenCalledOnce();
+  expect(onViewBuilding).not.toHaveBeenCalled();
+  expect(container.querySelector("button button")).toBeNull();
 });

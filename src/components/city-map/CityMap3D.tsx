@@ -32,6 +32,10 @@ import {
 import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
+import { PlotShareModal } from "./PlotShareModal";
+import { ShareCapture, type CapturePlot } from "./ShareCapture";
+import { SharedPlotArrival } from "./SharedPlotArrival";
+import type { PlotShareResult } from "@/lib/sharing/shared";
 import { OnlineFounderMarker } from "./OnlineFounderMarker";
 import { plotStatusLabel } from "@/lib/city/status";
 import { FounderProgressCard } from "./FounderProgressCard";
@@ -63,6 +67,8 @@ export interface CityMap3DProps {
   initialDevelopments: CityDevelopmentRecord;
   initialDevelopmentLoadError?: boolean;
   initialClaimPlotId?: string;
+  initialFocusPlotId?: string;
+  initialShareUnavailable?: boolean;
   initialAuthError?: "oauth";
   /** Plots that can still be claimed. A plot outside this set is inert: not clickable, never
    * highlighted, and absent from the keyboard plot list. Until now `is_active` was enforced only
@@ -117,7 +123,7 @@ const PlotHighlight = memo(function PlotHighlight({ selected }: { selected: bool
   });
 
   return (
-    <group ref={highlightRef} position={[0, 0.16, 0]}>
+    <group ref={highlightRef} position={[0, 0.16, 0]} userData={{ excludeFromShare: true }}>
       <mesh raycast={() => null} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[11.15, 10.05]} />
         <meshBasicMaterial
@@ -604,6 +610,8 @@ export function CityMap3D({
   initialDevelopments,
   initialDevelopmentLoadError,
   initialClaimPlotId,
+  initialFocusPlotId,
+  initialShareUnavailable = false,
   initialAuthError,
   activePlotIds,
 }: CityMap3DProps) {
@@ -655,6 +663,11 @@ export function CityMap3D({
   const [construction, setConstruction] = useState<ConstructionState | null>(null);
   const [completedProject, setCompletedProject] = useState<ClaimedDeed | null>(null);
   const [focusedPlotId, setFocusedPlotId] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [arrivalFinished, setArrivalFinished] = useState(false);
+  const shareButtonRef = useRef<HTMLButtonElement>(null);
+  const captureRef = useRef<CapturePlot | null>(null);
+  const shareRequestRef = useRef<{ id: string; image?: Blob; revision: string; phase: CityPhase; plotId: string; result?: PlotShareResult } | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [loadingComplete, setLoadingComplete] = useState(false);
   // Session-scoped only, on purpose. Nothing records that a founder has seen the premises chooser,
@@ -667,7 +680,8 @@ export function CityMap3D({
   const [statusMessage, setStatusMessage] = useState(
     initialDevelopmentLoadError
       ? "The city could not refresh its developments. You can still explore."
-      : "Choose an empty plot to found a startup.",
+      : initialShareUnavailable ? "This shared plot is no longer available. You can still explore the city."
+        : "Choose an empty plot to found a startup.",
   );
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const shellRef = useRef<HTMLElement>(null);
@@ -1130,6 +1144,56 @@ export function CityMap3D({
     setStatusMessage(`Viewing ${ownerDevelopment.project.name}.`);
   }
 
+  const arrivalPlot = initialFocusPlotId ? plotEntities.find((plot) => plot.plotId === initialFocusPlotId) : undefined;
+  const arrivalPosition = arrivalPlot ? getBuildingPlacement(arrivalPlot).position : undefined;
+  const completeArrival = useCallback(() => {
+    setArrivalFinished(true);
+    if (initialFocusPlotId) {
+      setFocusedPlotId(initialFocusPlotId);
+      setInspectedPlotId(initialFocusPlotId);
+      projectCardReturnFocusRef.current = shellRef.current;
+      setStatusMessage("Welcome to this founder’s plot.");
+    }
+  }, [initialFocusPlotId]);
+  const cancelArrival = useCallback(() => setArrivalFinished(true), []);
+
+  function openShare() {
+    if (!ownPlot) return;
+    shareRequestRef.current = { id: crypto.randomUUID(), revision: ownPlot.updatedAt, phase: cityPhase, plotId: ownPlot.plotId };
+    setShareOpen(true);
+  }
+  function closeShare() {
+    setShareOpen(false);
+    window.requestAnimationFrame(() => shareButtonRef.current?.focus());
+  }
+  async function prepareShare(signal: AbortSignal): Promise<PlotShareResult> {
+    const request = shareRequestRef.current;
+    if (!request || !captureRef.current) throw new Error("The city is still loading. Please retry.");
+    if (request.result) return request.result;
+    const plot = plotEntities.find((entity) => entity.plotId === request.plotId);
+    if (!plot) throw new Error("Your plot could not be found.");
+    const position = getBuildingPlacement(plot).position;
+    request.image ??= await captureRef.current(new THREE.Vector3(position.x, position.y, position.z), request.phase, signal, plot.rotationY ?? 0);
+    if (signal.aborted) throw new Error("Share cancelled");
+    const form = new FormData();
+    form.set("requestId", request.id); form.set("phase", request.phase); form.set("revision", request.revision);
+    form.set("scene", request.image, "map.png");
+    const response = await fetch("/api/plot-shares", { method: "POST", body: form, signal });
+    const result = await response.json() as PlotShareResult & { error?: { code: string; message: string } };
+    if (!response.ok) {
+      if (result.error?.code === "stale_share") {
+        const latest = await refresh();
+        const updated = latest?.[request.plotId];
+        if (updated) {
+          shareRequestRef.current = { id: crypto.randomUUID(), revision: updated.updatedAt, phase: cityPhase, plotId: updated.plotId };
+        }
+      }
+      throw new Error(result.error?.message || "Your image could not be prepared. Please retry.");
+    }
+    request.result = result;
+    return result;
+  }
+
   function closeInspectedProject() {
     const returnFocus = projectCardReturnFocusRef.current;
     projectCardReturnFocusRef.current = null;
@@ -1178,7 +1242,7 @@ export function CityMap3D({
               controlsRef={controlsRef}
               construction={selectedPlotId ? null : construction}
               constructionPosition={constructionPosition}
-              focusedPlotId={focusedPlotId}
+              focusedPlotId={focusedPlotId ?? (loadingComplete && !arrivalFinished ? initialFocusPlotId ?? null : null)}
             />
             <Preload all />
             <Pedestrians entities={district.entities} />
@@ -1190,6 +1254,10 @@ export function CityMap3D({
               </Fragment>
             ))}
             <SceneReadySignal onReady={handleSceneReady} />
+            <ShareCapture captureRef={captureRef} />
+            {loadingComplete && !arrivalFinished && arrivalPosition ? (
+              <SharedPlotArrival position={arrivalPosition} controlsRef={controlsRef} onComplete={completeArrival} onCancel={cancelArrival} />
+            ) : null}
           </Suspense>
           {/* Last child, and mounted only after dark — see CityBloom. */}
           <CityBloom />
@@ -1207,8 +1275,12 @@ export function CityMap3D({
           development={ownPlot}
           buttonRef={founderProgressButtonRef}
           onViewBuilding={openOwnerProjectFromProgress}
+          onShare={openShare}
+          shareButtonRef={shareButtonRef}
+          shareDisabled={!loadingComplete || Boolean(construction)}
         />
       ) : null}
+      {shareOpen && ownPlot ? <PlotShareModal development={ownPlot} prepare={prepareShare} onClose={closeShare} /> : null}
       {hasPendingUpdates ? (
         <aside className={`${styles.cityUpdateNotice} ${ownPlot ? styles.cityUpdateNoticeWithProgress : ""}`} aria-live="polite" aria-label="City updates available">
           <span className={styles.cityUpdateMarker} aria-hidden="true">◆</span>
@@ -1231,7 +1303,7 @@ export function CityMap3D({
           onRetry={retryAssetLoading}
         />
       ) : null}
-      {ownPlot && premisesAvailable && !premisesDismissed && loadingComplete ? (
+      {ownPlot && premisesAvailable && !premisesDismissed && loadingComplete && !initialFocusPlotId ? (
         <PremisesUpgradeModal
           development={ownPlot}
           onClose={() => {
@@ -1389,7 +1461,7 @@ export function CityMap3D({
       {/* Gated on loadingComplete like the premises modal. Without it the overlay mounts the moment
           the RPC answers -- while the loading screen still covers the city -- and the XP counts
           itself up to the final figure where nobody can see it. */}
-      {rewardAnnouncement && !completedProject && loadingComplete ? (
+      {rewardAnnouncement && !completedProject && loadingComplete && !initialFocusPlotId && !shareOpen ? (
         <RewardAnnouncement announcement={rewardAnnouncement} onDismiss={dismissRewardAnnouncement} />
       ) : null}
       {completedProject && (

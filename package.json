@@ -40,6 +40,7 @@
     "postprocessing": "^6.39.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sharp": "^0.35.3",
     "three": "^0.185.1"
   },
   "devDependencies": {
