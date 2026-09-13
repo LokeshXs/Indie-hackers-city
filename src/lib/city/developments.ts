@@ -32,6 +32,7 @@ export function serializeCityDevelopment(row: CityDevelopmentRow): CityDevelopme
   return {
     plotId: row.plot_id!,
     ownerId: row.owner_id!,
+    statusText: row.status_text ?? null,
     project: {
       id: row.project_id!,
       name: row.project_name!,

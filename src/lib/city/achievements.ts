@@ -15,12 +15,9 @@ type ProjectAchievementRow = Database["public"]["Tables"]["project_achievements"
 type ProjectRow = Database["public"]["Tables"]["projects"]["Row"];
 
 /** Exactly the columns the portfolio reads. Pinned to a Pick rather than the whole Row so that a
- * column added to `projects` -- the verification token was the first -- does not silently make the
- * select and this signature disagree. */
+ * column added to `projects` does not silently make the select and this signature disagree. */
 type FounderProjectRow = Pick<
-  ProjectRow,
-  "id" | "name" | "website_url" | "project_type" | "created_at"
-  | "verification_token" | "verified_at" | "verified_url"
+  ProjectRow, "id" | "name" | "website_url" | "project_type" | "created_at"
 >;
 
 export function isAchievementType(value: unknown): value is AchievementType {
@@ -90,10 +87,6 @@ export function serializeFounderProjects(
     isShowcased: row.id === showcasedProjectId,
     achievements: approvedByProject.get(row.id) ?? [],
     pendingAchievements: pendingByProject.get(row.id) ?? [],
-    verificationToken: row.verification_token,
-    // Verified *and* still pointing at the site that was checked. Repointing the project leaves
-    // verified_url behind, which is exactly when the badge should stop showing.
-    isVerified: row.verified_at !== null && row.verified_url === row.website_url,
     createdAt: row.created_at,
   }));
 }
@@ -138,7 +131,7 @@ export async function loadFounderProjects(
   const [projects, achievements] = await Promise.all([
     supabase
       .from("projects")
-      .select("id, name, website_url, project_type, created_at, verification_token, verified_at, verified_url")
+      .select("id, name, website_url, project_type, created_at")
       .eq("owner_id", ownerId)
       .order("created_at", { ascending: true }),
     supabase
@@ -165,7 +158,7 @@ export async function loadFounderPortfolio(
   const [projects, achievements] = await Promise.all([
     supabase
       .from("projects")
-      .select("id, name, website_url, project_type, created_at, verification_token, verified_at, verified_url")
+      .select("id, name, website_url, project_type, created_at")
       .eq("owner_id", ownerId)
       .order("created_at", { ascending: true }),
     supabase

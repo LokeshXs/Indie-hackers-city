@@ -32,6 +32,8 @@ import {
 import type { CityAssetId, CityDistrict, CityEntity } from "./map-types";
 import { CityAssetErrorBoundary } from "./CityAssetErrorBoundary";
 import { CityLoadingScreen } from "./CityLoadingScreen";
+import { OnlineFounderMarker } from "./OnlineFounderMarker";
+import { plotStatusLabel } from "@/lib/city/status";
 import { FounderProgressCard } from "./FounderProgressCard";
 import { RoofProps, type RoofPropPlacement } from "./RoofProps";
 import { ClaimSuccessOverlay } from "./ClaimSuccessOverlay";
@@ -497,10 +499,14 @@ const Scene = memo(function Scene({
           <RoofProps development={development} />
           {onlineIds.has(development.ownerId) && (
             <Html position={[0, BUILDING_ROOF_ANCHORS[development.building.assetId].bubbleY - 0.6, 0]}
-              center zIndexRange={[8, 1]} style={{ pointerEvents: "none" }}>
-              <span className={styles.onlineBubble} aria-label={`${development.founder.fullName} is online`}>
-                <span aria-hidden="true" />Online
-              </span>
+              zIndexRange={[8, 1]} style={{ pointerEvents: "none" }}>
+              <div className={styles.onlineMarkerAnchor}>
+                <OnlineFounderMarker
+                  fullName={development.founder.fullName}
+                  avatarUrl={development.founder.avatarUrl}
+                  text={plotStatusLabel(development.statusText, development.progression.xp)}
+                />
+              </div>
             </Html>
           )}
         </group>
@@ -603,11 +609,6 @@ export function CityMap3D({
 }: CityMap3DProps) {
   const { user, isAuthenticated, isLoading: isAuthLoading, signInWithGoogle } = useAuth();
   const cityPresence = useCityPresence(user);
-  const otherOnlineIds = useMemo(() => {
-    const ids = new Set(cityPresence.onlineIds);
-    if (user) ids.delete(user.id);
-    return ids;
-  }, [cityPresence.onlineIds, user]);
   const {
     developments,
     applyDevelopment,
@@ -1167,7 +1168,7 @@ export function CityMap3D({
             <Scene
               entities={sceneEntities}
               roofProps={roofPropPlacements}
-              onlineIds={otherOnlineIds}
+              onlineIds={cityPresence.onlineIds}
               selectedPlotId={selectedPlotId}
               hoveredPlotId={hoveredPlotId}
               selectablePlotIds={selectablePlotIds}

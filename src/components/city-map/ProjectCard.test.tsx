@@ -62,6 +62,7 @@ const development: CityDevelopment = {
     websiteUrl: "https://garageware.example/",
     type: "app",
   },
+  statusText: null,
   founder: { fullName: "Ada Founder", xHandle: "ada_founder", avatarUrl: null },
   building: { level: 1, assetId: "indie-garage-level-1" },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
@@ -319,24 +320,10 @@ describe("ProjectCard achievements", () => {
     );
   });
 
-  async function addProduct(user: ReturnType<typeof userEvent.setup>) {
+  it("names the product whose launch was filed after adding one", async () => {
+    const user = userEvent.setup();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
-      JSON.stringify({
-        development,
-        projectId: "new-project-1",
-        projects: [{
-          id: "new-project-1",
-          name: "Tideline",
-          websiteUrl: "https://tideline.example/",
-          type: "website",
-          isShowcased: false,
-          achievements: [],
-          pendingAchievements: ["product_launched"],
-          verificationToken: "abcdef0123456789abcdef0123456789",
-          isVerified: false,
-          createdAt: "2026-09-13T00:00:00.000Z",
-        }],
-      }),
+      JSON.stringify({ development, projects: [] }),
       { status: 200, headers: { "content-type": "application/json" } },
     )));
     renderCard();
@@ -346,41 +333,9 @@ describe("ProjectCard achievements", () => {
     await user.type(screen.getByLabelText("Product name"), "Tideline");
     await user.type(screen.getByLabelText("Product URL"), "https://tideline.example/");
     await user.click(screen.getByRole("button", { name: "Add product" }));
-  }
-
-  it("asks for the verification tag straight after adding a product", async () => {
-    const user = userEvent.setup();
-    await addProduct(user);
-
-    // The token only exists once the project row does, which is why this is a step after the form
-    // rather than a field inside it.
-    expect(await screen.findByText(
-      '<meta name="ihc-verify" content="abcdef0123456789abcdef0123456789">',
-    )).toBeInTheDocument();
-    expect(screen.getByText(/This step is required/)).toBeInTheDocument();
-  });
-
-  it("lets the founder skip the tag, and says what skipping costs", async () => {
-    const user = userEvent.setup();
-    await addProduct(user);
-
-    await user.click(await screen.findByRole("button", { name: "Skip for now" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "“Tideline” added, and its launch sent for review. It adds 100 XP once it is approved."
-      + " Add the verification tag from your projects list before it can be approved.",
-    );
-  });
-
-  it("names the product whose launch was filed once the tag is dealt with", async () => {
-    const user = userEvent.setup();
-    await addProduct(user);
-
-    await user.click(await screen.findByRole("button", { name: "I’ve added it" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "“Tideline” added, and its launch sent for review. It adds 100 XP once it is approved."
-      + " We will look for the tag when we review it.",
+      "“Tideline” added, and its launch sent for review. It adds 100 XP once it is approved.",
     );
   });
 
@@ -430,38 +385,6 @@ describe("ProjectCard achievements", () => {
     );
 
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
-  });
-
-  it("shows the verification tag for an unverified project, and a badge once it is verified", async () => {
-    mockRows.projects = [{
-      id: development.project.id,
-      name: "Garageware",
-      website_url: "https://garageware.example/",
-      project_type: "app",
-      created_at: "2026-08-30T00:00:00.000Z",
-      verification_token: "0123456789abcdef0123456789abcdef",
-      verified_at: null,
-      verified_url: null,
-    }];
-    const user = userEvent.setup();
-    const { unmount } = renderCard();
-
-    await user.click(screen.getByRole("button", { name: "My projects" }));
-    await user.click(await screen.findByText("Verify you own this site"));
-    expect(screen.getByText(
-      '<meta name="ihc-verify" content="0123456789abcdef0123456789abcdef">',
-    )).toBeInTheDocument();
-    unmount();
-
-    // Verified, and still pointing at the site that was checked.
-    mockRows.projects = [{
-      ...mockRows.projects[0],
-      verified_at: "2026-09-13T00:00:00.000Z",
-      verified_url: "https://garageware.example/",
-    }];
-    renderCard();
-    await user.click(screen.getByRole("button", { name: "My projects" }));
-    expect(await screen.findByText("✓ Site verified")).toBeInTheDocument();
   });
 
   it("asks for evidence in the words of the rung, and will not send without it", async () => {
@@ -567,5 +490,98 @@ describe("ProjectCard achievements", () => {
       achievementType: "revenue_100",
       evidenceLink: "https://dash.example/users",
     });
+  });
+});
+
+describe("ProjectCard status editing", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function openCard(xp = 390, statusText: string | null = null) {
+    const savedDevelopment = { ...development, statusText, progression: { ...development.progression, xp } };
+    const onUpdated = vi.fn();
+    const props = { development: savedDevelopment, currentUserId: "user-1", address: "Jobs Avenue", onClose: vi.fn(), onUpdated };
+    const view = render(<ProjectCard {...props} />);
+    return { ...view, props, onUpdated };
+  }
+
+  async function openStatus(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Customise" }));
+    await user.click(screen.getByRole("button", { name: /Status bubble/ }));
+  }
+
+  it("shows a locked preview at 389 XP", async () => {
+    const user = userEvent.setup();
+    openCard(389, "Previously unlocked");
+    await openStatus(user);
+    expect(screen.getByText(/Reach 390 XP/)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Ada Founder is online" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Status text/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save status" })).not.toBeInTheDocument();
+  });
+
+  it("previews and saves at exactly 390 XP, then reloads the persisted message", async () => {
+    const user = userEvent.setup();
+    const { props, onUpdated, rerender } = openCard();
+    const saved = { ...props.development, statusText: "Shipping 🚀" };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ development: saved }), { status: 200 })));
+    await openStatus(user);
+    const field = screen.getByRole("textbox", { name: /Status text/ });
+    expect(field).toHaveFocus();
+    await user.type(field, "  Shipping 🚀  ");
+    expect(screen.getByRole("img", { name: "Ada Founder is online: Shipping 🚀" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save status" }));
+    expect(fetch).toHaveBeenCalledWith("/api/plot-claim/status", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ statusText: "Shipping 🚀" }) }));
+    expect(onUpdated).toHaveBeenCalledWith(saved);
+    rerender(<ProjectCard {...props} development={saved} />);
+    await user.click(screen.getByRole("button", { name: /Status bubble/ }));
+    expect(screen.getByRole("textbox", { name: /Status text/ })).toHaveValue("Shipping 🚀");
+  });
+
+  it("discards drafts on Back and only persists Reset after Save", async () => {
+    const user = userEvent.setup();
+    openCard(390, "Building");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ development }), { status: 200 })));
+    await openStatus(user);
+    await user.clear(screen.getByRole("textbox", { name: /Status text/ }));
+    await user.type(screen.getByRole("textbox", { name: /Status text/ }), "Unsaved");
+    await user.click(screen.getByRole("button", { name: /Back/ }));
+    await user.click(screen.getByRole("button", { name: /Status bubble/ }));
+    expect(screen.getByRole("textbox", { name: /Status text/ })).toHaveValue("Building");
+    await user.click(screen.getByRole("button", { name: "Reset to Online" }));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByRole("img", { name: "Ada Founder is online" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save status" }));
+    expect(fetch).toHaveBeenCalledWith("/api/plot-claim/status", expect.objectContaining({ body: JSON.stringify({ statusText: null }) }));
+  });
+
+  it("retains the draft after a failed save and supports retry", async () => {
+    const user = userEvent.setup();
+    openCard();
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "Please retry." } }), { status: 500 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ development }), { status: 200 })));
+    await openStatus(user);
+    await user.type(screen.getByRole("textbox", { name: /Status text/ }), "Shipping");
+    await user.click(screen.getByRole("button", { name: "Save status" }));
+    expect(screen.getByText("Please retry.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Status text/ })).toHaveValue("Shipping");
+    await user.click(screen.getByRole("button", { name: "Save status" }));
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects overlong text before sending it", async () => {
+    const user = userEvent.setup();
+    openCard();
+    vi.stubGlobal("fetch", vi.fn());
+    await openStatus(user);
+    await user.type(screen.getByRole("textbox", { name: /Status text/ }), "x".repeat(41));
+    await user.click(screen.getByRole("button", { name: "Save status" }));
+    expect(screen.getByText(/single-line status of 40 characters or fewer/)).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not expose configuration to other founders", () => {
+    render(<ProjectCard development={development} currentUserId="someone-else" address="Jobs Avenue" onClose={vi.fn()} onUpdated={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Customise" })).not.toBeInTheDocument();
   });
 });

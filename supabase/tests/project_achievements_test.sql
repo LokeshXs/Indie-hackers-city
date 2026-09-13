@@ -6,7 +6,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(151);
+select plan(144);
 
 -- ---------------------------------------------------------------- structure
 
@@ -656,8 +656,6 @@ select ok(not has_table_privilege('anon', 'public.achievement_evidence', 'SELECT
 select ok(has_table_privilege('authenticated', 'public.achievement_evidence', 'SELECT'), 'a founder can read their own evidence');
 select ok(not has_table_privilege('authenticated', 'public.achievement_evidence', 'INSERT'), 'clients cannot write evidence directly');
 select ok(not has_table_privilege('authenticated', 'public.achievement_evidence', 'UPDATE'), 'clients cannot edit evidence directly');
-select ok(not has_function_privilege('authenticated', 'public.record_site_verification(uuid, text, boolean)', 'EXECUTE'), 'founders cannot mark their own site verified');
-select ok(has_function_privilege('service_role', 'public.record_site_verification(uuid, text, boolean)', 'EXECUTE'), 'the console can record a site check');
 
 -- Every rung states what it wants, in its own words.
 select is_empty(
@@ -674,6 +672,11 @@ select ok(
   (select evidence_hint like '%Dodo Payments%' from public.achievement_definitions
     where achievement_type = 'revenue_10'),
   'the payment providers named include Dodo Payments'
+);
+select is_empty(
+  $$ select achievement_type from public.achievement_definitions
+      where evidence_hint ilike '%verification tag%' or evidence_hint ilike '%meta%' $$,
+  'no rung asks for a site verification tag'
 );
 
 set local role authenticated;
@@ -756,42 +759,6 @@ select results_eq(
       where claims.project_id = '10000000-0000-4000-8000-000000000778' $$,
   $$ values ('https://news.ycombinator.com/item?id=1'::text, 'Front page for a day'::text) $$,
   'the launch post is what gets recorded when one is given'
-);
-
--- Every project is born with a token to put on its site, and unverified.
-select results_eq(
-  $$ select verified_at is null, verification_token ~ '^[0-9a-f]{32}$'
-       from public.projects where id = '10000000-0000-4000-8000-000000000777' $$,
-  $$ values (true, true) $$,
-  'a new project carries a verification token and is not yet verified'
-);
-select results_eq(
-  $$ select count(*) = count(distinct verification_token) from public.projects $$,
-  array[true],
-  'every project gets its own token'
-);
-
-reset role;
-select lives_ok(
-  $$ select * from public.record_site_verification(
-       '10000000-0000-4000-8000-000000000777', 'https://evidence.example/', true) $$,
-  'the console records a successful site check'
-);
-select results_eq(
-  $$ select verified_url from public.projects where id = '10000000-0000-4000-8000-000000000777' $$,
-  array['https://evidence.example/'::text],
-  'the verified URL is stored alongside the timestamp'
-);
-select lives_ok(
-  $$ select * from public.record_site_verification(
-       '10000000-0000-4000-8000-000000000777', 'https://evidence.example/', false) $$,
-  'a later failed check clears it again'
-);
-select results_eq(
-  $$ select verified_at is null, verified_url is null from public.projects
-      where id = '10000000-0000-4000-8000-000000000777' $$,
-  $$ values (true, true) $$,
-  'a site that stops carrying the tag stops counting as verified'
 );
 
 -- Re-filing after a rejection replaces the evidence rather than stacking another row beside it.

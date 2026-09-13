@@ -266,6 +266,7 @@ export type Database = {
           plot_id: string
           project_id: string
           rewards_seen_at: string
+          status_text: string | null
           updated_at: string
           xp_total: number
         }
@@ -279,6 +280,7 @@ export type Database = {
           plot_id: string
           project_id: string
           rewards_seen_at?: string
+          status_text?: string | null
           updated_at?: string
           xp_total?: number
         }
@@ -292,6 +294,7 @@ export type Database = {
           plot_id?: string
           project_id?: string
           rewards_seen_at?: string
+          status_text?: string | null
           updated_at?: string
           xp_total?: number
         }
@@ -509,9 +512,6 @@ export type Database = {
           owner_id: string
           project_type: string
           updated_at: string
-          verification_token: string
-          verified_at: string | null
-          verified_url: string | null
           website_url: string
         }
         Insert: {
@@ -521,9 +521,6 @@ export type Database = {
           owner_id: string
           project_type: string
           updated_at?: string
-          verification_token?: string
-          verified_at?: string | null
-          verified_url?: string | null
           website_url: string
         }
         Update: {
@@ -533,9 +530,6 @@ export type Database = {
           owner_id?: string
           project_type?: string
           updated_at?: string
-          verification_token?: string
-          verified_at?: string | null
-          verified_url?: string | null
           website_url?: string
         }
         Relationships: [
@@ -566,6 +560,7 @@ export type Database = {
           project_id: string | null
           project_name: string | null
           project_type: string | null
+          status_text: string | null
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
@@ -697,6 +692,7 @@ export type Database = {
           project_id: string | null
           project_name: string | null
           project_type: string | null
+          status_text: string | null
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
@@ -734,6 +730,7 @@ export type Database = {
           project_id: string | null
           project_name: string | null
           project_type: string | null
+          status_text: string | null
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
@@ -761,17 +758,6 @@ export type Database = {
           status: string
           xp_pending: number
           xp_total: number
-        }[]
-      }
-      record_site_verification: {
-        Args: {
-          checked_url: string
-          tag_found: boolean
-          target_project_id: string
-        }
-        Returns: {
-          verified_at: string
-          verified_url: string
         }[]
       }
       reject_achievement: {
@@ -841,6 +827,7 @@ export type Database = {
           project_id: string | null
           project_name: string | null
           project_type: string | null
+          status_text: string | null
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
@@ -904,6 +891,37 @@ export type Database = {
           project_id: string | null
           project_name: string | null
           project_type: string | null
+          status_text: string | null
+          updated_at: string | null
+          website_url: string | null
+          x_handle: string | null
+          xp_total: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "city_developments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      update_plot_status: {
+        Args: { requested_status_text: string }
+        Returns: {
+          avatar_url: string | null
+          billboard_background_color: string | null
+          billboard_text_color: string | null
+          building_asset_id: string | null
+          building_level: number | null
+          claimed_at: string | null
+          current_level_xp: number | null
+          founder_name: string | null
+          next_level_xp: number | null
+          owner_id: string | null
+          plot_id: string | null
+          project_id: string | null
+          project_name: string | null
+          project_type: string | null
+          status_text: string | null
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
@@ -939,6 +957,7 @@ export type Database = {
           project_id: string | null
           project_name: string | null
           project_type: string | null
+          status_text: string | null
           updated_at: string | null
           website_url: string | null
           x_handle: string | null
@@ -968,6 +987,7 @@ export type Database = {
           project_id: string | null
           project_name: string | null
           project_type: string | null
+          status_text: string | null
           updated_at: string | null
           website_url: string | null
           x_handle: string | null

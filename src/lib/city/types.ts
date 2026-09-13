@@ -32,6 +32,7 @@ export interface ClaimPlotDraft {
 export interface CityDevelopment {
   plotId: string;
   ownerId: string;
+  statusText: string | null;
   project: {
     id: string;
     name: string;
@@ -116,11 +117,6 @@ export interface FounderProject {
   /** Rungs filed and waiting on a decision. Kept apart from `achievements` because the two read
    * very differently to a founder: one is a badge, the other is a promise. */
   pendingAchievements: AchievementType[];
-  /** Goes in a meta tag on the product's own site. Public by design: knowing a project's token is
-   * no help unless you can also put it on a site you do not control. */
-  verificationToken: string;
-  /** The tag was found, and the project still points at the site it was found on. */
-  isVerified: boolean;
   createdAt: string;
 }
 

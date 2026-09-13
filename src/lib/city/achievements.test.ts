@@ -20,8 +20,6 @@ function project(overrides: Partial<FounderProject> = {}): FounderProject {
     isShowcased: true,
     achievements: [],
     pendingAchievements: [],
-    verificationToken: "0123456789abcdef0123456789abcdef",
-    isVerified: false,
     createdAt: "2026-08-30T00:00:00.000Z",
     ...overrides,
   };
