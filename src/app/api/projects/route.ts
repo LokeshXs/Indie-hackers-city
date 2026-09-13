@@ -58,9 +58,6 @@ export async function POST(request: Request) {
   const development = serializeCityDevelopment(result.data[0]);
   return NextResponse.json({
     development,
-    // Returned so the card can jump straight to the verification step for the project it just
-    // created. The token only exists once the row does, so this cannot be shown any earlier.
-    projectId,
     projects: await loadFounderProjects(supabase, user.id, development.project.id),
   }, { status: 201 });
 }

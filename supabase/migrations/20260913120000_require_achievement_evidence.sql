@@ -4,15 +4,13 @@
 -- founder asserting a number, and an admin either believing it or not. This attaches evidence to
 -- every claim, and tells the founder what evidence is wanted in the words of the rung they picked.
 --
--- Three things shape it.
+-- Two things shape it.
 --
 -- 1. Evidence is private. public.project_achievements is world-readable -- anon holds SELECT -- so a
 --    revenue screenshot stored there would be a privacy incident on day one. It gets its own table,
 --    readable by its owner and by the service role, and by nobody else.
 -- 2. The prompt is data, not code. Each rung carries the question it asks and the note explaining
 --    what is wanted, so re-wording an ask is an UPDATE rather than a deploy.
--- 3. A launched product proves itself. Ownership of a domain is the one thing no screenshot can
---    fake, so projects carry a verification token to put on the site.
 
 -- --------------------------------------------------------------------------------------------
 -- What each rung asks for.
@@ -26,8 +24,8 @@ alter table public.achievement_definitions
 -- on after the copy is seeded, because '' would fail them.
 update public.achievement_definitions set
   evidence_prompt = 'Show us it is live',
-  evidence_hint = 'Add the verification tag below to your site. Link a launch post too if you have '
-                  || 'one -- Product Hunt, X, Hacker News or Indie Hackers.'
+  evidence_hint = 'A link to the product itself, and a launch post if you have one -- Product Hunt, '
+                  || 'X, Hacker News or Indie Hackers.'
  where achievement_type = 'product_launched';
 
 -- The definition of a user rides in the hint on every users rung. Without it the disputes are all
@@ -173,33 +171,6 @@ create policy "Founders replace their own evidence files"
     bucket_id = 'achievement-evidence'
     and (storage.foldername(name))[1] = (select auth.uid())::text
   );
-
--- --------------------------------------------------------------------------------------------
--- Proving the site is yours.
--- --------------------------------------------------------------------------------------------
-
-alter table public.projects
-  -- Public on purpose, and harmless: knowing project P's token does not help you put it on a site
-  -- you do not control, and the client needs to read its own token to show the instructions.
-  add column verification_token text not null
-    default replace(gen_random_uuid()::text, '-', ''),
-  add column verified_at timestamptz,
-  -- Which URL was verified. Changing the project's URL leaves this behind, so a founder cannot
-  -- verify a site they own and then point the project somewhere else.
-  add column verified_url text;
-
-alter table public.projects
-  add constraint projects_verification_token_format check (
-    verification_token ~ '^[0-9a-f]{32}$'
-  ),
-  add constraint projects_verified_together check (
-    (verified_at is null and verified_url is null)
-    or (verified_at is not null and verified_url is not null)
-  );
-
-comment on column public.projects.verified_at is
-  'When the verification tag was last found on verified_url. Compare verified_url against '
-  'website_url before trusting it: they diverge when a founder repoints the project.';
 
 -- --------------------------------------------------------------------------------------------
 -- Filing a claim now carries its evidence. Same "revoked from every role" contract as before.
@@ -538,48 +509,3 @@ revoke execute on function public.create_project(uuid, text, text, text, boolean
   from public, anon;
 grant execute on function public.create_project(uuid, text, text, text, boolean, text, text)
   to authenticated;
-
--- --------------------------------------------------------------------------------------------
--- Recording the outcome of a site check.
--- --------------------------------------------------------------------------------------------
-
--- The fetch itself happens outside the database, and it is the admin console that performs the
--- authoritative one: a founder-triggered check that wrote its own result would be a founder marking
--- their own homework, and pointing the server at a URL is a request-forgery surface best kept
--- behind the console's allow-list rather than exposed to every signed-in account.
-create function public.record_site_verification(
-  target_project_id uuid,
-  checked_url text,
-  tag_found boolean
-)
-returns table (verified_at timestamptz, verified_url text)
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  updated public.projects%rowtype;
-begin
-  perform public.assert_reviewer();
-
-  if target_project_id is null or coalesce(checked_url, '') !~ '^https?://' then
-    raise exception using message = 'invalid_project';
-  end if;
-
-  update public.projects as owned
-     set verified_at = case when tag_found then now() else null end,
-         verified_url = case when tag_found then checked_url else null end
-   where owned.id = target_project_id
-   returning owned.* into updated;
-
-  if not found then
-    raise exception using message = 'project_not_found';
-  end if;
-
-  return query select updated.verified_at, updated.verified_url;
-end;
-$$;
-
-revoke execute on function public.record_site_verification(uuid, text, boolean)
-  from public, anon, authenticated;
-grant execute on function public.record_site_verification(uuid, text, boolean) to service_role;

@@ -118,38 +118,12 @@
   line-height: 1.5;
 }
 
-.verifiedBadge {
-  align-self: flex-start;
-  color: var(--teal-600);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-}
-
-/* Collapsed by default: one project in a portfolio of ten needs this, and the other nine should not
-   pay for it in vertical space. */
-.verify > summary {
-  cursor: pointer;
-  color: var(--ink-soft);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-}
-
-.verifyHelp {
-  margin: var(--space-2) 0 var(--space-1);
-  color: var(--ink-soft);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.verifyTag {
-  display: block;
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
+.statusPreview {
+  display: grid;
+  min-height: 136px;
+  place-items: center;
+  padding: var(--space-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
   background: var(--teal-wash);
-  color: var(--teal-600);
-  font-size: var(--text-xs);
-  /* The tag is long and must be copyable in one piece, so it wraps rather than scrolling away. */
-  overflow-wrap: anywhere;
-  user-select: all;
 }

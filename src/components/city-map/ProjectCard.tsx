@@ -16,7 +16,7 @@ import { summarisePendingClaims } from "@/lib/city/achievements";
 import { EVIDENCE_MIME_TYPES, uploadEvidence } from "@/lib/city/evidence";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useFounderProjects } from "@/hooks/useFounderProjects";
-import { VERIFICATION_META_NAME, X_HANDLE_PATTERN } from "@/lib/city/constants";
+import { X_HANDLE_PATTERN } from "@/lib/city/constants";
 import type {
   AchievementDefinition,
   AchievementGroup,
@@ -29,6 +29,9 @@ import type { CityEntity } from "./map-types";
 import { contrastRatio } from "./billboard-texture";
 import { BillboardPreview, PreviewStage } from "./ModelPreview";
 import styles from "./ProjectCard.module.css";
+import { OnlineFounderMarker } from "./OnlineFounderMarker";
+import { STATUS_TEXT_LIMIT, statusTextLength, validateStatusText } from "@/lib/city/status";
+import { unlocksFor } from "@/lib/city/unlocks";
 import { PlotSnapshot } from "./PlotSnapshot";
 
 const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
@@ -103,7 +106,6 @@ type CardMode =
   | "view"
   | "achievements"
   | "launch-form"
-  | "verify-site"
   | "pick-project"
   | "achievement-tier"
   | "achievement-evidence"
@@ -111,7 +113,8 @@ type CardMode =
   | "project-edit"
   | "customise"
   | "founder"
-  | "billboard";
+  | "billboard"
+  | "status";
 
 /** Which model the left pane shows. Everything but the two appearance editors shows the real plot. */
 type PreviewKind = "plot" | "billboard";
@@ -120,7 +123,6 @@ const PREVIEW_BY_MODE: Record<CardMode, PreviewKind> = {
   view: "plot",
   achievements: "plot",
   "launch-form": "plot",
-  "verify-site": "plot",
   "pick-project": "plot",
   "achievement-tier": "plot",
   "achievement-evidence": "plot",
@@ -129,6 +131,7 @@ const PREVIEW_BY_MODE: Record<CardMode, PreviewKind> = {
   customise: "plot",
   founder: "plot",
   billboard: "billboard",
+  status: "plot",
 };
 
 interface ProjectCardProps {
@@ -149,6 +152,8 @@ export function ProjectCard({
   onUpdated,
 }: ProjectCardProps) {
   const isOwner = currentUserId === development.ownerId;
+  const statusUnlocked = unlocksFor(development.progression.xp).status;
+  const [statusText, setStatusText] = useState(development.statusText ?? "");
   const [mode, setMode] = useState<CardMode>("view");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,12 +179,6 @@ export function ProjectCard({
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [editingProject, setEditingProject] = useState<FounderProject | null>(null);
-  // The project whose verification tag the next step should show. Set only by a successful launch,
-  // because the token does not exist until the row does.
-  const [verifyingProjectId, setVerifyingProjectId] = useState<string | null>(null);
-  // Held rather than shown straight away: goTo clears the notice, and this belongs on the projects
-  // list the founder lands on *after* the verification step, not on the step itself.
-  const [launchNotice, setLaunchNotice] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState(development.founder.fullName);
   const [xHandle, setXHandle] = useState(development.founder.xHandle ?? "");
@@ -208,6 +207,7 @@ export function ProjectCard({
   }, [mode]);
 
   function goTo(next: CardMode) {
+    if (next === "status") setStatusText(development.statusText ?? "");
     setError(null);
     setNotice(null);
     setMode(next);
@@ -249,15 +249,13 @@ export function ProjectCard({
     formData.set("websiteUrl", websiteUrl.trim());
     formData.set("projectType", projectType);
     formData.set("showcase", String(showcase));
-    const result = await send("/api/projects", { method: "POST", body: formData });
-    if (result) {
+    if (await send("/api/projects", { method: "POST", body: formData })) {
       const launchReward = rungsOf(catalog, "launch")[0]?.xpReward ?? 0;
-      setVerifyingProjectId(typeof result.projectId === "string" ? result.projectId : null);
-      setLaunchNotice(
+      goTo("projects");
+      setNotice(
         `“${launchedName}” added, and its launch sent for review. `
         + `It adds ${XP_FORMATTER.format(launchReward)} XP once it is approved.`,
       );
-      goTo("verify-site");
     }
   }
 
@@ -274,19 +272,6 @@ export function ProjectCard({
       body: formData,
     });
     if (result) goTo("projects");
-  }
-
-  /** Leaves the verification step, either way, and lands on the portfolio with the launch
-   * confirmation. Skipping is allowed -- a founder may not be able to edit their site right now --
-   * but the message says what skipping costs. */
-  function finishVerification(added: boolean) {
-    const message = launchNotice ?? "";
-    setLaunchNotice(null);
-    setVerifyingProjectId(null);
-    goTo("projects");
-    setNotice(added
-      ? `${message} We will look for the tag when we review it.`
-      : `${message} Add the verification tag from your projects list before it can be approved.`);
   }
 
   function resetClaimDraft() {
@@ -352,6 +337,21 @@ export function ProjectCard({
     formData.set("fullName", fullName.trim());
     formData.set("xHandle", normalizedHandle);
     if (await send("/api/profile", { method: "PATCH", body: formData })) goTo("customise");
+  }
+
+  async function saveStatus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isOwner || !statusUnlocked) return;
+    const validation = validateStatusText(statusText);
+    if (!validation.data) { setError(validation.error); return; }
+    if (await send("/api/plot-claim/status", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validation.data),
+    })) {
+      goTo("customise");
+      setNotice("Status saved. It appears above your plot while you are online.");
+    }
   }
 
   async function saveAppearance(event: FormEvent<HTMLFormElement>, next: CardMode) {
@@ -578,48 +578,6 @@ export function ProjectCard({
                 <Button size="lg" type="submit" disabled={isSaving}>{isSaving ? "Adding…" : "Add product"}</Button>
               </div>
             </form>
-          ) : mode === "verify-site" ? (
-            <div className={styles.pane}>
-              {(() => {
-                const project = projects.find((entry) => entry.id === verifyingProjectId);
-                return (
-                  <>
-                    <div className={styles.stepIntro}>
-                      <strong id="project-card-title">Prove the site is yours</strong>
-                      <span>{project?.name}</span>
-                    </div>
-
-                    <p className={styles.verifyHelp}>
-                      Add this line inside the <code>&lt;head&gt;</code> of{" "}
-                      {project?.websiteUrl ?? "your site"}:
-                    </p>
-
-                    <code className={styles.verifyTag}>
-                      {`<meta name="${VERIFICATION_META_NAME}" content="${project?.verificationToken ?? ""}">`}
-                    </code>
-
-                    <Alert tone="warning">
-                      This step is required. We check for the tag when reviewing your launch, and
-                      without it the claim cannot be approved — so the XP will not land.
-                    </Alert>
-
-                    <p className={styles.verifyHelp}>
-                      No rush if you cannot edit your site right now. The tag stays on your projects
-                      list, and you can add it any time before we review.
-                    </p>
-
-                    <div className={styles.formActions}>
-                      <Button variant="tertiary" onClick={() => finishVerification(false)}>
-                        Skip for now
-                      </Button>
-                      <Button size="lg" onClick={() => finishVerification(true)}>
-                        I&rsquo;ve added it
-                      </Button>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
           ) : mode === "pick-project" ? (
             <div className={styles.pane}>
               <div className={styles.stepIntro}>
@@ -809,22 +767,6 @@ export function ProjectCard({
                       <strong>{project.name}</strong>
                       <span className={styles.projectMeta}>{PROJECT_TYPE_LABELS[project.type]}</span>
                       {project.isShowcased ? <span className={styles.projectBadge}>On your billboard</span> : null}
-                      {project.isVerified ? (
-                        <span className={styles.verifiedBadge}>✓ Site verified</span>
-                      ) : (
-                        /* A native disclosure: one project in a list of ten needs this, and the
-                           other nine should not pay for it in vertical space. */
-                        <details className={styles.verify}>
-                          <summary>Verify you own this site</summary>
-                          <p className={styles.verifyHelp}>
-                            Add this to the <code>&lt;head&gt;</code> of {project.websiteUrl}. We check
-                            for it when reviewing your launch.
-                          </p>
-                          <code className={styles.verifyTag}>
-                            {`<meta name="${VERIFICATION_META_NAME}" content="${project.verificationToken}">`}
-                          </code>
-                        </details>
-                      )}
                     </div>
                     <Button variant="tertiary" size="sm" onClick={() => startEdit(project)}>Edit</Button>
                   </li>
@@ -879,11 +821,13 @@ export function ProjectCard({
                 <strong id="project-card-title">Customise</strong>
                 <span>How your plot and your name appear in the city.</span>
               </div>
+              {notice ? <p role="status">{notice}</p> : null}
               <ChoiceList
                 legend="Customise"
                 items={[
                   { id: "founder", title: "Founder details", description: "Your name and X handle." },
                   { id: "billboard", title: "Billboard design", description: "The colours on your board." },
+                  { id: "status", title: "Status bubble", description: "What you are working on, above your avatar.", meta: statusUnlocked ? undefined : "Unlocks at 390 XP" },
                 ]}
                 onSelect={(id) => goTo(id as CardMode)}
               />
@@ -892,6 +836,39 @@ export function ProjectCard({
                 <span />
               </div>
             </div>
+          ) : mode === "status" ? (
+            <form className={styles.pane} onSubmit={saveStatus} aria-busy={isSaving}>
+              <div className={styles.stepIntro}>
+                <strong id="project-card-title">Status bubble</strong>
+                <span>Your message appears above your plot while you are online.</span>
+              </div>
+              <div className={styles.statusPreview}>
+                <OnlineFounderMarker
+                  fullName={development.founder.fullName}
+                  avatarUrl={development.founder.avatarUrl}
+                  text={statusUnlocked ? statusText.trim() || "Online" : "Online"}
+                />
+              </div>
+              {statusUnlocked ? (
+                <>
+                  <Field label="Status text" htmlFor="plot-status-text"
+                    labelNote={`${statusTextLength(statusText)} / ${STATUS_TEXT_LIMIT}`}
+                    hint="Leave empty to show Online. Up to 40 characters."
+                    error={error ?? undefined}>
+                    {(field) => <input {...field} ref={firstFieldRef} className={fieldControlClass}
+                      value={statusText} placeholder="Online" disabled={isSaving}
+                      onChange={(event) => { setStatusText(event.target.value); setError(null); }} />}
+                  </Field>
+                  <Button variant="tertiary" disabled={isSaving} onClick={() => { setStatusText(""); setError(null); }}>Reset to Online</Button>
+                </>
+              ) : <p>Reach 390 XP to customise your status. Your plot shows Online until then.</p>}
+              <div className={styles.formActions}>
+                <Button variant="tertiary" disabled={isSaving} onClick={() => goTo("customise")}>← Back</Button>
+                {statusUnlocked ? <Button size="lg" type="submit" disabled={isSaving || !isOwner}>
+                  {isSaving ? "Saving…" : "Save status"}
+                </Button> : null}
+              </div>
+            </form>
           ) : mode === "founder" ? (
             <form className={styles.pane} onSubmit={saveFounder} aria-busy={isSaving}>
               <div className={styles.stepIntro}>

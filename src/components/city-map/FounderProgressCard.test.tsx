@@ -9,6 +9,7 @@ const development: CityDevelopment = {
   plotId: "pioneer:jobs:north:01",
   ownerId: "user-1",
   project: { id: "project-1", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "app" },
+  statusText: null,
   founder: { fullName: "Ada Founder", xHandle: "ada", avatarUrl: null },
   building: { level: 2, assetId: "startup-building-level-1" },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },

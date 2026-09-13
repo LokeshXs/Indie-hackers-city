@@ -18,7 +18,8 @@ export type CityAssetId =
   | "indie-garage-level-1"
   | "slat-studio-level-2"
   | "teal-brow-level-2"
-  | "coffee-shop";
+  | "coffee-shop"
+  | "corner-store";
 
 export interface WorldPosition {
   x: number;

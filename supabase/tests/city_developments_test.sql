@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(79);
+select plan(80);
 
 select has_table('public', 'plots', 'plots table exists');
 select has_table('public', 'projects', 'projects table exists');
@@ -17,13 +17,15 @@ select results_eq(
 );
 select results_eq(
   $$ select count(*) from public.plots where is_active $$,
-  array[63::bigint],
-  '63 of the 64 Pioneer plots are claimable; the Coffee House holds the other one'
+  array[62::bigint],
+  '62 of the 64 Pioneer plots are claimable; the two unowned buildings hold the others'
 );
+-- Ordered, so this also pins WHICH two are reserved. Both are -outer rows, and they sit on
+-- different blocks on purpose.
 select results_eq(
-  $$ select id from public.plots where not is_active $$,
-  array['pioneer:hopper:north-outer:01'],
-  'the reserved plot is Hopper Way''s inner corner, where the Coffee House stands'
+  $$ select id from public.plots where not is_active order by id $$,
+  array['pioneer:hopper:north-outer:01', 'pioneer:jobs:north-outer:04'],
+  'the reserved plots are the Coffee House corner and the corner store on the shore'
 );
 select results_eq(
   $$ select count(distinct id) from public.plots $$,
@@ -176,6 +178,18 @@ select throws_ok(
   'P0001',
   'inactive_plot',
   'the Coffee House plot cannot be claimed'
+);
+
+select throws_ok(
+  $$ select * from public.claim_plot(
+    '30000000-0000-4000-8000-000000000003', 'pioneer:jobs:north-outer:04', 'Founder Three',
+    'Founder_Three', 'Store Squatter', 'https://squatter.example/', 'website',
+    'startup-building-level-1',
+    '#f7e0a6', '#1b3a4b'
+  ) $$,
+  'P0001',
+  'inactive_plot',
+  'the corner store plot cannot be claimed'
 );
 
 reset role;

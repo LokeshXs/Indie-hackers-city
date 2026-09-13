@@ -9,11 +9,11 @@ describe("starter district", () => {
     expect(starterDistrict.plots).toHaveLength(64);
     expect(new Set(starterDistrict.plots.map((plot) => plot.id)).size).toBe(64);
     expect(starterDistrict.plots.every((plot) => /^pioneer:(jobs|lovelace|turing|hopper):(north|south|north-outer|south-outer):0[1-4]$/.test(plot.id))).toBe(true);
-    expect(starterDistrict.entities).toHaveLength(369);
+    expect(starterDistrict.entities).toHaveLength(370);
     expect(starterDistrict.entities.filter((entity) => entity.plotId)).toHaveLength(64);
     expect(starterDistrict.entities.filter((entity) => entity.interactive)).toHaveLength(64);
     expect(new Set(starterDistrict.entities.map((entity) => entity.assetId))).toEqual(
-      new Set(["map-base", "road-straight", "sidewalk-straight", "grass-plot", "driveway-straight", "roundabout", "palm-tree", "canopy-tree", "street-lamp", "cafe-lamp", "road-link", "launch-monument", "district-sign-gantry", "coffee-shop"]),
+      new Set(["map-base", "road-straight", "sidewalk-straight", "grass-plot", "driveway-straight", "roundabout", "palm-tree", "canopy-tree", "street-lamp", "cafe-lamp", "road-link", "launch-monument", "district-sign-gantry", "coffee-shop", "corner-store"]),
     );
   });
 
@@ -38,6 +38,28 @@ describe("starter district", () => {
     // The plot itself stays in the catalog. The catalog is the map's geometry; only the database
     // decides who may build, and it is what marks this one inactive.
     expect(starterDistrict.plots.some((plot) => plot.id === "pioneer:hopper:north-outer:01")).toBe(true);
+  });
+
+  it("stands the corner store on Jobs Avenue's shore side, also unclaimable", () => {
+    const store = starterDistrict.entities.find((entity) => entity.assetId === "corner-store");
+    expect(store).toMatchObject({ id: "corner-store", scale: 1.4 });
+    expect(store?.plotId).toBeUndefined();
+    expect(store?.interactive).toBeUndefined();
+
+    // The shore row: -outer sits FURTHER from the map centre on the blocks offset negatively, so
+    // this is the row fronting the outer ring road rather than the city.
+    const pad = starterDistrict.entities.find(
+      (entity) => entity.assetId === "grass-plot" && entity.plotId === "pioneer:jobs:north-outer:04",
+    );
+    expect(pad?.position).toEqual({ x: -22, y: 0, z: -58 });
+    expect(store?.position).toEqual({ x: -22, y: 0, z: -56.76 });
+    expect(store?.rotationY).toBeUndefined();
+
+    // Not on Hopper: the two unowned buildings are kept on different blocks on purpose.
+    expect(store?.position.z).not.toEqual(
+      starterDistrict.entities.find((entity) => entity.assetId === "coffee-shop")?.position.z,
+    );
+    expect(starterDistrict.plots.some((plot) => plot.id === "pioneer:jobs:north-outer:04")).toBe(true);
   });
 
   it("uses memorable street names and canonical Pioneer addresses", () => {

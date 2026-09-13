@@ -50,6 +50,7 @@
   --cream-edge: #c5ae7d;
 
   /* --- Semantic: each color means exactly one thing ------------------ */
+  --presence-online: oklch(79.2% 0.209 151.711); /* online presence */
   --gold: #e5a846;          /* progression / XP ONLY */
   --gold-deep: #b7792d;
   --amber-ink: #7a5417;     /* warning copy ONLY — legible where --gold is not */

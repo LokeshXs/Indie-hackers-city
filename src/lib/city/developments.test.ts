@@ -5,6 +5,7 @@ import { cityDevelopmentRecord, serializeCityDevelopment } from "./developments"
 function developmentRow(overrides: Partial<CityDevelopmentRow> = {}): CityDevelopmentRow {
   return {
     avatar_url: null,
+    status_text: null,
     billboard_background_color: "#1b3a4b",
     billboard_text_color: "#f7e0a6",
     building_asset_id: "startup-building-level-1",
@@ -48,6 +49,11 @@ describe("city development serialization", () => {
 
     expect(development.progression).toEqual({ xp: 0, buildingLevel: 1, currentLevelXp: 0, nextLevelXp: 100 });
     expect(development.building.level).toBe(1);
+  });
+
+  it("preserves saved status text and defaults old records to Online's null value", () => {
+    expect(serializeCityDevelopment(developmentRow({ status_text: "Shipping" })).statusText).toBe("Shipping");
+    expect(serializeCityDevelopment(developmentRow()).statusText).toBeNull();
   });
 
   it("indexes serialized developments by plot ID", () => {

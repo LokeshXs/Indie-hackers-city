@@ -87,36 +87,15 @@
   .constructionLabel, .constructionLabel i { animation: none; }
 }
 
-.onlineBubble {
-  animation: onlineBubbleBob 2.6s ease-in-out infinite;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.6rem;
-  border: 1px solid #86bea0;
-  border-radius: 1rem;
-  background: #effbf1;
-  color: #23553c;
-  box-shadow: 0 2px 8px #102e3430;
-  font: 600 11px var(--font-sans);
-  white-space: nowrap;
-}
-.onlineBubble > span, .onlineDot {
+.onlineMarkerAnchor { transform: translate(-50%, -100%); padding-bottom: 8px; }
+.onlineDot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #298856;
+  background: var(--presence-online);
   flex-shrink: 0;
 }
 
-@keyframes onlineBubbleBob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .onlineBubble { animation: none; }
-}
 .onlineToast {
   position: fixed;
   z-index: 25;

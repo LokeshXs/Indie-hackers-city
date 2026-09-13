@@ -427,23 +427,6 @@ The users rungs all define what a user is, because otherwise every dispute is th
 Creating a project files its launch claim, and a live product is its own evidence: `create_project`
 falls back to the project's own `website_url` when no launch post is supplied.
 
-### Site ownership
-
-Every project is born with a `verification_token`, to be placed on its own site:
-
-```html
-<meta name="ihc-verify" content="<verification_token>">
-```
-
-The token is public and that is harmless — knowing it does not help anyone put it on a site they do
-not control. Finding it is what proves ownership, which is the one thing a screenshot cannot fake.
-
-`record_site_verification` writes the outcome and is `service_role` only, because the fetch belongs
-to the admin console: a founder-triggered check that wrote its own result would be a founder marking
-their own homework, and pointing a server at a caller-supplied URL is a request-forgery surface best
-kept behind the console's allow-list. `verified_url` is stored alongside `verified_at`, so
-repointing a project at a different site leaves the verification behind rather than carrying it over.
-
 ## Tuning the economy from the console
 
 Two tables decide what everything is worth, and they behave differently — the console says so on

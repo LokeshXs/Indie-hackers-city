@@ -21,6 +21,7 @@ const development = {
   plotId: "pioneer:jobs:north:01",
   ownerId: "user-1",
   project: { id: "p1", name: "UrlBit", websiteUrl: "https://urlbit.dev/", type: "website" },
+  statusText: null,
   founder: { fullName: "Ada Lovelace", xHandle: "ada_builds", avatarUrl: null },
   building: { level: 2, assetId: "corner-studio-level-1" },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },

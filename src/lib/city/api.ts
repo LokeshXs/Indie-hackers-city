@@ -41,6 +41,7 @@ const KNOWN_RPC_ERRORS = new Set([
   "claim_not_found",
   "invalid_achievement",
   "invalid_evidence",
+  "invalid_status",
   "evidence_required",
   "showcase_required",
   "reward_locked",
@@ -60,7 +61,7 @@ export function rpcErrorCode(error: Pick<PostgrestError, "message">): CityApiErr
   if (code === "evidence_required") return "evidence_required";
   if (code === "reward_locked") return "reward_locked";
   if (code && CONFLICT_ERRORS.has(code)) return code as CityApiErrorCode;
-  if (["invalid_project", "invalid_building", "invalid_achievement", "invalid_evidence"].includes(code ?? "")) {
+  if (["invalid_project", "invalid_building", "invalid_achievement", "invalid_evidence", "invalid_status"].includes(code ?? "")) {
     return "invalid_request";
   }
   return "unexpected_error";
@@ -76,4 +77,3 @@ export function errorResponse(code: CityApiErrorCode, message: string, status?: 
   );
   return NextResponse.json({ error: { code, message } }, { status: responseStatus });
 }
-

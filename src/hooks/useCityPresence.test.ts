@@ -31,6 +31,17 @@ async function connect() { await act(async () => { fake.subscribe("SUBSCRIBED");
     renderHook(() => useCityPresence(null)); await connect();
     expect(fake.track).not.toHaveBeenCalled();
   });
+  it("includes the owner's presence and clears all markers when the connection is unavailable", async () => {
+    const { result } = renderHook(() => useCityPresence(me));
+    fake.state = { self: [{ userId: "me", name: "Me" }], other: [member] };
+    await connect();
+    expect(result.current.onlineIds).toEqual(new Set(["me", "other"]));
+    await act(async () => { fake.subscribe("CHANNEL_ERROR"); });
+    expect(result.current.onlineIds.size).toBe(0);
+    await connect();
+    expect(result.current.onlineIds.has("me")).toBe(true);
+    expect(result.current.notice).toEqual([]);
+  });
   it("shows existing users without arrival toasts and deduplicates their tabs", async () => {
     const { result } = renderHook(() => useCityPresence(me));
     fake.state = { a: [member], b: [member] }; await connect();
