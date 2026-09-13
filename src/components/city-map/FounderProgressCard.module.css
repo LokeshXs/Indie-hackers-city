@@ -14,20 +14,19 @@
   color: var(--ink);
   font: inherit;
   text-align: left;
-  cursor: pointer;
   transform: rotate(0.3deg);
   animation: founderProgressIn 210ms cubic-bezier(.2,.8,.2,1);
   transition: filter 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 
-.card:hover {
+.card:has(.viewButton:hover) {
   filter: brightness(1.025);
   transform: rotate(0deg) translateY(-1px);
   box-shadow: 0 0 0 0.12rem var(--frame-ring), 0 0.38rem 0 var(--frame), 0 1rem 2.2rem rgb(9 45 45 / 29%);
 }
 
-.card:active { transform: translateY(0.18rem); box-shadow: 0 0 0 0.12rem var(--frame-ring), 0 0.14rem 0 var(--frame), 0 0.55rem 1.2rem rgb(9 45 45 / 22%); }
-.card:focus-visible { outline: 0; box-shadow: var(--focus); }
+.card:has(.viewButton:active) { transform: translateY(0.18rem); box-shadow: 0 0 0 0.12rem var(--frame-ring), 0 0.14rem 0 var(--frame), 0 0.55rem 1.2rem rgb(9 45 45 / 22%); }
+.viewButton:focus-visible, .shareButton:focus-visible { outline: 0; box-shadow: var(--focus); }
 
 .heading { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; color: var(--slate); font-size: var(--text-2xs); font-weight: var(--weight-black); letter-spacing: 0.11em; text-transform: uppercase; }
 .heading strong { flex: none; font-family: var(--font-mono); border: 0.1rem solid var(--gold-deep); border-radius: 0.42rem; padding: 0.2rem 0.38rem; background: #f8d789; color: #754b23; font-size: 0.62rem; transform: rotate(-1.5deg); }
@@ -138,3 +137,8 @@
 @media (prefers-reduced-motion: reduce) {
   .card, .fill { animation: none; transition: none; }
 }
+
+.viewButton { display: grid; width: 100%; gap: 0.55rem; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-sm); }
+.shareButton { display: flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 36px; border: 1px solid var(--teal-600); border-radius: var(--radius-sm); background: var(--teal-wash); color: var(--teal-600); font: inherit; font-size: var(--text-xs); font-weight: var(--weight-bold); cursor: pointer; }
+.shareButton:hover { background: var(--teal-500); color: var(--cream-on-dark); }
+.shareButton:disabled { opacity: 0.55; cursor: wait; }

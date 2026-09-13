@@ -10,6 +10,9 @@ interface FounderProgressCardProps {
   development: CityDevelopment;
   buttonRef?: RefObject<HTMLButtonElement | null>;
   onViewBuilding(): void;
+  onShare(): void;
+  shareButtonRef?: RefObject<HTMLButtonElement | null>;
+  shareDisabled?: boolean;
 }
 
 const XP_FORMATTER = new Intl.NumberFormat("en-US");
@@ -32,16 +35,20 @@ export function FounderProgressCard({
   development,
   buttonRef,
   onViewBuilding,
+  onShare,
+  shareButtonRef,
+  shareDisabled = false,
 }: FounderProgressCardProps) {
   const { xp, buildingLevel } = development.progression;
   const leg = currentLeg(xp);
   const rewardName = leg ? leg.reward?.label ?? UNNAMED_REWARD : null;
 
   return (
+    <section className={styles.card} aria-label="Founder progress">
     <button
       ref={buttonRef}
       type="button"
-      className={styles.card}
+      className={styles.viewButton}
       aria-label={`Level ${buildingLevel}, ${XP_FORMATTER.format(xp)} XP.${
         leg ? ` Next reward ${rewardName}, ${XP_FORMATTER.format(leg.remaining)} XP to go.` : ""
       } View my building.`}
@@ -85,5 +92,12 @@ export function FounderProgressCard({
 
       <span className={styles.action}>View my building <span aria-hidden="true">→</span></span>
     </button>
+    <button ref={shareButtonRef} type="button" className={styles.shareButton} onClick={onShare} disabled={shareDisabled}>
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 16V3m-4 4 4-4 4 4M5 13v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" />
+      </svg>
+      Share
+    </button>
+    </section>
   );
 }

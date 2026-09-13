@@ -322,6 +322,63 @@ export type Database = {
           },
         ]
       }
+      plot_shares: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          development_revision: string
+          founder_name: string
+          id: string
+          image_path: string
+          owner_id: string
+          phase: string
+          plot_id: string
+          ready_at: string | null
+          xp: number
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          development_revision: string
+          founder_name: string
+          id: string
+          image_path: string
+          owner_id: string
+          phase: string
+          plot_id: string
+          ready_at?: string | null
+          xp: number
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          development_revision?: string
+          founder_name?: string
+          id?: string
+          image_path?: string
+          owner_id?: string
+          phase?: string
+          plot_id?: string
+          ready_at?: string | null
+          xp?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plot_shares_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plot_shares_plot_id_fkey"
+            columns: ["plot_id"]
+            isOneToOne: false
+            referencedRelation: "plots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plot_xp_events: {
         Row: {
           awarded_by: string
@@ -739,6 +796,54 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "city_developments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      prepare_plot_share: {
+        Args: {
+          expected_revision: string
+          request_id: string
+          requested_phase: string
+        }
+        Returns: {
+          avatar_url: string | null
+          created_at: string
+          development_revision: string
+          founder_name: string
+          id: string
+          image_path: string
+          owner_id: string
+          phase: string
+          plot_id: string
+          ready_at: string | null
+          xp: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "plot_shares"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      publish_plot_share: {
+        Args: { request_id: string }
+        Returns: {
+          avatar_url: string | null
+          created_at: string
+          development_revision: string
+          founder_name: string
+          id: string
+          image_path: string
+          owner_id: string
+          phase: string
+          plot_id: string
+          ready_at: string | null
+          xp: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "plot_shares"
           isOneToOne: false
           isSetofReturn: true
         }
