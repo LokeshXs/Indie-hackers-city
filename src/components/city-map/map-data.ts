@@ -560,6 +560,38 @@ function createCoffeeShop(blockEntities: readonly CityEntity[]): CityEntity[] {
   })];
 }
 
+/** Jobs Avenue's shore side: the ring-road row on the block furthest from the map centre, where
+ * the north-outer row fronts the outer carriageway rather than the city.
+ *
+ * Deliberately not on Hopper. The Coffee House already holds that block's inner corner, and the two
+ * buildings nobody owns should not share a street -- spread across the map they read as civic
+ * fixtures, side by side they would read as one quarter that founders are shut out of. */
+const CORNER_STORE_PLOT_ID = "pioneer:jobs:north-outer:04";
+
+/** The corner store: the district's second building that belongs to nobody.
+ *
+ * The same arrangement as the Coffee House -- the plot beneath it is marked `is_active = false` so
+ * it is never offered to a founder, while the catalog still lists it, because the catalog is the
+ * map's geometry and the database is what decides who may build. No `plotId` of its own: with one,
+ * clicking it would open the claim flow for a plot nobody can hold.
+ *
+ * It needs no path lamps of its own, unlike the cafe. Its pole sign and its three fascia marks are
+ * lit surfaces in the asset itself, so after dark it lights its own forecourt. */
+function createCornerStore(blockEntities: readonly CityEntity[]): CityEntity[] {
+  const pad = blockEntities.find(
+    (entity) => entity.assetId === "grass-plot" && entity.plotId === CORNER_STORE_PLOT_ID,
+  );
+  if (!pad) throw new Error(`No plot pad found for the corner store: ${CORNER_STORE_PLOT_ID}`);
+  const { position, rotationY } = getBuildingPlacement(pad);
+  return [{
+    id: "corner-store",
+    assetId: "corner-store",
+    position,
+    rotationY,
+    scale: PLOT_BUILDING_SCALE,
+  }];
+}
+
 const plots: CityDistrict["plots"] = [...nw.plots, ...ne.plots, ...sw.plots, ...se.plots];
 const entities: CityDistrict["entities"] = [
   ...cityCentre,
@@ -568,6 +600,7 @@ const entities: CityDistrict["entities"] = [
   ...sw.entities,
   ...se.entities,
   ...createCoffeeShop(se.entities),
+  ...createCornerStore(nw.entities),
 ];
 
 export const starterDistrict: CityDistrict = {

@@ -47,6 +47,8 @@ const NON_SHADOW_CASTING_ASSETS = new Set<CityAssetId>([
   // Out on the block corner at r = 31, far past the same default frustum. It stands on its own
   // terrace and service paving, which is where its ground contact comes from.
   "coffee-shop",
+  // Further out again, on the north shore, and likewise standing on its own paving.
+  "corner-store",
 ]);
 
 /** After the plot is normalised, the building's front points along +z. PreviewStage's camera sits at

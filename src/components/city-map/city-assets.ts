@@ -22,6 +22,7 @@ export const CITY_ASSET_PATHS: Record<CityAssetId, string> = {
   "slat-studio-level-2": "/assets/city/v3/level2/slat-studio-level-2.glb",
   "teal-brow-level-2": "/assets/city/v3/level2/teal-brow-level-2.glb",
   "coffee-shop": "/assets/city/v3/shops/coffee-shop.glb",
+  "corner-store": "/assets/city/v3/shops/corner-store.glb",
 };
 
 /** The pedestrians who walk the pavements.
@@ -163,6 +164,37 @@ export const NIGHT_EMISSIVE_MATERIALS: Record<string, NightEmissive> = {
   // to bloom at this size stops being a painted fin and becomes a lamp.
   "Rocket white": { boost: 1, nightColor: "#3a3630" },
   "Rocket red": { boost: 2.8, nightColor: "#c8341a" },
+
+  // The corner store on the north shore. A convenience store's whole architecture is signage, so
+  // this is the most heavily lit thing on the map after the monument -- and deliberately a
+  // different KIND of light from the Coffee House: that one is somewhere to sit, lit warm; this one
+  // is open all night under cool fluorescent, which is what tells them apart at a distance.
+  //
+  // The pole sign and the three fascia marks ship lit already, because an internally lit sign box
+  // reads as one at noon too. They only come up.
+  // Held to 1.6, which looks timid written down and is not. The face ships at 0.56 emissive, so
+  // anything near 2.8 pushes all three channels past 1 at once -- and a colour clipped equally in
+  // three channels does not get brighter, it goes white and takes the mark's colours with it. The
+  // panel is the lightbox; the mark on it is what should be vivid.
+  "Seven Eleven sign face": { boost: 1.6 },
+  "Seven Eleven logo red": { boost: 2.4 },
+  "Seven Eleven logo green": { boost: 2.4 },
+  // The shopfront. Walked round to a cool white rather than the cafe's lamplight: a 24-hour shop
+  // is the one window in the city that should look like strip lighting, not a living room.
+  "Seven Eleven glazing": { boost: 2.2, nightColor: "#8d9a95" },
+  // The banded parapet. These ship unlit -- they are painted panels at noon -- so the colour is
+  // what does the work rather than a multiplier. Lifted only as far as keeping their hue after
+  // dark needs: pushed to where they read as lit panels they would out-glow the sign boxes, and
+  // the building would stop having a focus.
+  "Seven Eleven orange cap": { boost: 1, nightColor: "#7a3309" },
+  "Seven Eleven orange": { boost: 1, nightColor: "#6d2c07" },
+  "Seven Eleven green": { boost: 1, nightColor: "#0d3318" },
+  "Seven Eleven red": { boost: 1, nightColor: "#4d1010" },
+  "Seven Eleven white": { boost: 1, nightColor: "#5e6259" },
+  // The barrel canopies, catching the shopfront's light from underneath -- the same reason the
+  // Coffee House's awning carries an entry: unlit, a pale canopy over a lit window stops reading
+  // as a canopy and starts reading as a lid.
+  "Seven Eleven canopy": { boost: 1, nightColor: "#2f3438" },
 
   // Traffic. Both already carry a little emission so the lenses read at noon; at night they are
   // the only moving lights on the map.
