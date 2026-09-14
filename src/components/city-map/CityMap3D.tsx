@@ -194,14 +194,110 @@ function computeCityFitZoom(width: number, height: number): number {
   );
 }
 
+/** The lowest the controls let the camera drop toward the horizon, which is also the angle at which
+ * the sea has to reach furthest to fill the screen. Keep in sync with <OrbitControls maxPolarAngle>. */
+const MAX_POLAR_ANGLE = Math.PI / 2.8;
+/** Orthographic, so the camera's distance from the city changes nothing about how big anything
+ * looks -- it only decides where the clip planes and the fog are measured from. Keep in sync with
+ * the camera position set on mount and with the <Canvas camera> prop. */
+const CAMERA_DISTANCE = Math.hypot(600, 600, 600);
+/** How much sea there is, as a multiple of the area the screen can see. */
+const WATER_SCREEN_AREA_MULTIPLE = 2;
+
+/** How far out the sea has to go, from the city at the middle of it.
+ *
+ * `screen` is the furthest ground point the view can ever show: the widest zoom, at the lowest
+ * camera angle, panned as far as the controls allow. `water` is that again with room to spare.
+ *
+ * WHY THIS IS MEASURED RATHER THAN FIXED: the plane used to be a flat 1200 units square, which is
+ * plenty on a laptop and not nearly enough on a phone. The city is framed to a fixed fraction of
+ * the NARROWER axis, so a tall portrait screen looks out over roughly four times as much water --
+ * and ran off the end of it, leaving the background colour along the top of the map. */
+function computeSeaExtent(width: number, height: number): { screen: number; water: number } {
+  const zoom = computeCityFitZoom(width, height);
+  const halfWidth = width / (2 * zoom);
+  // Ground recedes, so a screen-vertical span covers 1/cos(polar) as much of it as it does screen.
+  const halfDepth = height / (2 * zoom) / Math.cos(MAX_POLAR_ANGLE);
+  const panReach = Math.hypot(CITY_HALF_EXTENT_X, CITY_HALF_EXTENT_Z);
+  const screen = Math.hypot(halfWidth, halfDepth) + panReach;
+  // Scaling a radius by root two doubles the area it covers.
+  return { screen, water: screen * Math.sqrt(WATER_SCREEN_AREA_MULTIPLE) };
+}
+
+/** How far from the camera a point that far out across the ground is. Orthographic, so this is the
+ * only thing fog and the clip planes depend on -- screen position doesn't come into it. */
+function seaDepthOffset(groundDistance: number): number {
+  return groundDistance * Math.sin(MAX_POLAR_ANGLE);
+}
+
+/** Open the clip planes wide enough to hold the sea, which is now as big as the screen needs it.
+ *
+ * Orthographic, so `near` is free to be negative: it is a plane a fixed distance in front of the
+ * camera rather than a distance anything has to stay beyond, and on a tall screen the near corner
+ * of the water genuinely does lie behind the camera's own plane. Symmetric about the camera, with
+ * headroom for the buildings standing in the middle of it. */
+function fitClipPlanesToSea(camera: THREE.Camera, waterExtent: number): void {
+  const orthographic = camera as THREE.OrthographicCamera;
+  const reach = seaDepthOffset(waterExtent * Math.SQRT2) + 200;
+  orthographic.near = CAMERA_DISTANCE - reach;
+  orthographic.far = CAMERA_DISTANCE + reach;
+  orthographic.updateProjectionMatrix();
+}
+
+/** Vertex spacing at the shore, which is what the fixed 1200/64 plane had all over. */
+const WATER_VERTEX_SPAN = 18.75;
+/** The grid is capped rather than grown to keep that spacing everywhere, because both the colouring
+ * loop below and the normals it recomputes cost the whole vertex count every frame, and a portrait
+ * phone wants a plane several times the size of a laptop's. */
+const WATER_MIN_SEGMENTS = 64;
+const WATER_MAX_SEGMENTS = 96;
+/** World units to one repeat of the surface tile -- the old 1200 / 40. */
+const WATER_TILE_SPAN = 30;
+
+/** Bunch the plane's vertices toward the island in the middle of it.
+ *
+ * WHY, rather than an evenly spaced grid: the resolution is wanted at the coast, where the shallows
+ * grade into deep water, and nowhere else -- past WATER_DEEP_DISTANCE the sea is one flat colour
+ * for thousands of units. An even grid ties the two together, so a plane big enough to reach a
+ * phone's horizon at an affordable vertex count would be more than twice as coarse at the shore as
+ * the old fixed plane was, and the shallows would ring the island in facets.
+ *
+ * Each axis is remapped through a power curve, chosen so the innermost step lands exactly on
+ * WATER_VERTEX_SPAN however large the sea has had to be. On a laptop that exponent comes out at
+ * essentially 1 and the grid stays the even one it always was. UVs are rebuilt from the moved
+ * positions so a texture tile still covers a fixed patch of world rather than stretching with the
+ * grid. */
+function bunchWaterVerticesInward(geometry: THREE.PlaneGeometry, extent: number): number {
+  const { widthSegments } = geometry.parameters;
+  const innermost = 2 / widthSegments;
+  // (innermost ** exponent) * (extent / 2) === WATER_VERTEX_SPAN, solved for the exponent. Never
+  // below 1, which would spread the vertices outward instead.
+  const exponent = Math.max(1, Math.log((2 * WATER_VERTEX_SPAN) / extent) / Math.log(innermost));
+  const position = geometry.attributes.position as THREE.BufferAttribute;
+  const uv = geometry.attributes.uv as THREE.BufferAttribute;
+  for (let index = 0; index < position.count; index += 1) {
+    for (const axis of ["X", "Y"] as const) {
+      const unit = (position[`get${axis}`](index) * 2) / extent;
+      const moved = (Math.sign(unit) * Math.abs(unit) ** exponent * extent) / 2;
+      position[`set${axis}`](index, moved);
+      uv[`set${axis}`](index, 0.5 + moved / extent);
+    }
+  }
+  position.needsUpdate = true;
+  uv.needsUpdate = true;
+  // The widest spacing left on the plane, out at the rim: the swell is sized against it.
+  return exponent * (extent / widthSegments);
+}
+
 const WaterSurface = memo(function WaterSurface() {
   const geometryRef = useRef<THREE.PlaneGeometry>(null);
-  const basePositionsRef = useRef<Float32Array | null>(null);
+  const shapedRef = useRef<THREE.PlaneGeometry | null>(null);
   const shoreDistancesRef = useRef<Float32Array | null>(null);
+  const swellRef = useRef(1);
   const scratchColor = useRef(new THREE.Color());
   const blend = useNightBlend();
-  /** The four depth colours at the current hour, mixed once a frame rather than once per vertex —
-   * the loop below runs four thousand times, and the sea is all one hour. */
+  /** The four depth colours at the current hour, mixed once a frame rather than once per vertex --
+   * the loop below runs thousands of times, and the sea is all one hour. */
   const palette = useRef({
     shallow: new THREE.Color(),
     mid: new THREE.Color(),
@@ -209,31 +305,59 @@ const WaterSurface = memo(function WaterSurface() {
     highlight: new THREE.Color(),
     tint: MORNING_ENVIRONMENT.water.tint,
   });
+  const { size } = useThree();
+  const extent = useMemo(
+    () => computeSeaExtent(size.width, size.height).water * 2,
+    [size.width, size.height],
+  );
+  const segments = useMemo(
+    () => THREE.MathUtils.clamp(Math.round(extent / WATER_VERTEX_SPAN), WATER_MIN_SEGMENTS, WATER_MAX_SEGMENTS),
+    [extent],
+  );
+  // A resize builds a whole new plane, so it needs shaping and the caches below no longer describe
+  // it. Guarded on the geometry itself rather than on the deps, so a double-invoked effect cannot
+  // put the vertices through the power curve twice.
+  useEffect(() => {
+    const geometry = geometryRef.current;
+    if (!geometry || shapedRef.current === geometry) return;
+    shapedRef.current = geometry;
+    // Sized against the widest spacing on the plane, so the swell is sampled at least as often per
+    // crest as it was on the old even grid anywhere on it, rather than aliasing into speckle out at
+    // sea. At laptop sizes the spacing is the old one and this is 1.
+    swellRef.current = WATER_VERTEX_SPAN / bunchWaterVerticesInward(geometry, extent);
+    shoreDistancesRef.current = null;
+  }, [extent, segments]);
+
   const loadedWaterTexture = useTexture("/assets/city/v3/water-surface-tile.png");
   const waterTexture = useMemo(() => {
     const texture = loadedWaterTexture.clone();
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(40, 40);
     texture.needsUpdate = true;
     return texture;
   }, [loadedWaterTexture]);
+  // Repeats follow the plane, so one tile stays the same size in world units however big the sea is.
+  useEffect(() => {
+    const repeats = Math.max(1, Math.round(extent / WATER_TILE_SPAN));
+    waterTexture.repeat.set(repeats, repeats);
+  }, [waterTexture, extent]);
 
   useFrame(({ clock }) => {
     const geometry = geometryRef.current;
     if (!geometry) return;
     const positions = geometry.attributes.position as THREE.BufferAttribute;
-    basePositionsRef.current ??= new Float32Array(positions.array as ArrayLike<number>);
     if (!geometry.getAttribute("color")) {
       geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(positions.count * 3), 3));
     }
     const colors = geometry.getAttribute("color") as THREE.BufferAttribute;
-    const base = basePositionsRef.current;
     // The coast is static: compute distance once, not for every vertex every frame.
     if (!shoreDistancesRef.current) {
+      const base = positions.array as ArrayLike<number>;
       shoreDistancesRef.current = Float32Array.from({ length: positions.count }, (_, index) =>
         shorelineDistance(base[index * 3], -base[index * 3 + 1], CITY_PAVED_HALF_X, CITY_PAVED_HALF_Z));
     }
+    const shoreDistances = shoreDistancesRef.current;
+    const swell = swellRef.current;
     const time = clock.elapsedTime;
 
     const night = blend?.current ?? 0;
@@ -245,8 +369,9 @@ const WaterSurface = memo(function WaterSurface() {
     water.tint = THREE.MathUtils.lerp(MORNING_ENVIRONMENT.water.tint, NIGHT_ENVIRONMENT.water.tint, night);
 
     for (let index = 0; index < positions.count; index += 1) {
-      const distance = shoreDistancesRef.current[index];
-      const wave = Math.sin(distance * 0.11 - time * 0.6) * 0.11 + Math.sin(distance * 0.07 + time * 0.35) * 0.07;
+      const distance = shoreDistances[index];
+      const wave = Math.sin(distance * 0.11 * swell - time * 0.6) * 0.11
+        + Math.sin(distance * 0.07 * swell + time * 0.35) * 0.07;
       positions.setZ(index, wave);
 
       const depthColor = scratchColor.current;
@@ -267,7 +392,7 @@ const WaterSurface = memo(function WaterSurface() {
 
   return (
     <mesh position={[0, -0.62, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow raycast={() => null}>
-      <planeGeometry ref={geometryRef} args={[1200, 1200, 64, 64]} />
+      <planeGeometry ref={geometryRef} args={[extent, extent, segments, segments]} />
       <meshStandardMaterial vertexColors map={waterTexture} roughness={0.2} metalness={0.1} fog />
     </mesh>
   );
@@ -453,7 +578,12 @@ const Scene = memo(function Scene({
 }) {
   const { camera, size } = useThree();
   const fitZoom = useMemo(() => computeCityFitZoom(size.width, size.height), [size.width, size.height]);
+  const sea = useMemo(() => computeSeaExtent(size.width, size.height), [size.width, size.height]);
   const framedRef = useRef(false);
+
+  useEffect(() => {
+    fitClipPlanesToSea(camera, sea.water);
+  }, [camera, sea]);
 
   useEffect(() => {
     // Frame once on mount; later viewport resizes only move the `minZoom` floor below, so a
@@ -490,8 +620,16 @@ const Scene = memo(function Scene({
   return (
     <>
       {/* Sky, fog, sun and moon, all driven from the city clock. At noon this renders exactly the
-          five fixed lines it replaced — see MORNING_ENVIRONMENT. */}
-      <TimeOfDayLighting />
+          five fixed lines it replaced — see MORNING_ENVIRONMENT.
+
+          The fog range is the exception, and comes from the viewport: it begins past the furthest
+          ground the screen can reach and finishes at the edge of the sea, so it hides the far rim
+          of the water without laying a band of sky colour across the top of the map — which is
+          what the old fixed 1086/1186 pair did, at every viewport size. */}
+      <TimeOfDayLighting
+        fogNear={CAMERA_DISTANCE + seaDepthOffset(sea.screen)}
+        fogFar={CAMERA_DISTANCE + seaDepthOffset(sea.water)}
+      />
       <LampGlow entities={entities} />
       <WaterSurface />
       <IslandShoreline halfX={CITY_PAVED_HALF_X} halfZ={CITY_PAVED_HALF_Z} />
