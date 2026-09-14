@@ -66,6 +66,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${overpass.variable} ${overpassMono.variable}`}>
       <head>
+        <link
+          rel="preload"
+          as="image"
+          href="/generated/indie-hackers-city-loading-boardwalk.png"
+          fetchPriority="high"
+        />
         <script
           defer
           src="https://cloud.umami.is/script.js"

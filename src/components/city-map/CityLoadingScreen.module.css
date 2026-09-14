@@ -6,7 +6,7 @@
   place-items: center;
   overflow: hidden;
   padding: clamp(1.25rem, 4vw, 3rem);
-  background: var(--ink);
+  background: #197f91;
   color: var(--cream-on-dark);
   isolation: isolate;
 }
