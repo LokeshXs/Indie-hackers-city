@@ -61,6 +61,7 @@ import {
   fieldControlClass,
 } from "@/components/ui";
 import styles from "./CityMap3D.module.css";
+import { shorelineRadius, shorelineDistance } from "./shoreline";
 
 export interface CityMap3DProps {
   district: CityDistrict;
@@ -163,9 +164,7 @@ const WATER_MID = [new THREE.Color(MORNING_ENVIRONMENT.water.mid), new THREE.Col
 const WATER_DEEP = [new THREE.Color(MORNING_ENVIRONMENT.water.deep), new THREE.Color(NIGHT_ENVIRONMENT.water.deep)] as const;
 const WATER_HIGHLIGHT = [new THREE.Color(MORNING_ENVIRONMENT.water.highlight), new THREE.Color(NIGHT_ENVIRONMENT.water.highlight)] as const;
 const WHITE_COLOR = new THREE.Color("#ffffff");
-// Water depth is measured as distance OUTSIDE the island rectangle (0 exactly at the shore),
-// so the shallow band hugs all four edges and the corners evenly. A radial-from-origin metric
-// would break up at the corners, which sit ~97 units out versus ~69 at the edge midpoints.
+// Shallow water follows the same irregular contour as the beach.
 const WATER_SHORE_START = 0;
 const WATER_MID_DISTANCE = 70;
 const WATER_DEEP_DISTANCE = 240;
@@ -173,9 +172,9 @@ const WATER_DEEP_DISTANCE = 240;
 /** Paved half-extents of the merged island (block offset + a block's outermost pathway). */
 const CITY_PAVED_HALF_X = 69.2;
 const CITY_PAVED_HALF_Z = 68.55;
-/** Outermost shoreline face — the paved edge plus the lower lip's 0.96 overhang. */
-const CITY_HALF_EXTENT_X = CITY_PAVED_HALF_X + 0.96;
-const CITY_HALF_EXTENT_Z = CITY_PAVED_HALF_Z + 0.96;
+/** Conservative beach bounds for camera framing and panning. */
+const CITY_HALF_EXTENT_X = CITY_PAVED_HALF_X * 1.19 + 19;
+const CITY_HALF_EXTENT_Z = CITY_PAVED_HALF_Z * 1.19 + 19;
 /** Fraction of the viewport the whole city spans when fully zoomed out. */
 const CITY_FIT_FRACTION = 0.6;
 // At the default camera orientation the screen axes are right = (1,0,-1)/√2 and up = (-1,2,-1)/√6,
@@ -195,6 +194,7 @@ function computeCityFitZoom(width: number, height: number): number {
 const WaterSurface = memo(function WaterSurface() {
   const geometryRef = useRef<THREE.PlaneGeometry>(null);
   const basePositionsRef = useRef<Float32Array | null>(null);
+  const shoreDistancesRef = useRef<Float32Array | null>(null);
   const scratchColor = useRef(new THREE.Color());
   const blend = useNightBlend();
   /** The four depth colours at the current hour, mixed once a frame rather than once per vertex —
@@ -226,6 +226,11 @@ const WaterSurface = memo(function WaterSurface() {
     }
     const colors = geometry.getAttribute("color") as THREE.BufferAttribute;
     const base = basePositionsRef.current;
+    // The coast is static: compute distance once, not for every vertex every frame.
+    if (!shoreDistancesRef.current) {
+      shoreDistancesRef.current = Float32Array.from({ length: positions.count }, (_, index) =>
+        shorelineDistance(base[index * 3], -base[index * 3 + 1], CITY_PAVED_HALF_X, CITY_PAVED_HALF_Z));
+    }
     const time = clock.elapsedTime;
 
     const night = blend?.current ?? 0;
@@ -237,13 +242,7 @@ const WaterSurface = memo(function WaterSurface() {
     water.tint = THREE.MathUtils.lerp(MORNING_ENVIRONMENT.water.tint, NIGHT_ENVIRONMENT.water.tint, night);
 
     for (let index = 0; index < positions.count; index += 1) {
-      const offset = index * 3;
-      const x = base[offset];
-      const y = base[offset + 1];
-      // Distance outside the island rectangle — 0 anywhere on/inside the shore.
-      const dx = Math.max(Math.abs(x) - CITY_HALF_EXTENT_X, 0);
-      const dz = Math.max(Math.abs(y) - CITY_HALF_EXTENT_Z, 0);
-      const distance = Math.sqrt(dx * dx + dz * dz);
+      const distance = shoreDistancesRef.current[index];
       const wave = Math.sin(distance * 0.11 - time * 0.6) * 0.11 + Math.sin(distance * 0.07 + time * 0.35) * 0.07;
       positions.setZ(index, wave);
 
@@ -271,34 +270,49 @@ const WaterSurface = memo(function WaterSurface() {
   );
 });
 
-/** Three stacked retaining-wall tiers, each stepping further out and getting thicker.
- * Offsets reproduce the original hand-tuned per-block numbers exactly. */
-const SHORELINE_TIERS = [
-  { offset: 0.26, thickness: 0.52, y: -0.06, height: 0.1, color: "#b9b7ac", roughness: 0.88 },
-  { offset: 0.38, thickness: 0.72, y: -0.24, height: 0.3, color: "#515957", roughness: 0.92 },
-  { offset: 0.50, thickness: 0.92, y: -0.43, height: 0.1, color: "#858d89", roughness: 0.9 },
-] as const;
-
-/** halfX / halfZ are the paved half-extents where the shoreline begins. */
+/** A grassy verge gives way to a narrow sandy beach and submerged wet sand. */
 const IslandShoreline = memo(function IslandShoreline({ halfX, halfZ }: { halfX: number; halfZ: number }) {
+  const geometry = useMemo(() => {
+    const segments = 256;
+    const bands = [0, 0.3, 0.43, 0.52, 0.78, 0.9, 1];
+    const heights = [-0.08, -0.09, -0.12, -0.17, -0.3, -0.48, -0.85];
+    const sandColors = ["#79a957", "#8ab662", "#a4bd72", "#efd79c", "#eed69d", "#cbb580", "#b8aa7e"].map((color) => new THREE.Color(color));
+    const vertices: number[] = [];
+    const colors: number[] = [];
+    const indices: number[] = [];
+    for (let band = 0; band < bands.length; band++) {
+      for (let segment = 0; segment <= segments; segment++) {
+        const angle = segment / segments * Math.PI * 2;
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        // Start just under the paving so there is no gap at the city edge.
+        const inner = Math.min((halfX - 0.15) / Math.abs(cos), (halfZ - 0.15) / Math.abs(sin));
+        // Uneven grass/sand boundary follows the coast without becoming a straight border.
+        const grassVariation = band > 0 && band < 4
+          ? 0.035 * Math.sin(17 * angle + 0.8) + 0.02 * Math.sin(29 * angle)
+          : 0;
+        const radius = THREE.MathUtils.lerp(inner, shorelineRadius(angle, halfX, halfZ), bands[band] + grassVariation);
+        vertices.push(cos * radius, heights[band], sin * radius);
+        const color = sandColors[band];
+        colors.push(color.r, color.g, color.b);
+        if (band < bands.length - 1 && segment < segments) {
+          const a = band * (segments + 1) + segment;
+          const b = a + segments + 1;
+          indices.push(a, a + 1, b, a + 1, b + 1, b);
+        }
+      }
+    }
+    const mesh = new THREE.BufferGeometry();
+    mesh.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+    mesh.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    mesh.setIndex(indices);
+    mesh.computeVertexNormals();
+    return mesh;
+  }, [halfX, halfZ]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   return (
-    <group raycast={() => null}>
-      {SHORELINE_TIERS.map((tier) => {
-        const x = halfX + tier.offset;
-        const z = halfZ + tier.offset;
-        // Bars run full corner-to-corner so the four corners are always covered.
-        const alongX = 2 * x + tier.thickness;
-        const alongZ = 2 * z + tier.thickness;
-        return (
-          <group key={tier.color}>
-            <mesh position={[0, tier.y, -z]} receiveShadow><boxGeometry args={[alongX, tier.height, tier.thickness]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
-            <mesh position={[0, tier.y, z]} receiveShadow><boxGeometry args={[alongX, tier.height, tier.thickness]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
-            <mesh position={[-x, tier.y, 0]} receiveShadow><boxGeometry args={[tier.thickness, tier.height, alongZ]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
-            <mesh position={[x, tier.y, 0]} receiveShadow><boxGeometry args={[tier.thickness, tier.height, alongZ]} /><meshStandardMaterial color={tier.color} roughness={tier.roughness} /></mesh>
-          </group>
-        );
-      })}
-    </group>
+    <mesh geometry={geometry} receiveShadow raycast={() => null}>
+      <meshStandardMaterial vertexColors roughness={0.95} />
+    </mesh>
   );
 });
 
@@ -560,6 +574,7 @@ const DayNightToggle = memo(function DayNightToggle({
         variant="secondary"
         size="sm"
         icon
+        className={styles.mapControlButton}
         aria-pressed={night}
         aria-label={night ? "Switch the city to day" : "Switch the city to night"}
         title={night ? "Switch to day" : "Switch to night"}
@@ -1204,12 +1219,6 @@ export function CityMap3D({
   return (
     // The phase dresses the HUD panels, and nothing else — see Panel.module.css.
     <main ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete} data-city-phase={cityPhase}>
-      <Panel as="header" placement="topLeft" inert className={styles.header}>
-        <p className={styles.eyebrow}>{district.name}</p>
-        <h1>Indie Hackers City</h1>
-        <p>Choose a plot and found your first startup.</p>
-      </Panel>
-      <AccountMenu />
       {cityPresence.notice.length > 0 && (
         <aside className={styles.onlineToast} role="status" aria-live="polite">
           <span className={styles.onlineDot} aria-hidden="true" />
@@ -1264,12 +1273,28 @@ export function CityMap3D({
           </CityTimeProvider>
         </Canvas>
       </CityAssetErrorBoundary>
+      <div className={styles.mapControls}>
       <DayNightToggle phase={cityPhase} onToggle={toggleCityPhase} />
-      <Panel placement="topRight" className={styles.controls} aria-label="Camera controls">
-        <Button variant="secondary" size="sm" icon aria-label="Zoom out" onClick={() => zoomBy(-3)}>−</Button>
-        <Button variant="secondary" size="sm" icon aria-label="Zoom in" onClick={() => zoomBy(3)}>+</Button>
-        <Button variant="secondary" size="sm" icon aria-label="Reset camera" onClick={resetCamera}>⌂</Button>
+      <Panel placement="bottomLeft" className={styles.controls} aria-label="Camera controls">
+        <Button variant="tertiary" size="sm" icon className={styles.mapControlButton} aria-label="Zoom out" title="Zoom out" onClick={() => zoomBy(-3)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5M7.5 10.5h6" />
+          </svg>
+        </Button>
+        <Button variant="tertiary" size="sm" icon className={styles.mapControlButton} aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(3)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5M7.5 10.5h6m-3-3v6" />
+          </svg>
+        </Button>
+        <Button variant="tertiary" size="sm" icon className={styles.mapControlButton} aria-label="Reset camera" title="Reset camera" onClick={resetCamera}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M8 3H4a1 1 0 0 0-1 1v4m13-5h4a1 1 0 0 1 1 1v4M3 16v4a1 1 0 0 0 1 1h4m13-5v4a1 1 0 0 1-1 1h-4" /><path d="m12 8 4 4-4 4-4-4Z" />
+          </svg>
+        </Button>
       </Panel>
+      </div>
+      <div className={styles.founderAccount}>
+      <AccountMenu />
       {ownPlot ? (
         <FounderProgressCard
           development={ownPlot}
@@ -1280,6 +1305,7 @@ export function CityMap3D({
           shareDisabled={!loadingComplete || Boolean(construction)}
         />
       ) : null}
+      </div>
       {shareOpen && ownPlot ? <PlotShareModal development={ownPlot} prepare={prepareShare} onClose={closeShare} /> : null}
       {hasPendingUpdates ? (
         <aside className={`${styles.cityUpdateNotice} ${ownPlot ? styles.cityUpdateNoticeWithProgress : ""}`} aria-live="polite" aria-label="City updates available">
@@ -1294,7 +1320,7 @@ export function CityMap3D({
         </aside>
       ) : null}
       <Panel as="p" placement="bottomCenter" inert className={styles.hint}>Tap a plot to build · Drag to pan · Right-drag to rotate · Scroll to zoom where you point</Panel>
-      <Panel as="p" placement="bottomRight" inert className={styles.buildStatus} aria-live="polite">{hasRefreshError ? "Live city updates are temporarily unavailable. Showing the last known city state." : statusMessage}</Panel>
+      <span className="sr-only" aria-live="polite">{hasRefreshError ? "Live city updates are temporarily unavailable. Showing the last known city state." : statusMessage}</span>
       {!loadingComplete ? (
         <CityLoadingScreen
           sceneReady={sceneReady}

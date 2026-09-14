@@ -466,6 +466,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          bio: string | null
           created_at: string
           full_name: string
           id: string
@@ -474,6 +475,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           full_name?: string
           id: string
@@ -482,6 +484,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           full_name?: string
           id?: string
@@ -606,6 +609,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
@@ -738,6 +742,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
@@ -776,6 +781,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
@@ -921,6 +927,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
@@ -985,6 +992,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
@@ -1015,6 +1023,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
@@ -1051,6 +1060,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null
@@ -1081,6 +1091,7 @@ export type Database = {
           avatar_url: string | null
           billboard_background_color: string | null
           billboard_text_color: string | null
+          bio: string | null
           building_asset_id: string | null
           building_level: number | null
           claimed_at: string | null

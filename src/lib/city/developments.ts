@@ -43,6 +43,7 @@ export function serializeCityDevelopment(row: CityDevelopmentRow): CityDevelopme
       fullName: row.founder_name!,
       xHandle: row.x_handle,
       avatarUrl: row.avatar_url,
+      bio: row.bio ?? null,
     },
     building: {
       level: buildingLevel,

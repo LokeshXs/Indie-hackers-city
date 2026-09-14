@@ -32,6 +32,7 @@ import styles from "./ProjectCard.module.css";
 import { OnlineFounderMarker } from "./OnlineFounderMarker";
 import { STATUS_TEXT_LIMIT, statusTextLength, validateStatusText } from "@/lib/city/status";
 import { unlocksFor } from "@/lib/city/unlocks";
+import { VisitorPlotCard } from "./VisitorPlotCard";
 import { PlotSnapshot } from "./PlotSnapshot";
 
 const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
@@ -143,7 +144,13 @@ interface ProjectCardProps {
   onUpdated(development: CityDevelopment): void;
 }
 
-export function ProjectCard({
+export function ProjectCard(props: ProjectCardProps) {
+  return props.currentUserId && props.currentUserId === props.development.ownerId
+    ? <OwnerProjectCard key={props.development.plotId} {...props} />
+    : <VisitorPlotCard key={props.development.plotId} development={props.development} onClose={props.onClose} />;
+}
+
+function OwnerProjectCard({
   development,
   plotEntity,
   address,
@@ -180,6 +187,7 @@ export function ProjectCard({
   const [isUploading, setIsUploading] = useState(false);
   const [editingProject, setEditingProject] = useState<FounderProject | null>(null);
 
+  const [bio, setBio] = useState(development.founder.bio ?? "");
   const [fullName, setFullName] = useState(development.founder.fullName);
   const [xHandle, setXHandle] = useState(development.founder.xHandle ?? "");
   const [projectName, setProjectName] = useState("");
@@ -336,6 +344,7 @@ export function ProjectCard({
     const formData = new FormData();
     formData.set("fullName", fullName.trim());
     formData.set("xHandle", normalizedHandle);
+    formData.set("bio", bio);
     if (await send("/api/profile", { method: "PATCH", body: formData })) goTo("customise");
   }
 
@@ -878,6 +887,10 @@ export function ProjectCard({
               <Field label="Full name" htmlFor="founder-name">
                 {(field) => <input {...field} ref={firstFieldRef} className={fieldControlClass} value={fullName} maxLength={60} required onChange={(event) => setFullName(event.target.value)} />}
               </Field>
+              <Field label="Public bio (optional)" htmlFor="founder-bio">
+                {(field) => <textarea {...field} className={fieldControlClass} value={bio} rows={3} aria-describedby="founder-bio-count" onChange={(event) => setBio(Array.from(event.target.value).slice(0, 160).join(""))} />}
+              </Field>
+              <small id="founder-bio-count">{Array.from(bio).length}/160 · Visible to everyone visiting your plot.</small>
               <Field label="X handle" htmlFor="founder-handle">
                 {(field) => <input {...field} className={fieldControlClass} value={xHandle} maxLength={16} required autoCapitalize="none" spellCheck={false} onChange={(event) => setXHandle(event.target.value)} />}
               </Field>

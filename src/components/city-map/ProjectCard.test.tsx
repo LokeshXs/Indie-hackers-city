@@ -63,7 +63,7 @@ const development: CityDevelopment = {
     type: "app",
   },
   statusText: null,
-  founder: { fullName: "Ada Founder", xHandle: "ada_founder", avatarUrl: null },
+  founder: { fullName: "Ada Founder", xHandle: "ada_founder", avatarUrl: null, bio: null },
   building: { level: 1, assetId: "indie-garage-level-1" },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
   progression: { xp: 10, buildingLevel: 1, currentLevelXp: 0, nextLevelXp: 100 },
@@ -583,5 +583,36 @@ describe("ProjectCard status editing", () => {
   it("does not expose configuration to other founders", () => {
     render(<ProjectCard development={development} currentUserId="someone-else" address="Jobs Avenue" onClose={vi.fn()} onUpdated={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Customise" })).not.toBeInTheDocument();
+  });
+});
+
+describe("owner and visitor modal routing", () => {
+  it.each([undefined, "other-user"])("shows the visitor profile for %s", async (currentUserId) => {
+    render(<ProjectCard development={development} address="Jobs Avenue" currentUserId={currentUserId} onClose={vi.fn()} onUpdated={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: development.founder.fullName })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Customise" })).not.toBeInTheDocument();
+    await screen.findByText("Claimed a plot");
+  });
+  it("switches away from an open owner editor when the user logs out", async () => {
+    const props = { development, address: "Jobs Avenue", onClose: vi.fn(), onUpdated: vi.fn() };
+    const view = render(<ProjectCard {...props} currentUserId={development.ownerId} />);
+    await userEvent.click(screen.getByRole("button", { name: "Customise" }));
+    await userEvent.click(screen.getByRole("button", { name: /Founder details/ }));
+    expect(screen.getByRole("textbox", { name: "Public bio (optional)" })).toBeInTheDocument();
+    view.rerender(<ProjectCard {...props} />);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await screen.findByText("Claimed a plot");
+  });
+  it("submits bio through the existing founder editor", async () => {
+    stubSuccessfulSave();
+    render(<ProjectCard development={development} address="Jobs Avenue" currentUserId={development.ownerId} onClose={vi.fn()} onUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Customise" }));
+    await userEvent.click(screen.getByRole("button", { name: /Founder details/ }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Public bio (optional)" }), "Building for makers");
+    await userEvent.click(screen.getByRole("button", { name: "Save details" }));
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("/api/profile");
+    expect((init?.body as FormData).get("bio")).toBe("Building for makers");
+    vi.unstubAllGlobals();
   });
 });

@@ -50,7 +50,7 @@ const development = {
   ownerId: "user-1",
   project: { id: "123e4567-e89b-42d3-a456-426614174000", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "app" as const },
   statusText: null,
-  founder: { fullName: "Lokesh Singh", xHandle: "lokesh_singh", avatarUrl: null },
+  founder: { fullName: "Lokesh Singh", xHandle: "lokesh_singh", avatarUrl: null, bio: null },
   building: { level: 1 as const, assetId: "startup-building-level-1" as const },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
   progression: { xp: 0, buildingLevel: 1 as const, currentLevelXp: 0, nextLevelXp: 100 },

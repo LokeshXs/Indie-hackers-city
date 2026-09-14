@@ -43,6 +43,7 @@ export interface CityDevelopment {
     fullName: string;
     xHandle: string | null;
     avatarUrl: string | null;
+    bio: string | null;
   };
   building: {
     level: StartupBuildingLevel;

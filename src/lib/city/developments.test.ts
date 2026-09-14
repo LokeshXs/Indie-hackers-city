@@ -4,6 +4,7 @@ import { cityDevelopmentRecord, serializeCityDevelopment } from "./developments"
 
 function developmentRow(overrides: Partial<CityDevelopmentRow> = {}): CityDevelopmentRow {
   return {
+    bio: null,
     avatar_url: null,
     status_text: null,
     billboard_background_color: "#1b3a4b",

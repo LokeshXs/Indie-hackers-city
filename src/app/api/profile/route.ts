@@ -21,7 +21,7 @@ export async function PATCH(request: Request) {
   // No RPC needed: profiles already carries an own-row UPDATE policy for authenticated users.
   const update = await supabase
     .from("profiles")
-    .update({ full_name: validation.data.fullName, x_handle: validation.data.xHandle })
+    .update({ full_name: validation.data.fullName, x_handle: validation.data.xHandle, ...(validation.data.bio !== undefined ? { bio: validation.data.bio } : {}) })
     .eq("id", user.id);
 
   if (update.error) {
