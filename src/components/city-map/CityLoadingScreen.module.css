@@ -21,7 +21,7 @@
   background: linear-gradient(180deg, rgb(7 34 42 / 12%), transparent 45%, rgb(7 34 42 / 48%));
 }
 .content { display: grid; place-items: center; width: 100%; }
-.brand { max-width: 100%; text-align: center; }
+.brand { max-width: 100%; text-align: center; transform: translateY(-clamp(1rem, 5vh, 3.5rem)); }
 .logo {
   display: block;
   width: clamp(8rem, 28vh, 18rem);
