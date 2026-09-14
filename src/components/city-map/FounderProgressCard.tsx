@@ -25,12 +25,9 @@ const GIFT_MARKER = "/assets/ui/reward-gift-marker.png";
  * block keeps its shape instead of showing a blank line. */
 const UNNAMED_REWARD = "A new reward";
 
-/** The founder's own standing, and what their XP is buying next.
- *
- * The bar measures the stretch between the reward last earned and the next one — not building
- * level, which renders identically at every level, and not total XP, which makes a fresh leg look
- * two-thirds done. Crossing a reward threshold visibly changes the building: lights appear on the
- * roof, the billboard starts scrolling. That is what is worth measuring. */
+/** The founder's own standing, and what their XP is buying next. The bar measures the stretch
+ * between the reward last earned and the next one. Lights, the pet, and a level-two building are
+ * all visible city changes, so each gets its own progress stretch. */
 export function FounderProgressCard({
   development,
   buttonRef,

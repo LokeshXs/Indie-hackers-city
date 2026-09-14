@@ -8,11 +8,13 @@ const SCENARIOS: Record<string, Announcement> = {
   "100 users": {
     xpGained: 80, previousXpTotal: 110, xpTotal: 190,
     previousBuildingLevel: 1, buildingLevel: 1, levelChanged: false,
+    currentLevelXp: 0, nextLevelXp: 490,
     achievements: [{ type: "users_100", label: "100+ users", xp: 50 }],
   },
   "Multiple achievements": {
     xpGained: 80, previousXpTotal: 110, xpTotal: 190,
     previousBuildingLevel: 1, buildingLevel: 1, levelChanged: false,
+    currentLevelXp: 0, nextLevelXp: 490,
     achievements: [
       { type: "users_10", label: "10 users", xp: 5 },
       { type: "users_50", label: "50 users", xp: 25 },
@@ -22,6 +24,7 @@ const SCENARIOS: Record<string, Announcement> = {
   "Level up": {
     xpGained: 150, previousXpTotal: 390, xpTotal: 540,
     previousBuildingLevel: 1, buildingLevel: 2, levelChanged: true,
+    currentLevelXp: 490, nextLevelXp: 690,
     achievements: [{ type: "revenue_100", label: "$100 earned", xp: 150 }],
   },
 };

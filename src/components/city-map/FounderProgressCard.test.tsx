@@ -99,7 +99,6 @@ describe("FounderProgressCard", () => {
       onViewBuilding={() => undefined}
     />);
 
-    // 570 is a placeholder: a real landing on the earning curve, with nothing designed for it yet.
     expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("A new reward");
     expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("570 XP");
   });

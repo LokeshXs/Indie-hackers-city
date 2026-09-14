@@ -4,7 +4,6 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import { useEffect } from "react";
 import { Button, Overlay } from "@/components/ui";
 import type { RewardAnnouncement as Announcement } from "@/lib/city/rewards";
-import { currentLeg } from "@/lib/city/unlocks";
 import styles from "./RewardAnnouncement.module.css";
 
 const FORMAT = new Intl.NumberFormat("en-US");
@@ -30,17 +29,27 @@ interface RewardAnnouncementProps {
 
 /** One shared tween keeps earned XP and reward progress in step, without React renders per frame. */
 export function RewardAnnouncement({ announcement, onDismiss }: RewardAnnouncementProps) {
-  const { levelChanged, buildingLevel, xpGained, previousXpTotal, xpTotal, achievements } = announcement;
+  const {
+    levelChanged, buildingLevel, xpGained, previousXpTotal, xpTotal, currentLevelXp, nextLevelXp, achievements,
+  } = announcement;
   const still = Boolean(useReducedMotion());
   const earned = useMotionValue(still ? xpGained : 0);
   const count = useTransform(earned, (value) => `+${FORMAT.format(Math.round(value))}`);
-  const leg = currentLeg(xpTotal);
-  // Keep the displayed reward interval fixed throughout the animation. Recomputing the
-  // interval at each threshold makes the bar fill, reset, then fill again.
-  const fill = useTransform(earned, (value) => leg
-    ? Math.min(1, Math.max(0, (previousXpTotal + value - leg.from) / (leg.to - leg.from)))
-    : 1);
-  const nextReward = leg?.reward?.label ?? "Next reward";
+  const hasNextLevel = nextLevelXp !== null && nextLevelXp > currentLevelXp;
+  // The celebration always follows the building level that the founder finishes on. A level-up
+  // therefore starts a fresh stretch (490 → 690 for level 2), while an ordinary reward fills the
+  // current stretch (0 → 490 for level 1) without resetting at smaller cosmetic unlocks.
+  const fill = useTransform(earned, (value) => {
+    if (!hasNextLevel || nextLevelXp === null) return 1;
+    return Math.min(1, Math.max(0,
+      (previousXpTotal + value - currentLevelXp) / (nextLevelXp - currentLevelXp),
+    ));
+  });
+  const nextLevel = buildingLevel + 1;
+  const progressLabel = hasNextLevel ? `Level ${nextLevel} unlocks` : "All current levels unlocked";
+  const progressDetail = hasNextLevel && nextLevelXp !== null
+    ? `${FORMAT.format(Math.max(0, nextLevelXp - xpTotal))} XP to go`
+    : "";
 
   useEffect(() => {
     earned.set(still ? xpGained : 0);
@@ -93,13 +102,13 @@ export function RewardAnnouncement({ announcement, onDismiss }: RewardAnnounceme
           <div className={styles.progressHeading}>
             <strong>Level {buildingLevel}</strong><span>Total XP: {FORMAT.format(xpTotal)}</span>
           </div>
-          {leg ? <>
-            <div className={styles.track} role="progressbar" aria-label={`Progress toward ${nextReward}`}
-              aria-valuemin={leg.from} aria-valuemax={leg.to} aria-valuenow={xpTotal}>
+          {hasNextLevel && nextLevelXp !== null ? <>
+            <div className={styles.track} role="progressbar" aria-label={`Progress toward ${progressLabel}`}
+              aria-valuemin={currentLevelXp} aria-valuemax={nextLevelXp} aria-valuenow={Math.min(xpTotal, nextLevelXp)}>
               <motion.div className={styles.fill} style={{ scaleX: fill }} />
             </div>
-            <div className={styles.legend}><span>{nextReward}</span><span>{FORMAT.format(leg.remaining)} XP to go</span></div>
-          </> : <p className={styles.completed}>All current rewards unlocked</p>}
+            <div className={styles.legend}><span>{progressLabel}</span><span>{progressDetail}</span></div>
+          </> : <p className={styles.completed}>All current levels unlocked</p>}
           {levelChanged && <motion.p className={styles.levelUp}
             initial={still ? false : { opacity: 0 }} animate={{ opacity: 1 }}
             transition={{ delay: 2.7, duration: 0.3 }}>✦ Level {buildingLevel} unlocked</motion.p>}

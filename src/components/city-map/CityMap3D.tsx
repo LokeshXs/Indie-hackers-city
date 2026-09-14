@@ -23,7 +23,7 @@ import { canChoosePremises, unlocksFor } from "@/lib/city/unlocks";
 import { BUILDING_ROOF_ANCHORS, CAR_ASSET_PATH, CITY_ASSET_PATHS, PEDESTRIAN_ASSET_PATH, PET_DOG_ASSET_PATH } from "./city-assets";
 import { PremisesUpgradeModal } from "./PremisesUpgradeModal";
 import { contrastRatio } from "./billboard-texture";
-import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
+import { BillboardPreview, BuildingPreview, EmptyPlotPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
 import {
   PLOT_BUILDING_SCALE,
   createPlotDevelopmentEntities,
@@ -695,6 +695,7 @@ export function CityMap3D({
   const [assetError, setAssetError] = useState<Error | null>(null);
   const [assetBoundaryResetKey] = useState(0);
   const [isClaimLimitAlertOpen, setIsClaimLimitAlertOpen] = useState(false);
+  const [isClaimGuideOpen, setIsClaimGuideOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState(
     initialDevelopmentLoadError
       ? "The city could not refresh its developments. You can still explore."
@@ -709,9 +710,11 @@ export function CityMap3D({
   const focusTimerRef = useRef<number | null>(null);
   const viewBuildingButtonRef = useRef<HTMLButtonElement>(null);
   const claimLimitButtonRef = useRef<HTMLButtonElement>(null);
+  const claimGuideButtonRef = useRef<HTMLButtonElement>(null);
   const founderProgressButtonRef = useRef<HTMLButtonElement>(null);
   const projectCardReturnFocusRef = useRef<HTMLElement | null>(null);
   const initialReturnConsumedRef = useRef(false);
+  const claimGuideEvaluatedUserRef = useRef<string | null>(null);
   const handlePlotInteractionRef = useRef<(plotId: string) => void>(() => undefined);
   const handleScenePlotInteraction = useCallback((plotId: string) => {
     handlePlotInteractionRef.current(plotId);
@@ -729,6 +732,19 @@ export function CityMap3D({
     shellRef.current?.focus();
   }, []);
 
+  const closeClaimGuide = useCallback(() => {
+    if (user) {
+      try {
+        window.localStorage.setItem(`indie-hackers-city:claim-guide:${user.id}`, "seen");
+      } catch {
+        // The guide still closes when storage is unavailable; it can be offered again next visit.
+      }
+    }
+    setIsClaimGuideOpen(false);
+    setStatusMessage("Choose a bright empty plot to begin your claim.");
+    shellRef.current?.focus();
+  }, [user]);
+
   const plotEntities = useMemo(
     () => district.entities.filter((entity) => entity.plotId),
     [district.entities],
@@ -741,6 +757,19 @@ export function CityMap3D({
    * without the guard they would each flash for a moment at someone who turns out to be signed
    * out. A single narrowed const rather than the condition repeated at each of them. */
   const ownPlot = !isAuthLoading && isAuthenticated ? ownerDevelopment ?? null : null;
+
+  useEffect(() => {
+    if (!loadingComplete || isAuthLoading || !isAuthenticated || ownerDevelopment || initialClaimPlotId || !user) return;
+    if (claimGuideEvaluatedUserRef.current === user.id) return;
+    claimGuideEvaluatedUserRef.current = user.id;
+    try {
+      if (window.localStorage.getItem(`indie-hackers-city:claim-guide:${user.id}`) === "seen") return;
+    } catch {
+      // Private browsing can reject storage. The guide remains useful for this visit.
+    }
+    const frame = window.requestAnimationFrame(() => setIsClaimGuideOpen(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialClaimPlotId, isAuthenticated, isAuthLoading, loadingComplete, ownerDevelopment, user]);
   /** The 490 XP reward, unspent. Derived rather than stored, like every other unlock: the founder
    * still standing on a level-1 shell is the whole of the record that they have not redeemed it. */
   const premisesAvailable = Boolean(
@@ -1335,6 +1364,7 @@ export function CityMap3D({
           </button>
         </aside>
       ) : null}
+      <aside className={styles.betaNotice} aria-label="Product status">We are in <strong>Beta</strong> mode</aside>
       <Panel as="p" placement="bottomCenter" inert className={styles.hint}>Tap a plot to build · Drag to pan · Right-drag to rotate · Scroll to zoom where you point</Panel>
       <span className="sr-only" aria-live="polite">{hasRefreshError ? "Live city updates are temporarily unavailable. Showing the last known city state." : statusMessage}</span>
       {!loadingComplete ? (
@@ -1358,6 +1388,47 @@ export function CityMap3D({
             setStatusMessage(`${development.project.name} has moved into new premises.`);
           }}
         />
+      ) : null}
+      {isClaimGuideOpen ? (
+        <Modal
+          containment="absolute"
+          layout="surface"
+          width="min(78rem, 100%)"
+          zIndex={12}
+          className={styles.claimGuideModal}
+          label="Welcome to Indie Hackers City"
+          describedBy="claim-guide-description"
+          showClose
+          closeLabel="Close claim guide"
+          initialFocus={claimGuideButtonRef}
+          onClose={closeClaimGuide}
+        >
+          <Modal.Split previewColumn="minmax(0, 1.05fr)" actionColumn="minmax(26rem, 0.95fr)">
+            <Modal.Preview label="An empty city plot ready to claim">
+              <div className={styles.claimGuidePreviewInfo}>
+                <p>Open plot</p>
+                <strong>Start with a corner<br />that’s yours.</strong>
+                <span>One plot for every founder.</span>
+              </div>
+              <PreviewStage className={styles.claimGuidePreviewCanvas} zoom={43}>
+                <EmptyPlotPreview />
+              </PreviewStage>
+              <span className={styles.claimGuidePreviewAddress} aria-hidden="true">Pioneer District · Available</span>
+            </Modal.Preview>
+            <Modal.Pane>
+              <div className={styles.claimGuideContent}>
+                <h2>Find your corner of the city</h2>
+                <p id="claim-guide-description">Choose any bright empty plot on the map, then add your profile, project, and billboard to make it yours.</p>
+                <ol>
+                  <li><strong>Pick an open plot.</strong><span>Empty lots are ready to claim.</span></li>
+                  <li><strong>Tell us what you’re building.</strong><span>Add your name, X handle, and project.</span></li>
+                  <li><strong>Grow it with milestones.</strong><span>Approved achievements earn XP and unlock rewards.</span></li>
+                </ol>
+                <Button ref={claimGuideButtonRef} size="default" onClick={closeClaimGuide}>Choose my plot</Button>
+              </div>
+            </Modal.Pane>
+          </Modal.Split>
+        </Modal>
       ) : null}
       {isClaimLimitAlertOpen ? (
         <Modal

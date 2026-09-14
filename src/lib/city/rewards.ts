@@ -17,6 +17,8 @@ export interface RewardAnnouncement {
   xpTotal: number;
   previousBuildingLevel: StartupBuildingLevel;
   buildingLevel: StartupBuildingLevel;
+  currentLevelXp: number;
+  nextLevelXp: number | null;
   levelChanged: boolean;
   achievements: RewardAchievement[];
 }
@@ -43,6 +45,8 @@ export function serializeRewardAnnouncement(row: AnnouncementRow): RewardAnnounc
     xpTotal: row.xp_total,
     previousBuildingLevel: row.previous_building_level as StartupBuildingLevel,
     buildingLevel: row.building_level as StartupBuildingLevel,
+    currentLevelXp: row.current_level_xp,
+    nextLevelXp: row.next_level_xp,
     levelChanged: row.level_changed,
     achievements: parseAchievements(row.achievements),
   };

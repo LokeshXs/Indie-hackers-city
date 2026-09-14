@@ -7,10 +7,12 @@ import type { RewardAnnouncement as Announcement } from "@/lib/city/rewards";
 function announcement(overrides: Partial<Announcement> = {}): Announcement {
   return {
     xpGained: 80,
-    previousXpTotal: 410,
-    xpTotal: 490,
+    previousXpTotal: 310,
+    xpTotal: 390,
     previousBuildingLevel: 1,
     buildingLevel: 1,
+    currentLevelXp: 0,
+    nextLevelXp: 490,
     levelChanged: false,
     achievements: [
       { type: "users_10", label: "10 users", xp: 5 },
@@ -75,21 +77,36 @@ describe("RewardAnnouncement", () => {
   it("counts earned XP from zero and separates the lifetime total", () => {
     render(<RewardAnnouncement announcement={announcement()} onDismiss={vi.fn()} />);
     expect(screen.getByText("+0")).toBeInTheDocument();
-    expect(screen.getByText("Total XP: 490")).toBeInTheDocument();
+    expect(screen.getByText("Total XP: 390")).toBeInTheDocument();
     const progress = screen.getByRole("progressbar");
-    expect(progress).toHaveAttribute("aria-valuemin", "490");
-    expect(progress).toHaveAttribute("aria-valuemax", "570");
-    expect(progress).toHaveAttribute("aria-valuenow", "490");
+    expect(progress).toHaveAttribute("aria-valuemin", "0");
+    expect(progress).toHaveAttribute("aria-valuemax", "490");
+    expect(progress).toHaveAttribute("aria-valuenow", "390");
+    expect(screen.getByText("Level 2 unlocks")).toBeInTheDocument();
   });
 
-  it("starts at zero on the final reward interval when the award crosses a threshold", () => {
+  it("keeps level 1 progress on the 0 to 490 building range", () => {
     render(<RewardAnnouncement announcement={announcement({
-      previousXpTotal: 140, xpGained: 150, xpTotal: 290,
+      previousXpTotal: 10, xpGained: 380, xpTotal: 390,
     })} onDismiss={vi.fn()} />);
     const progress = screen.getByRole("progressbar");
-    expect(progress).toHaveAttribute("aria-valuemin", "240");
-    expect(progress).toHaveAttribute("aria-valuemax", "390");
-    expect(progress.firstElementChild).toHaveStyle({ transform: "scaleX(0)" });
+    expect(progress).toHaveAttribute("aria-valuemin", "0");
+    expect(progress).toHaveAttribute("aria-valuemax", "490");
+    expect(progress).toHaveAttribute("aria-valuenow", "390");
+    expect(progress.firstElementChild).toHaveStyle({ transform: `scaleX(${10 / 490})` });
+  });
+
+  it("starts the level 2 to level 3 range when level 2 is reached", () => {
+    render(<RewardAnnouncement announcement={announcement({
+      previousXpTotal: 480, xpGained: 10, xpTotal: 490,
+      previousBuildingLevel: 1, buildingLevel: 2, levelChanged: true,
+      currentLevelXp: 490, nextLevelXp: 690,
+    })} onDismiss={vi.fn()} />);
+    const progress = screen.getByRole("progressbar");
+    expect(progress).toHaveAttribute("aria-valuemin", "490");
+    expect(progress).toHaveAttribute("aria-valuemax", "690");
+    expect(progress).toHaveAttribute("aria-valuenow", "490");
+    expect(screen.getByText("Level 3 unlocks")).toBeInTheDocument();
   });
 
   it("celebrates a single user milestone in the headline", () => {
@@ -99,16 +116,16 @@ describe("RewardAnnouncement", () => {
     expect(screen.getByRole("heading", { name: "You reached 100 users" })).toBeInTheDocument();
   });
 
-  it("does not invent a next reward after the ladder is complete", () => {
-    render(<RewardAnnouncement announcement={announcement({ xpTotal: 1000 })} onDismiss={vi.fn()} />);
+  it("does not invent a next level after the final level", () => {
+    render(<RewardAnnouncement announcement={announcement({ xpTotal: 1_890, buildingLevel: 5, currentLevelXp: 1_890, nextLevelXp: null })} onDismiss={vi.fn()} />);
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-    expect(screen.getByText("All current rewards unlocked")).toBeInTheDocument();
+    expect(screen.getByText("All current levels unlocked")).toBeInTheDocument();
   });
 
   it("puts the whole story in the dialog label, since the figure is animating", () => {
     render(
       <RewardAnnouncement
-        announcement={announcement({ levelChanged: true, buildingLevel: 2 })}
+        announcement={announcement({ levelChanged: true, buildingLevel: 2, currentLevelXp: 490, nextLevelXp: 690, xpTotal: 490 })}
         onDismiss={vi.fn()}
       />,
     );

@@ -169,6 +169,39 @@ export const BuildingPreview = memo(function BuildingPreview({ assetId }: { asse
   );
 });
 
+/** A clean city lot for the first-claim guide. It deliberately uses simple geometry instead of a
+ * building asset: the point is the possibility of an open plot, not a starter building choice. */
+export const EmptyPlotPreview = memo(function EmptyPlotPreview() {
+  return (
+    <group rotation={[0, -0.55, 0]}>
+      <mesh position={[0, -1.78, 0]} receiveShadow>
+        <boxGeometry args={[8.6, 0.35, 6.6]} />
+        <meshStandardMaterial color="#d8ccb0" roughness={0.92} />
+      </mesh>
+      <mesh position={[0, -1.52, 0]} receiveShadow>
+        <boxGeometry args={[7.9, 0.18, 5.9]} />
+        <meshStandardMaterial color="#8fcf72" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, -1.4, 0]} receiveShadow>
+        <boxGeometry args={[1.1, 0.04, 5.5]} />
+        <meshStandardMaterial color="#dbe3d7" roughness={0.9} />
+      </mesh>
+      {[
+        [-3.05, 2.15], [3.05, 2.15], [-3.05, -2.15], [3.05, -2.15],
+      ].map(([x, z]) => (
+        <group key={`${x}:${z}`} position={[x, -1.33, z]}>
+          <mesh castShadow><cylinderGeometry args={[0.13, 0.18, 0.82, 10]} /><meshStandardMaterial color="#73503a" roughness={0.95} /></mesh>
+          <mesh position={[0, 0.58, 0]} castShadow><sphereGeometry args={[0.48, 12, 10]} /><meshStandardMaterial color="#3c9b55" roughness={0.85} /></mesh>
+        </group>
+      ))}
+      <mesh position={[-2.25, -1.31, -0.65]} rotation={[0, 0.22, 0]} castShadow>
+        <boxGeometry args={[2.1, 0.1, 1.6]} />
+        <meshStandardMaterial color="#a9d989" roughness={0.9} />
+      </mesh>
+    </group>
+  );
+});
+
 export const BillboardPreview = memo(function BillboardPreview({
   card,
   assetId,
