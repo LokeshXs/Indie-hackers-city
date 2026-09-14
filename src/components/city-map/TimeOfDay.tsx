@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, memo, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import type { BloomEffect } from "postprocessing";
@@ -89,13 +89,30 @@ const FOG = [new THREE.Color(MORNING_ENVIRONMENT.fog), new THREE.Color(NIGHT_ENV
  *
  * This replaces the five fixed lines the scene used to open with, and the morning end of every
  * value below is exactly what those lines said -- see MORNING_ENVIRONMENT. */
-export const TimeOfDayLighting = memo(function TimeOfDayLighting() {
+export const TimeOfDayLighting = memo(function TimeOfDayLighting({
+  fogNear = MORNING_ENVIRONMENT.fogNear,
+  fogFar = MORNING_ENVIRONMENT.fogFar,
+}: {
+  /** Where the haze over the sea starts and finishes, as distances from the camera. The map works
+   * these out from the viewport, because how far the water has to reach depends on the screen --
+   * see computeSeaExtent. The defaults are the fixed pair this used to be built with. */
+  fogNear?: number;
+  fogFar?: number;
+}) {
   const blend = useNightBlend();
   const backgroundRef = useRef<THREE.Color>(null);
   const fogRef = useRef<THREE.Fog>(null);
   const hemisphereRef = useRef<THREE.HemisphereLight>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
   const applied = useRef(-1);
+
+  // Mutated rather than passed as `args`, which would rebuild the Fog on every resize and reset its
+  // colour to the morning one part-way through a transition to night.
+  useEffect(() => {
+    if (!fogRef.current) return;
+    fogRef.current.near = fogNear;
+    fogRef.current.far = fogFar;
+  }, [fogNear, fogFar]);
 
   useFrame(() => {
     const t = blend?.current ?? 0;
@@ -133,8 +150,8 @@ export const TimeOfDayLighting = memo(function TimeOfDayLighting() {
   return (
     <>
       <color ref={backgroundRef} attach="background" args={[MORNING_ENVIRONMENT.background]} />
-      {/* Fog is distance-from-camera, so this range is the original [90, 190] offset by the
-          camera's +995.93 move — reproduces the previous look exactly. */}
+      {/* Fog is distance-from-camera, hence the very large numbers: the camera sits ~1039 units
+          back from the city, and the sea now runs out well past that. */}
       <fog ref={fogRef} attach="fog" args={[MORNING_ENVIRONMENT.fog, MORNING_ENVIRONMENT.fogNear, MORNING_ENVIRONMENT.fogFar]} />
       <hemisphereLight
         ref={hemisphereRef}
