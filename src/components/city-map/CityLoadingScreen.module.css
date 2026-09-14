@@ -30,7 +30,7 @@
   filter: drop-shadow(0 0.4rem 0.75rem rgb(7 34 42 / 25%));
   animation: titlePop 950ms ease-out both;
 }
-.brand h1 {
+.brand h2 {
   display: grid;
   grid-template-columns: auto auto;
   justify-items: center;
@@ -106,7 +106,7 @@
 @media (max-height: 580px) {
   .logo { width: 6rem; margin-bottom: 0.65rem; }
   .brand { transform: translateY(-1rem); }
-  .brand h1 { font-size: clamp(2rem, min(11vw, 15vh), 5.5rem); }
+  .brand h2 { font-size: clamp(2rem, min(11vw, 15vh), 5.5rem); }
   .loadingReadout { bottom: max(1rem, env(safe-area-inset-bottom)); }
   .loadingReadout p { display: none; }
 }

@@ -1,8 +1,9 @@
 # Indie Hackers City
 
-Indie Hackers City is a web experience shaped by the progress of independent
-builders. This repository currently contains the production-ready application
-foundation; product features will be introduced in later stages.
+Indie Hackers City is an interactive city for independent builders to build in
+public. Founders claim plots, showcase projects, and submit product, user, and
+revenue milestones for review. Approved achievements earn XP and unlock plot
+rewards. Visitors can explore the map and public founder timelines without an account.
 
 ## Requirements
 
