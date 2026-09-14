@@ -1,10 +1,9 @@
 .card {
-  position: absolute;
+  position: relative;
   z-index: 4;
-  top: 5.8rem;
-  right: 1.25rem;
   display: grid;
   width: 17rem;
+  min-width: 0;
   gap: 0.55rem;
   border: 0.14rem solid var(--teal-600);
   border-radius: 1rem;
@@ -121,13 +120,7 @@
 }
 
 @media (max-width: 700px) {
-  /* One column here too. The card is wider on a phone than on the desktop HUD, so the two-column
-     shuffle the narrow card needed is no longer buying anything. */
   .card {
-    top: 5.8rem;
-    right: auto;
-    left: 0.75rem;
-    width: min(22rem, calc(100% - 1.5rem));
     padding: 0.7rem 0.8rem;
     transform: none;
   }

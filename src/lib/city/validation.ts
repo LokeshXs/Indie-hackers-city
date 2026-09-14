@@ -44,6 +44,7 @@ export function normalizeWebsite(value: string): string | null {
 }
 
 export interface ValidatedFounderFields {
+  bio?: string | null;
   fullName: string;
   xHandle: string;
 }
@@ -70,7 +71,10 @@ export function validateFounderFields(formData: FormData): ValidationResult<Vali
   if (!fullName || fullName.length > 60) return { error: "Enter a founder name of 60 characters or fewer." };
   if (!X_HANDLE_PATTERN.test(xHandle)) return { error: "Enter a valid X handle." };
 
-  return { data: { fullName, xHandle } };
+  if (formData.has("bio") && typeof formData.get("bio") !== "string") return { error: "Enter a text bio." };
+  const bio = formString(formData, "bio");
+  if (Array.from(bio).length > 160) return { error: "Keep your bio to 160 characters or fewer." };
+  return { data: { fullName, xHandle, ...(formData.has("bio") ? { bio: bio || null } : {}) } };
 }
 
 export function validateProjectDetails(formData: FormData): ValidationResult<ValidatedProjectDetails> {

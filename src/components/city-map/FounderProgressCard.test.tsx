@@ -10,7 +10,7 @@ const development: CityDevelopment = {
   ownerId: "user-1",
   project: { id: "project-1", name: "Xenith", websiteUrl: "https://xenith.dev/", type: "app" },
   statusText: null,
-  founder: { fullName: "Ada Founder", xHandle: "ada", avatarUrl: null },
+  founder: { fullName: "Ada Founder", xHandle: "ada", avatarUrl: null, bio: null },
   building: { level: 2, assetId: "startup-building-level-1" },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
   progression: { xp: 185, buildingLevel: 2, currentLevelXp: 100, nextLevelXp: 300 },
@@ -109,7 +109,7 @@ it("keeps Share and View my building independent without nested buttons", async 
   const onShare = vi.fn(), onViewBuilding = vi.fn();
   const user = userEvent.setup();
   const { container } = render(<FounderProgressCard development={development} onShare={onShare} onViewBuilding={onViewBuilding} />);
-  await user.click(screen.getByRole("button", { name: "Share" }));
+  await user.click(screen.getByRole("button", { name: "Share my plot" }));
   expect(onShare).toHaveBeenCalledOnce();
   expect(onViewBuilding).not.toHaveBeenCalled();
   expect(container.querySelector("button button")).toBeNull();

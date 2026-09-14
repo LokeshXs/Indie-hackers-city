@@ -1,4 +1,4 @@
-.account { position: absolute; z-index: 4; top: 1.25rem; right: 12.35rem; }
+.account { position: relative; z-index: 4; flex-shrink: 0; }
 .trigger { position: relative; display: grid; width: 3.6rem; height: 3.6rem; place-items: center; overflow: hidden; border: 0.14rem solid #fff4cf; border-radius: 1.05rem; background: linear-gradient(145deg, #42c4b7, var(--teal-500)); box-shadow: 0 0.28rem 0 var(--teal-edge), 0 0.7rem 1.5rem rgb(9 45 45 / 28%); color: var(--cream-100); font: inherit; font-size: 0.82rem; font-weight: var(--weight-black); cursor: pointer; transform: rotate(1deg); transition: filter 140ms ease, transform 140ms ease; }
 .trigger:hover { filter: brightness(1.08); transform: rotate(0deg) translateY(-1px); }
 .trigger:focus-visible { outline: 0; box-shadow: var(--focus); }
@@ -13,5 +13,5 @@
 .signOut:disabled { color: #a99b8e; cursor: wait; }
 .error { margin: 0; padding: 0 1.05rem 0.9rem; color: var(--rose); font-size: 0.68rem; }
 @keyframes menuIn { from { opacity: 0; transform: translateY(-0.45rem) scale(0.96); } }
-@media (max-width: 700px) { .account { top: 0.75rem; right: 0.75rem; } .trigger { width: 3.2rem; height: 3.2rem; } }
+@media (max-width: 700px) { .trigger { width: 3.2rem; height: 3.2rem; } }
 @media (prefers-reduced-motion: reduce) { .menu { animation: none; } .trigger { transition: none; } }
