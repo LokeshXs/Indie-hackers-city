@@ -101,11 +101,11 @@ export function CityLoadingScreen({
       <div className={styles.content}>
         <header className={styles.brand}>
           <Image className={styles.logo} src="/assets/logo/indie_hackers_city_logo_transparent.png" alt="" width={1254} height={1254} sizes="288px" priority />
-          <h1 aria-label="Indie Hacker City">
+          <h2 aria-label="Indie Hacker City">
             <span className={styles.titleWord} aria-hidden="true">Indie</span>
             <span className={styles.titleWord} aria-hidden="true">Hacker</span>
             <span className={`${styles.titleWord} ${styles.titleCity}`} aria-hidden="true">City</span>
-          </h1>
+          </h2>
         </header>
 
         <div className={styles.loadingReadout}>

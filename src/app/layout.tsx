@@ -5,6 +5,7 @@ import { Overpass, Overpass_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { SITE_TITLE, SITE_DESCRIPTION, siteOrigin, isPreviewDeployment } from "@/lib/seo";
 import "./globals.css";
 
 // Overpass descends from Highway Gothic, the US road-sign face — the city's
@@ -22,8 +23,31 @@ const overpassMono = Overpass_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Indie Hackers City",
-  description: "A city shaped by the progress of independent builders.",
+  metadataBase: new URL(siteOrigin()),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  robots: isPreviewDeployment ? { index: false, follow: false } : { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    siteName: "Indie Hackers City",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [{
+      url: "/generated/indie-hackers-city-og-boardwalk.png",
+      width: 1734,
+      height: 907,
+      alt: "Indie Hackers City — independent builders in a sunny coastal town",
+    }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [{
+      url: "/generated/indie-hackers-city-og-boardwalk.png",
+      alt: "Indie Hackers City — independent builders in a sunny coastal town",
+    }],
+  },
   icons: {
     icon: "/assets/logo/favicon.png",
     apple: "/assets/logo/favicon.png",

@@ -1232,7 +1232,7 @@ export function CityMap3D({
 
   return (
     // The phase dresses the HUD panels, and nothing else — see Panel.module.css.
-    <main ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete} data-city-phase={cityPhase}>
+    <main id="city-map" ref={shellRef} className={styles.shell} tabIndex={-1} aria-busy={!loadingComplete} data-city-phase={cityPhase}>
       {cityPresence.notice.length > 0 && (
         <aside className={styles.onlineToast} role="status" aria-live="polite">
           <span className={styles.onlineDot} aria-hidden="true" />
