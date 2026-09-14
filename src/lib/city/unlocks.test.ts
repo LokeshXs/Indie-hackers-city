@@ -3,28 +3,36 @@ import { LADDER, canChoosePremises, currentLeg, unlocksFor, type LadderEntry } f
 
 describe("unlocksFor", () => {
   it("derives every unlock from xp alone", () => {
-    expect(unlocksFor(10)).toEqual({ lights: false, marquee: false, status: false, levelTwo: false });
-    expect(unlocksFor(240)).toEqual({ lights: true, marquee: true, status: false, levelTwo: false });
-    expect(unlocksFor(9999)).toEqual({ lights: true, marquee: true, status: true, levelTwo: true });
+    expect(unlocksFor(10)).toEqual({ lights: false, marquee: false, status: false, pet: false, levelTwo: false });
+    expect(unlocksFor(190)).toEqual({ lights: false, marquee: true, status: true, pet: false, levelTwo: false });
+    expect(unlocksFor(240)).toEqual({ lights: true, marquee: true, status: true, pet: false, levelTwo: false });
+    expect(unlocksFor(390)).toEqual({ lights: true, marquee: true, status: true, pet: true, levelTwo: false });
+    expect(unlocksFor(9999)).toEqual({ lights: true, marquee: true, status: true, pet: true, levelTwo: true });
   });
 
   it("unlocks exactly on the threshold, not one past it", () => {
-    expect(unlocksFor(99).lights).toBe(false);
-    expect(unlocksFor(100).lights).toBe(true);
+    expect(unlocksFor(109).status).toBe(false);
+    expect(unlocksFor(110).status).toBe(true);
+    expect(unlocksFor(239).lights).toBe(false);
+    expect(unlocksFor(240).lights).toBe(true);
+    expect(unlocksFor(389).pet).toBe(false);
+    expect(unlocksFor(390).pet).toBe(true);
   });
 });
 
 describe("currentLeg", () => {
   it("starts a new founder on a real leg from zero", () => {
-    expect(currentLeg(10)).toMatchObject({ from: 0, to: 100, remaining: 90, progress: 0.1 });
+    const leg = currentLeg(10);
+    expect(leg).toMatchObject({ from: 0, to: 110, remaining: 100 });
+    expect(leg?.progress).toBeCloseTo(10 / 110);
   });
 
   it("measures across the leg, not from zero", () => {
     const leg = currentLeg(210);
-    // 110 of the 140 between the 100 and 240 rungs. From zero this would read 88%, which is the
+    // 20 of the 50 between the 190 and 240 rungs. From zero this would read 88%, which is the
     // reading this function exists to replace.
-    expect(leg).toMatchObject({ from: 100, to: 240, remaining: 30 });
-    expect(leg?.progress).toBeCloseTo(110 / 140);
+    expect(leg).toMatchObject({ from: 190, to: 240, remaining: 30 });
+    expect(leg?.progress).toBeCloseTo(20 / 50);
   });
 
   it("empties the bar the moment a reward lands", () => {
@@ -33,7 +41,9 @@ describe("currentLeg", () => {
   });
 
   it("carries the reward, and leaves it absent on a placeholder rung", () => {
-    expect(currentLeg(210)?.reward?.label).toBe("Scrolling billboard");
+    expect(currentLeg(150)?.reward?.label).toBe("Scrolling billboard");
+    expect(currentLeg(210)?.reward?.label).toBe("Roof lights");
+    expect(currentLeg(300)?.reward?.label).toBe("A dog");
     expect(currentLeg(500)).toMatchObject({ to: 570 });
     expect(currentLeg(500)?.reward).toBeUndefined();
   });
@@ -52,6 +62,30 @@ describe("currentLeg", () => {
     // from <= xp < to. It takes a first threshold of zero or less, and an xp below it.
     const degenerate: LadderEntry[] = [{ threshold: 0 }, { threshold: 100 }];
     expect(currentLeg(-5, degenerate)?.progress).toBe(1);
+  });
+});
+
+describe("the ladder order", () => {
+  // The order is the product decision this file exists to record, and reordering LADDER in place is
+  // a two-line edit that nothing else would catch. Pinned whole, rather than rung by rung.
+  it("runs status, marquee, lights, the dog, then the bigger building", () => {
+    expect(LADDER.map((entry) => [entry.threshold, entry.reward?.key])).toEqual([
+      [110, "status"],
+      [190, "marquee"],
+      [240, "lights"],
+      [390, "pet"],
+      [490, "levelTwo"],
+      [570, undefined],
+      [670, undefined],
+      [850, undefined],
+    ]);
+  });
+
+  // currentLeg takes the first rung above the founder's XP with findIndex, so a rung out of order
+  // is not a cosmetic problem: it would hand back a leg the founder has already finished.
+  it("keeps the thresholds ascending", () => {
+    const thresholds = LADDER.map((entry) => entry.threshold);
+    expect(thresholds).toEqual([...thresholds].sort((first, second) => first - second));
   });
 });
 

@@ -34,7 +34,7 @@ describe("CityLoadingScreen", () => {
     expect(screen.getByText("Raising landmarks…")).toBeInTheDocument();
     expect(screen.getByText("72%")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "72");
-    expect(screen.getByRole("heading", { name: "Indie Hackers City" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Indie Hacker City" })).toBeInTheDocument();
     expect(screen.queryByText(/city assets/i)).not.toBeInTheDocument();
     expect(document.querySelector('[class*="cityAssembly"]')).not.toBeInTheDocument();
   });
@@ -55,7 +55,7 @@ describe("CityLoadingScreen", () => {
       <CityLoadingScreen sceneReady={false} assetError={null} onComplete={onComplete} onRetry={vi.fn()} />,
     );
 
-    await act(async () => vi.advanceTimersByTime(1800));
+    await act(async () => vi.advanceTimersByTime(2000));
     expect(onComplete).not.toHaveBeenCalled();
     expect(screen.getByText("Preparing your first view…")).toBeInTheDocument();
 
@@ -64,7 +64,7 @@ describe("CityLoadingScreen", () => {
     });
     expect(onComplete).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTime(0));
-    await act(async () => vi.advanceTimersByTime(220));
+    await act(async () => vi.advanceTimersByTime(350));
     await act(async () => vi.advanceTimersByTime(350));
     expect(onComplete).toHaveBeenCalledOnce();
   });
@@ -75,6 +75,20 @@ describe("CityLoadingScreen", () => {
 
     await act(async () => vi.advanceTimersByTime(3000));
     expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("keeps the intro visible for at least two seconds even when everything is ready", async () => {
+    Object.assign(loaderState, { active: false, progress: 100, loaded: 12 });
+    const onComplete = vi.fn();
+    render(<CityLoadingScreen sceneReady assetError={null} onComplete={onComplete} onRetry={vi.fn()} />);
+    await act(async () => vi.advanceTimersByTime(1999));
+    expect(screen.getByRole("status", { name: "Loading Indie Hackers City" })).toHaveAttribute("data-phase", "loading");
+    expect(onComplete).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTime(1));
+    await act(async () => vi.advanceTimersByTime(0));
+    await act(async () => vi.advanceTimersByTime(350));
+    await act(async () => vi.advanceTimersByTime(350));
+    expect(onComplete).toHaveBeenCalledOnce();
   });
 
   it("shows a recoverable error state", async () => {

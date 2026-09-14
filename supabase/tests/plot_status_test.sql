@@ -31,16 +31,16 @@ select plot_id from public.claim_plot(
 select is((select status_text from public.city_developments where owner_id = auth.uid()), null::text, 'new plots default to Online');
 
 reset role;
-update public.plot_claims set xp_total = 389 where owner_id = '70000000-0000-4000-8000-000000000001';
+update public.plot_claims set xp_total = 109 where owner_id = '70000000-0000-4000-8000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '70000000-0000-4000-8000-000000000001', true);
-select throws_ok($$ select * from public.update_plot_status('Shipping') $$, 'P0001', 'reward_locked', '389 XP cannot configure status even through direct RPC');
+select throws_ok($$ select * from public.update_plot_status('Shipping') $$, 'P0001', 'reward_locked', '109 XP cannot configure status even through direct RPC');
 select throws_ok($$ select * from public.update_plot_status(null) $$, 'P0001', 'reward_locked', 'reset cannot bypass the reward lock');
 
 reset role;
-update public.plot_claims set xp_total = 390 where owner_id = '70000000-0000-4000-8000-000000000001';
+update public.plot_claims set xp_total = 110 where owner_id = '70000000-0000-4000-8000-000000000001';
 set local role authenticated;
-select lives_ok($$ select * from public.update_plot_status('  Shipping today  ') $$, '390 XP unlocks custom status');
+select lives_ok($$ select * from public.update_plot_status('  Shipping today  ') $$, '110 XP unlocks custom status');
 select is((select status_text from public.city_developments where owner_id = auth.uid()), 'Shipping today', 'the trimmed message persists in the public view');
 select is((select status_text from public.plot_claims where owner_id = '70000000-0000-4000-8000-000000000002'), null::text, 'another founder is untouched');
 select lives_ok($$ select * from public.update_plot_status(repeat('🚀', 40)) $$, '40 Unicode characters fit');
@@ -59,7 +59,7 @@ select is((select status_text from public.city_developments where owner_id = aut
 -- Existing view-returning RPCs still work after appending the new column.
 select is((select status_text from public.update_plot_appearance('#ffffff', '#163b3c')), '<script>alert(1)</script>', 'appearance updates return and preserve saved status');
 reset role;
-update public.plot_claims set xp_total = 389 where owner_id = '70000000-0000-4000-8000-000000000001';
+update public.plot_claims set xp_total = 109 where owner_id = '70000000-0000-4000-8000-000000000001';
 set local role authenticated;
 select throws_ok($$ select * from public.update_plot_status('Replacement') $$, 'P0001', 'reward_locked', 'XP loss locks further edits');
 select is((select status_text from public.city_developments where owner_id = auth.uid()), '<script>alert(1)</script>', 'XP loss retains the saved text for later re-unlock');

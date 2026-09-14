@@ -4,11 +4,16 @@
  * its own action rather than two firing at once:
  *
  *    10  claim
- *   110  first launch          +100   lights
- *   190  100+ users             +80   (open — the flag was pulled, see git history)
- *   240  first $10              +50   marquee
- *   390  first $100            +150   status
+ *   110  first launch          +100   status
+ *   190  100+ users             +80   marquee
+ *   240  first $10              +50   lights
+ *   390  first $100            +150   pet
  *   490  second product launch +100   level 2
+ *
+ * The order is deliberately cheapest-first in what it asks of the founder's building: a status
+ * bubble costs them a sentence, the marquee and lights are earned decoration, and only the last
+ * rung replaces the shell. It used to run lights → marquee → status, which put the one reward a
+ * founder can actually *write* behind three approvals' worth of evidence.
  *
  * Round numbers would be worse here, not better: with cascading, `revenue_100` grants 200 in one
  * call, so a threshold sitting between two totals is crossed silently while the founder is looking
@@ -37,22 +42,26 @@ export interface LadderEntry {
   reward?: LadderReward;
 }
 
-export type UnlockKey = "lights" | "marquee" | "status" | "levelTwo";
+export type UnlockKey = "lights" | "marquee" | "status" | "pet" | "levelTwo";
 
 export type Unlocks = Record<UnlockKey, boolean>;
 
 export const LADDER: readonly LadderEntry[] = [
   {
-    threshold: 100,
-    reward: { key: "lights", label: "Roof lights", description: "A string of lights around your roof edge." },
+    threshold: 110,
+    reward: { key: "status", label: "Status bubble", description: "Tell the city what you are working on." },
   },
   {
-    threshold: 240,
+    threshold: 190,
     reward: { key: "marquee", label: "Scrolling billboard", description: "Your billboard text travels, like a station board." },
   },
   {
+    threshold: 240,
+    reward: { key: "lights", label: "Roof lights", description: "A string of lights around your roof edge." },
+  },
+  {
     threshold: 390,
-    reward: { key: "status", label: "Status bubble", description: "Tell the city what you are working on." },
+    reward: { key: "pet", label: "A dog", description: "A puppy that trots, sits and naps on your lawn." },
   },
   {
     threshold: 490,
@@ -76,6 +85,7 @@ export function unlocksFor(xp: number): Unlocks {
     lights: xp >= UNLOCK_THRESHOLDS.lights,
     marquee: xp >= UNLOCK_THRESHOLDS.marquee,
     status: xp >= UNLOCK_THRESHOLDS.status,
+    pet: xp >= UNLOCK_THRESHOLDS.pet,
     levelTwo: xp >= UNLOCK_THRESHOLDS.levelTwo,
   };
 }

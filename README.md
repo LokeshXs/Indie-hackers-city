@@ -152,6 +152,13 @@ unconfigured rather than requesting a missing file when that is unset. At 128 kb
 across 52 minutes it is ~50 MB, but `preload="none"` and R2's range support mean a
 listener only transfers the stretch they actually hear.
 
+The bucket is reached through a custom domain rather than its `r2.dev` subdomain,
+which Cloudflare rate-limits and which returns no `Cache-Control` at all. Requests
+are a plain `<audio>` source with no `crossOrigin`, so no CORS policy is involved;
+adding a visualiser would change that, because `createMediaElementSource` requires
+a cross-origin-enabled element. The object key carries no version hash, so replacing
+the track means renaming it rather than trusting the edge cache to expire.
+
 Other map viewers receive silent, grouped join notices. Initial sync, known seat
 IDs, existing accounts, and the viewer's own arrivals do not produce notices.
 The cafe panel includes a notification preference saved in the browser.

@@ -9,6 +9,7 @@ import { NIGHT_ENVIRONMENT, targetFor, type CityPhase } from "@/lib/city/time-of
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/lib/sharing/shared";
 import { useNightBlend } from "./TimeOfDay";
 import { makeShareCamera } from "./share-camera";
+import { freezePetsForCapture } from "./PlotPets";
 
 export type CapturePlot = (position: THREE.Vector3, phase: CityPhase, signal: AbortSignal, plotRotation?: number) => Promise<Blob>;
 interface CaptureRequest {
@@ -87,6 +88,11 @@ export function captureScene(gl: THREE.WebGLRenderer, scene: THREE.Scene, positi
   scene.traverse((object) => {
     if (object.visible && object.userData.excludeFromShare) { hidden.push(object); object.visible = false; }
   });
+  // Dogs are in the share, and they are sitting in it. This is one frame of the live city, so
+  // without posing them the image catches whichever dog was mid-stride when the founder pressed
+  // share -- and a founder showing off the reward they just earned should get the dog, not a blur
+  // of legs. Undone in the finally below, alongside the visibility above.
+  const releasePets = freezePetsForCapture();
   try {
     gl.setScissorTest(false);
     gl.autoClear = true;
@@ -114,6 +120,7 @@ export function captureScene(gl: THREE.WebGLRenderer, scene: THREE.Scene, positi
     for (let y = 0; y < SCENE_HEIGHT; y++) flipped.set(pixels.subarray(y * stride, (y + 1) * stride), (SCENE_HEIGHT - y - 1) * stride);
     return flipped;
   } finally {
+    releasePets();
     hidden.forEach((object) => { object.visible = true; });
     gl.setRenderTarget(previousTarget);
     gl.setViewport(viewport); gl.setScissor(scissor); gl.setScissorTest(scissorTest); gl.autoClear = autoClear;

@@ -3,11 +3,13 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { getUserAvatarUrl, getUserDisplayName, getUserInitials } from "@/lib/auth/user-metadata";
+import { Button } from "@/components/ui/Button";
 import { useAuth } from "./AuthProvider";
 import styles from "./AccountMenu.module.css";
 
 export function AccountMenu() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, signInWithGoogle, isLoading } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -24,7 +26,25 @@ export function AccountMenu() {
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isOpen]);
 
-  if (!user) return null;
+  async function handleSignIn() {
+    setIsSigningIn(true);
+    setError(null);
+    try {
+      await signInWithGoogle(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    } catch {
+      setError("Couldn’t start sign-in. Try again.");
+      setIsSigningIn(false);
+    }
+  }
+
+  if (!user) return (
+    <div className={styles.account}>
+      <Button size="sm" disabled={isLoading || isSigningIn} onClick={handleSignIn}>
+        {isSigningIn ? "Signing in…" : "Log in"}
+      </Button>
+      {error ? <div className={styles.menu}><p className={styles.loginError} role="alert">{error}</p></div> : null}
+    </div>
+  );
   const displayName = getUserDisplayName(user) || "Indie hacker";
   const avatarUrl = getUserAvatarUrl(user);
 
@@ -34,6 +54,8 @@ export function AccountMenu() {
     try {
       await signOut();
       setIsOpen(false);
+      setIsSigningIn(false);
+      setIsSigningOut(false);
     } catch {
       setError("Couldn’t sign out. Try again.");
       setIsSigningOut(false);

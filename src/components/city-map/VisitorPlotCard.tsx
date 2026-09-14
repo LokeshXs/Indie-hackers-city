@@ -95,7 +95,7 @@ export function VisitorPlotCard({ development, onClose }: { development: CityDev
   const initials = development.founder.fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => Array.from(part)[0]).join("");
 
   return <Modal closeLabel="Close founder profile" onClose={onClose} labelledBy="visitor-founder-name" containment="fixed" layout="surface" zIndex={32} width="min(78rem, 100%)" className={styles.modal} initialFocus="close">
-    <div className={styles.content}>
+    <div className={`${styles.content} ${!milestones && !failed ? styles.loading : ""}`}>
       <header className={styles.profile}>
         <div className={styles.identity}>
           <span className={styles.avatar}>
@@ -121,7 +121,19 @@ export function VisitorPlotCard({ development, onClose }: { development: CityDev
 
       <section className={styles.journey} aria-label="Founder journey">
         {failed ? <div className={styles.feedback} role="status">The journey couldn’t be loaded. <button className={styles.linkButton} onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}>Try again</button></div>
-          : !milestones ? <div className={styles.skeleton} role="status" aria-label="Loading founder journey"><span /><span /><span /></div>
+          : !milestones ? <div className={styles.skeleton} role="status" aria-label="Loading founder journey">
+              <div className={styles.skeletonTrack} aria-hidden="true">
+                {[0, 1, 2, 3].map((index) => <div key={index} className={styles.skeletonStop}>
+                  <span className={styles.skeletonDot} />
+                  <div className={styles.skeletonCard}>
+                    <span className={styles.skeletonIcon} />
+                    <span className={styles.skeletonTitle} />
+                    <span className={styles.skeletonDetail} />
+                  </div>
+                </div>)}
+              </div>
+              <span className={styles.loadingLabel}>Loading founder journey…</span>
+            </div>
           : <>
             <div ref={timelineRef} className={styles.timelineScroll} tabIndex={0} aria-label="Achievement timeline, scroll for more milestones">
               <ol id="visitor-timeline" className={`${styles.timeline} ${expanded ? styles.expanded : ""}`}>

@@ -18,9 +18,9 @@ describe("plot status text", () => {
   });
 
   it("shows custom text only while the status reward is unlocked", () => {
-    expect(plotStatusLabel("Shipping", 389)).toBe("Online");
-    expect(plotStatusLabel("Shipping", 390)).toBe("Shipping");
-    expect(plotStatusLabel(null, 390)).toBe("Online");
-    expect(plotStatusLabel("", 390)).toBe("Online");
+    expect(plotStatusLabel("Shipping", 109)).toBe("Online");
+    expect(plotStatusLabel("Shipping", 110)).toBe("Shipping");
+    expect(plotStatusLabel(null, 110)).toBe("Online");
+    expect(plotStatusLabel("", 110)).toBe("Online");
   });
 });

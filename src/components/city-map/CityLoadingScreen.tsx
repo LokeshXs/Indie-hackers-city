@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useProgress } from "@react-three/drei";
 import styles from "./CityLoadingScreen.module.css";
 
-const MINIMUM_INTRO_MS = 1800;
-const READY_HOLD_MS = 220;
+const MINIMUM_INTRO_MS = 2000;
+const READY_HOLD_MS = 350;
 const EXIT_MS = 350;
 
 export type CityLoadingPhase = "loading" | "ready" | "exiting" | "hidden" | "error";
@@ -99,9 +100,12 @@ export function CityLoadingScreen({
     >
       <div className={styles.content}>
         <header className={styles.brand}>
-          <span className={styles.brandDiamond} aria-hidden="true">◆</span>
-          <p>Welcome to</p>
-          <h1>Indie Hackers City</h1>
+          <Image className={styles.logo} src="/assets/logo/indie_hackers_city_logo_transparent.png" alt="" width={1254} height={1254} sizes="288px" priority />
+          <h1 aria-label="Indie Hacker City">
+            <span className={styles.titleWord} aria-hidden="true">Indie</span>
+            <span className={styles.titleWord} aria-hidden="true">Hacker</span>
+            <span className={`${styles.titleWord} ${styles.titleCity}`} aria-hidden="true">City</span>
+          </h1>
         </header>
 
         <div className={styles.loadingReadout}>
@@ -117,7 +121,9 @@ export function CityLoadingScreen({
             aria-valuemax={100}
             aria-valuenow={visiblePhase === "ready" || visiblePhase === "exiting" ? 100 : progress}
           >
-            <span style={{ width: `${visiblePhase === "ready" || visiblePhase === "exiting" ? 100 : progress}%` }} />
+            <span className={styles.progressWell}>
+              <span className={styles.progressFill} style={{ width: `${visiblePhase === "ready" || visiblePhase === "exiting" ? 100 : progress}%` }} />
+            </span>
           </div>
           <p>Building a place for independent makers.</p>
         </div>

@@ -5,12 +5,14 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { CityDevelopment, PlotBuildingAssetId } from "@/lib/city/types";
+import { unlocksFor } from "@/lib/city/unlocks";
 import { BILLBOARD_FACE_MATERIAL, BILLBOARD_NIGHT_EMISSIVE, CITY_ASSET_PATHS } from "./city-assets";
 import { MARQUEE_SPEED, useBillboardTexture } from "./billboard-texture";
 import { nightLitMaterial, registerNightMaterial } from "./night-materials";
 import { useNightBlend } from "./TimeOfDay";
 import { PLOT_BUILDING_SCALE, createPlotDevelopmentEntities, entityScale, getBuildingPlacement, getSignPreviewScale } from "./plot-builds";
 import { RoofProps } from "./RoofProps";
+import { StillPet } from "./PlotPets";
 import type { CityAssetId, CityEntity } from "./map-types";
 
 /** Every scrolling billboard texture currently mounted.
@@ -263,6 +265,17 @@ export const PlotPreview = memo(function PlotPreview({
           >
             <RoofProps development={development} />
           </group>
+          {/* The dog, in a group carrying the PAD's placement rather than the building's -- it is
+              on the grass in front, not on the roof -- and at scale 1, since it is authored at
+              world size. Sitting, because this preview has no frame loop and should not grow one. */}
+          {unlocksFor(development.progression.xp).pet && plotEntity.plotId && (
+            <group
+              position={[plotEntity.position.x, plotEntity.position.y, plotEntity.position.z]}
+              rotation={[0, plotEntity.rotationY ?? 0, 0]}
+            >
+              <StillPet plotId={plotEntity.plotId} assetId={development.building.assetId} />
+            </group>
+          )}
         </group>
         </group>
       </group>

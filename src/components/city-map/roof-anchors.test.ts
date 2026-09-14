@@ -11,7 +11,7 @@ const PLOT_BUILDING_ASSET_IDS: readonly PlotBuildingAssetId[] = [
 describe("BUILDING_ROOF_ANCHORS", () => {
   // The reason this test exists: RoofProps looks the building up in this record and bails with
   // `return null` when there is no entry. A founder redeeming the 490 XP reward has long since
-  // passed the 100 XP roof-lights unlock, so a level-2 shell without anchors would take a reward
+  // passed the 240 XP roof-lights unlock, so a level-2 shell without anchors would take a reward
   // away as the price of collecting one. The Record's type is total, but the type only guards the
   // shells listed in the union -- this guards the ones a founder can actually end up standing on.
   it("covers every shell that can stand on a plot", () => {

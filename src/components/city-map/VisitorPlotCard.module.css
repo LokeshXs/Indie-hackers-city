@@ -15,7 +15,7 @@
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .bio { max-width: 35rem; margin: 0.9rem auto 0; color: var(--slate); font-size: var(--text-base); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-line; }
 .journey { margin: 0.5rem 0 0; text-align: center; }
-.timelineScroll { overflow-x: auto; overscroll-behavior-x: contain; padding: 0.4rem 0.2rem 0.8rem;  }
+.timelineScroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding: 1rem 0.2rem;  }
 .timelineScroll:focus-visible, .linkButton:focus-visible, .gap:focus-visible, .projectLink:focus-visible, .social:focus-visible { outline: 2px solid var(--teal-500); outline-offset: 4px; }
 .timeline { position: relative; display: flex; list-style: none; margin: 0; padding: 0; min-width: 100%; width: max-content; height: 19rem; }
 .timeline::before, .timeline::after { content: ""; position: absolute; top: calc(50% - 3px); left: 0; right: 0; height: 8px; border-radius: 999px; }
@@ -39,8 +39,23 @@
 .expanded::after, .expanded .milestone, .expanded .dot { animation: none; }
 .linkButton { padding: 0.4rem; border: 0; background: transparent; color: var(--teal-600); font: inherit; font-size: var(--text-sm); text-decoration: underline; cursor: pointer; }
 .feedback { min-height: 12rem; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.3rem; color: var(--slate); }
-.skeleton { display: flex; align-items: center; justify-content: space-around; min-height: 19rem; gap: 1rem; }
-.skeleton span { width: 25%; height: 5rem; border-radius: 0.8rem; background: var(--teal-wash); }
+.loading { scrollbar-width: none; }
+.loading::-webkit-scrollbar { display: none; }
+.skeleton { position: relative; height: 21rem; overflow: hidden; }
+.skeletonTrack { position: relative; display: flex; height: 19rem; margin-top: 1rem; }
+.skeletonTrack::before { content: ""; position: absolute; top: calc(50% - 3px); left: 0; right: 0; height: 8px; border-radius: 999px; background: var(--teal-wash); }
+.skeletonTrack::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 25%, rgb(255 253 243 / 65%) 50%, transparent 75%); transform: translateX(-100%); animation: journeyShimmer 2.4s ease-in-out infinite; pointer-events: none; }
+.skeletonStop { position: relative; flex: 1; min-width: 0; }
+.skeletonDot { position: absolute; top: calc(50% - 6px); left: calc(50% - 7px); width: 14px; height: 14px; border-radius: 50%; background: var(--parchment); border: 2px solid var(--rule); }
+.skeletonCard { position: absolute; bottom: calc(50% + 1.15rem); left: 50%; transform: translateX(-50%); width: 80%; max-width: 12rem; display: grid; justify-items: center; gap: 0.55rem; padding: 0.85rem 0.65rem; border: 1px solid var(--rule); border-top: 3px solid var(--teal-wash); border-radius: 0.8rem; background: var(--paper-raised); }
+.skeletonCard::after { content: ""; position: absolute; bottom: -1.15rem; left: 50%; height: 1.15rem; width: 2px; background: var(--rule); }
+.skeletonStop:nth-child(even) .skeletonCard { top: calc(50% + 1.15rem); bottom: auto; }
+.skeletonStop:nth-child(even) .skeletonCard::after { top: -1.15rem; bottom: auto; }
+.skeletonIcon { width: 2.5rem; height: 2.5rem; border-radius: 0.65rem; background: var(--teal-wash); }
+.skeletonTitle, .skeletonDetail { height: 0.55rem; width: 80%; border-radius: 999px; background: var(--teal-wash); }
+.skeletonDetail { width: 55%; background: var(--parchment); }
+.loadingLabel { position: absolute; bottom: 0.3rem; left: 0; right: 0; color: var(--slate); font-size: var(--text-xs); }
+@keyframes journeyShimmer { to { transform: translateX(100%); } }
 .showcase { display: grid; place-items: center; flex-grow: 1; min-height: 9rem; margin: 0; padding: 0.75rem 0; }
 .profileLinks { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; max-width: 100%; }
 .linkSeparator { color: var(--slate); }
@@ -68,8 +83,10 @@
   .identity { flex-direction: column; gap: 0.65rem; }
   .nameBlock { justify-items: center; text-align: center; }
   .profileLinks { justify-content: center; }
+  .skeletonStop:nth-child(n + 3) { display: none; }
   .stop { flex-basis: 9rem; width: 9rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .modal.modal, .timeline::after, .milestone, .dot { animation: none; }
+  .skeletonTrack::after { animation: none; display: none; }
 }

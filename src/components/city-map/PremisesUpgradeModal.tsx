@@ -13,8 +13,9 @@ import styles from "./PremisesUpgradeModal.module.css";
  * been watching creep closer is the thing that greets them here. */
 const GIFT_MARKER = "/assets/ui/reward-gift-marker.png";
 
-/** The named rungs, in ladder order. The three placeholder rungs above 490 carry no reward yet and
- * are left out: this block is what the founder has earned, not what is still owed. */
+/** The named rungs, in ladder order. The placeholder rungs -- 390, and the three above 490 -- carry
+ * no reward yet and are left out: this block is what the founder has earned, not what is still
+ * owed. The 390 one drops back in by itself once the pet is named in LADDER. */
 const REWARD_RUNGS = LADDER.flatMap((entry) => (entry.reward ? [{ ...entry.reward, threshold: entry.threshold }] : []));
 
 const XP_FORMATTER = new Intl.NumberFormat("en-US");

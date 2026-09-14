@@ -496,7 +496,7 @@ describe("ProjectCard achievements", () => {
 describe("ProjectCard status editing", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  function openCard(xp = 390, statusText: string | null = null) {
+  function openCard(xp = 110, statusText: string | null = null) {
     const savedDevelopment = { ...development, statusText, progression: { ...development.progression, xp } };
     const onUpdated = vi.fn();
     const props = { development: savedDevelopment, currentUserId: "user-1", address: "Jobs Avenue", onClose: vi.fn(), onUpdated };
@@ -509,17 +509,17 @@ describe("ProjectCard status editing", () => {
     await user.click(screen.getByRole("button", { name: /Status bubble/ }));
   }
 
-  it("shows a locked preview at 389 XP", async () => {
+  it("shows a locked preview at 109 XP", async () => {
     const user = userEvent.setup();
-    openCard(389, "Previously unlocked");
+    openCard(109, "Previously unlocked");
     await openStatus(user);
-    expect(screen.getByText(/Reach 390 XP/)).toBeInTheDocument();
+    expect(screen.getByText(/Reach 110 XP/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Ada Founder is online" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /Status text/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save status" })).not.toBeInTheDocument();
   });
 
-  it("previews and saves at exactly 390 XP, then reloads the persisted message", async () => {
+  it("previews and saves at exactly 110 XP, then reloads the persisted message", async () => {
     const user = userEvent.setup();
     const { props, onUpdated, rerender } = openCard();
     const saved = { ...props.development, statusText: "Shipping 🚀" };
@@ -539,7 +539,7 @@ describe("ProjectCard status editing", () => {
 
   it("discards drafts on Back and only persists Reset after Save", async () => {
     const user = userEvent.setup();
-    openCard(390, "Building");
+    openCard(110, "Building");
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ development }), { status: 200 })));
     await openStatus(user);
     await user.clear(screen.getByRole("textbox", { name: /Status text/ }));

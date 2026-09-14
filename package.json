@@ -30,11 +30,13 @@
     "db:types": "Regenerate src/lib/supabase/database.types.ts from the local database schema."
   },
   "dependencies": {
+    "@next/third-parties": "^16.3.2",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@react-three/postprocessing": "^3.1.1",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "@vercel/analytics": "^2.0.1",
     "motion": "^13.2.0",
     "next": "16.3.2",
     "postprocessing": "^6.39.5",

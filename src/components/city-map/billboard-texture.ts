@@ -29,7 +29,7 @@ export interface BillboardCard {
   name: string;
   textColor: string;
   backgroundColor: string;
-  /** Earned at 240 XP: the name travels across the board like a station departure display. */
+  /** Earned at 190 XP: the name travels across the board like a station departure display. */
   scrolling?: boolean;
 }
 

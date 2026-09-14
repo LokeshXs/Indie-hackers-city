@@ -13,7 +13,7 @@ const development: CityDevelopment = {
   founder: { fullName: "Ada Founder", xHandle: "ada", avatarUrl: null, bio: null },
   building: { level: 2, assetId: "startup-building-level-1" },
   billboard: { textColor: "#f7e0a6", backgroundColor: "#1b3a4b" },
-  progression: { xp: 185, buildingLevel: 2, currentLevelXp: 100, nextLevelXp: 300 },
+  progression: { xp: 150, buildingLevel: 2, currentLevelXp: 100, nextLevelXp: 300 },
   claimedAt: "2026-08-30T00:00:00.000Z",
   updatedAt: "2026-08-30T00:00:00.000Z",
 };
@@ -25,15 +25,15 @@ describe("FounderProgressCard", () => {
     const user = userEvent.setup();
     render(<FounderProgressCard onShare={vi.fn()} development={development} buttonRef={buttonRef} onViewBuilding={onViewBuilding} />);
 
-    // 185 sits on the leg between the 100 and 240 rungs: 55 short of the scrolling billboard.
+    // 150 sits on the leg between the 110 and 190 rungs: 40 short of the scrolling billboard.
     const card = screen.getByRole("button", {
-      name: "Level 2, 185 XP. Next reward Scrolling billboard, 55 XP to go. View my building.",
+      name: "Level 2, 150 XP. Next reward Scrolling billboard, 40 XP to go. View my building.",
     });
     expect(card).toHaveTextContent("Founder progress");
-    expect(card).toHaveTextContent("185");
+    expect(card).toHaveTextContent("150");
     expect(card).toHaveTextContent("Scrolling billboard");
-    expect(card).toHaveTextContent("55 XP to go");
-    expect(card).toHaveTextContent("240 XP");
+    expect(card).toHaveTextContent("40 XP to go");
+    expect(card).toHaveTextContent("190 XP");
     expect(buttonRef.current).toBe(card);
     await user.click(card);
     expect(onViewBuilding).toHaveBeenCalledOnce();
@@ -65,7 +65,7 @@ describe("FounderProgressCard", () => {
     render(<FounderProgressCard onShare={vi.fn()} development={development} onViewBuilding={() => undefined} />);
 
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /View my building/ })).toHaveAccessibleName(/Scrolling billboard, 55 XP to go/);
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveAccessibleName(/Scrolling billboard, 40 XP to go/);
   });
 
   it("measures the bar across the current leg, not from zero", () => {
@@ -73,10 +73,10 @@ describe("FounderProgressCard", () => {
       <FounderProgressCard onShare={vi.fn()} development={development} onViewBuilding={() => undefined} />,
     );
 
-    // 85 of the 140 between the 100 and 240 rungs. From zero this would be 77%, which is the
+    // 40 of the 80 between the 110 and 190 rungs. From zero this would be 79%, which is the
     // reading that made a barely-started leg look nearly finished.
     expect(container.querySelector('[style*="--fill"]')).toHaveStyle({
-      "--fill": `${(85 / 140) * 100}%`,
+      "--fill": `${(40 / 80) * 100}%`,
     });
   });
 
@@ -88,9 +88,9 @@ describe("FounderProgressCard", () => {
       />,
     );
 
-    expect(container.querySelector('[style*="--fill"]')).toHaveStyle({ "--fill": "10%" });
-    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("Roof lights");
-    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("90 XP to go");
+    expect(container.querySelector('[style*="--fill"]')).toHaveStyle({ "--fill": `${(10 / 110) * 100}%` });
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("Status bubble");
+    expect(screen.getByRole("button", { name: /View my building/ })).toHaveTextContent("100 XP to go");
   });
 
   it("names a rung that has a threshold but no reward yet", () => {
