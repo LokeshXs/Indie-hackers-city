@@ -177,7 +177,7 @@ describe("plot claim modal", () => {
     };
     render(<CityMap3D district={starterDistrict} initialDevelopments={{ [plotId]: progressedDevelopment }} />);
 
-    const progressCard = screen.getByRole("button", { name: "Level 2, 185 XP. Next reward Scrolling billboard, 55 XP to go. View my building." });
+    const progressCard = screen.getByRole("button", { name: "Level 2, 185 XP. Next reward Scrolling billboard, 5 XP to go. View my building." });
     await user.click(progressCard);
     expect(screen.getByRole("dialog", { name: "Lokesh Singh" })).toBeInTheDocument();
     expect(screen.getByLabelText("185 city XP")).toBeInTheDocument();

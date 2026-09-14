@@ -836,7 +836,7 @@ function OwnerProjectCard({
                 items={[
                   { id: "founder", title: "Founder details", description: "Your name and X handle." },
                   { id: "billboard", title: "Billboard design", description: "The colours on your board." },
-                  { id: "status", title: "Status bubble", description: "What you are working on, above your avatar.", meta: statusUnlocked ? undefined : "Unlocks at 390 XP" },
+                  { id: "status", title: "Status bubble", description: "What you are working on, above your avatar.", meta: statusUnlocked ? undefined : "Unlocks at 110 XP" },
                 ]}
                 onSelect={(id) => goTo(id as CardMode)}
               />
@@ -870,7 +870,7 @@ function OwnerProjectCard({
                   </Field>
                   <Button variant="tertiary" disabled={isSaving} onClick={() => { setStatusText(""); setError(null); }}>Reset to Online</Button>
                 </>
-              ) : <p>Reach 390 XP to customise your status. Your plot shows Online until then.</p>}
+              ) : <p>Reach 110 XP to customise your status. Your plot shows Online until then.</p>}
               <div className={styles.formActions}>
                 <Button variant="tertiary" disabled={isSaving} onClick={() => goTo("customise")}>← Back</Button>
                 {statusUnlocked ? <Button size="lg" type="submit" disabled={isSaving || !isOwner}>

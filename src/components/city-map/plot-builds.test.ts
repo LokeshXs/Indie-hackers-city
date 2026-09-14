@@ -99,7 +99,7 @@ describe("Level 1 plot development", () => {
       rotationY: undefined,
       plotId: "plot-north-1",
       suppressPlotHighlight: true,
-      // Below the 240 XP marquee unlock, so the board is static.
+      // Below the 190 XP marquee unlock, so the board is static.
       billboard: { name: "Xenith", textColor: "#f7e0a6", backgroundColor: "#1b3a4b", scrolling: false },
     });
     // Up on the roof: the startup shell's deck tops out at 3.98 before its 1.4 scale, so the frame
@@ -149,10 +149,10 @@ describe("Level 1 plot development", () => {
     expect(entities.every((entity) => entity.suppressPlotHighlight)).toBe(true);
   });
 
-  it("switches the billboard to a marquee once the 240 XP unlock is reached", () => {
+  it("switches the billboard to a marquee once the 190 XP unlock is reached", () => {
     const earned = {
       ...development("plot-north-1"),
-      progression: { xp: 240, buildingLevel: 1 as const, currentLevelXp: 100, nextLevelXp: 300 },
+      progression: { xp: 190, buildingLevel: 1 as const, currentLevelXp: 100, nextLevelXp: 300 },
     };
     const [, billboard] = createPlotDevelopmentEntities(plot(-7.90, undefined), earned);
     expect(billboard.billboard?.scrolling).toBe(true);

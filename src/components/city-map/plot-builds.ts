@@ -142,7 +142,7 @@ export function createPlotDevelopmentEntities(
       name: development.project.name,
       textColor: development.billboard.textColor,
       backgroundColor: development.billboard.backgroundColor,
-      // Earned at 240 XP. Derived rather than stored, like every other unlock.
+      // Earned at 190 XP. Derived rather than stored, like every other unlock.
       scrolling: unlocksFor(development.progression.xp).marquee,
     },
   }];

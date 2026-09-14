@@ -56,6 +56,35 @@ export const CAR_ASSET_PATH = "/assets/city/v3/vehicles/car.glb";
  * Unlike the pedestrians it ships no separate parts: a car's only moving part is the car. */
 export const CAR_VARIANTS = 4;
 
+/** The dog a founder earns at 390 XP, on the lawn in front of their building.
+ *
+ * Outside CITY_ASSET_PATHS like the other two movers, and for a reason of its own on top of
+ * theirs: a dog is not something the district places at all. It is placed by a reward, from the
+ * founder's own XP, on whichever plots have earned one -- see petPlacements in pet-dog.ts. */
+export const PET_DOG_ASSET_PATH = "/assets/city/v3/props/pet-dog.glb";
+
+/** The nine nodes build-pet-dog.py ships, kept separate so the runtime can pose them.
+ *
+ * Underscored for the same reason the pedestrian's parts are: three.js sanitises node names as it
+ * loads a glb, turning any whitespace into "_", and these are the names as they arrive in the
+ * scene graph.
+ *
+ * `dog_head` is a child of `dog_body` and the two ears are children of the head, so a body that
+ * pitches up to sit carries its own head and ears with it. The four legs are NOT children -- they
+ * stay planted while the chest rises. getObjectByName searches the whole subtree, so the flat list
+ * here finds all nine regardless. */
+export const PET_DOG_PARTS = [
+  "dog_body",
+  "dog_head",
+  "dog_ear_left",
+  "dog_ear_right",
+  "dog_tail",
+  "dog_leg_front_left",
+  "dog_leg_front_right",
+  "dog_leg_back_left",
+  "dog_leg_back_right",
+] as const;
+
 // Name of the mesh material representing each building's main wall surface,
 // verified against the exported glb material names — used to recolor buildings at runtime.
 /** Mesh material on the billboard whose map the runtime replaces with the painted product card.
@@ -290,6 +319,54 @@ export interface SignAnchor {
   width: number;
 }
 
+/** The patch of grass in front of each shell that the 390 XP dog is allowed to roam.
+ *
+ * PLOT-LOCAL, not building-local: `side` runs across the plot and `f` runs from the pad centre
+ * toward the road. Building-local +x is plot-local -side on every row, because the pad and the
+ * building are always turned a half-turn apart -- see getBuildingPlacement.
+ *
+ * PER SHELL, because the frontages are not remotely alike. Measured at the DOG'S OWN HEIGHT off
+ * the shipped .glb files rather than off the build scripts, and re-measured by city-assets.test.ts,
+ * because the piece of a shell that reaches furthest toward the road is usually a canopy with
+ * nothing underneath: the startup and corner-studio awnings overhang to f = 3.41 and f = 4.42 with
+ * their undersides 3.7 units up. What bounds a dog is the front-most thing standing in its own
+ * height, which on all five shells is a doorstep or a planter.
+ *
+ * Every band shares a far edge -- the mown grass ends at f = 5.07 and a dog keeps its own body
+ * length off the kerb -- and reaches the full width of the plot, EXCEPT the corner studio. Its
+ * entry step occupies the left half of its frontage out to f = 4.39, which leaves too little grass
+ * in front of it to stand in, so that dog gets the clear side of the plot instead. */
+export interface LawnBand {
+  /** Nearest the building. */
+  near: number;
+  far: number;
+  sideMin: number;
+  sideMax: number;
+}
+
+// The mown grass ends at 5.07 and a dog keeps its own body length off the kerb, so no paw ever
+// hangs over the edge of the plot.
+// The mown grass ends at 5.07 and the sides at 5.62; a dog keeps its own clearance off both, so no
+// paw hangs over the edge of the plot.
+const LAWN_FAR = 4.74;
+const LAWN_SIDE = 4.94;
+
+export const BUILDING_LAWN_BANDS: Record<PlotBuildingAssetId, LawnBand> = {
+  // The roomiest frontage in the kit: nothing below the awning reaches past f = 3.39.
+  "startup-building-level-1": { near: 3.74, far: LAWN_FAR, sideMin: -LAWN_SIDE, sideMax: LAWN_SIDE },
+  // The one shell that cannot give the dog the full width. Its entry step stands to f = 4.39 across
+  // plot-local side -4.94..-2.20, and the strip of grass left in front of that is thinner than the
+  // dog. It gets the clear side of the plot instead -- still two thirds of the frontage.
+  "corner-studio-level-1": { near: 4.44, far: LAWN_FAR, sideMin: -1.45, sideMax: LAWN_SIDE },
+  // The corner planter and the shrub in it, not the wall: together they stand to f = 3.88, and at
+  // the size the dog is drawn the foliage is squarely in its way rather than over its head.
+  "indie-garage-level-1": { near: 4.23, far: LAWN_FAR, sideMin: -LAWN_SIDE, sideMax: LAWN_SIDE },
+  // The entry step at f = 3.97, low enough to walk past but not to walk through.
+  "slat-studio-level-2": { near: 4.32, far: LAWN_FAR, sideMin: -LAWN_SIDE, sideMax: LAWN_SIDE },
+  // The lowest of the three entrance steps, at f = 3.69.
+  "teal-brow-level-2": { near: 4.04, far: LAWN_FAR, sideMin: -LAWN_SIDE, sideMax: LAWN_SIDE },
+};
+
 export const BUILDING_SIGN_ANCHORS: Record<PlotBuildingAssetId, SignAnchor> = {
   // One mass. The sign stands on the flat deck at 3.98, NOT on the 3.75 shadow tier the garland
   // above is hung from -- that band is the eave below the deck, and a sign seated on it sinks a
@@ -349,7 +426,7 @@ export const BUILDING_ROOF_ANCHORS: Record<PlotBuildingAssetId, RoofAnchors> = {
   },
   // Level-2 premises. These are not optional: RoofProps bails with `return null` when an asset has
   // no entry here, so a founder redeeming the 490 XP reward would lose the roof lights they earned
-  // at 100 XP -- an upgrade that quietly takes a reward away.
+  // at 240 XP -- an upgrade that quietly takes a reward away.
   //
   // Two full-width tiers stepped front to back. Bay roof: top 3.12, X +-4.05, Z -2.68..-1.60.
   // Main roof:                                            top 4.34, X +-4.05, Z -1.72..2.52.

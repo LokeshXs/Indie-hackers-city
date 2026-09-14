@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCityPresence } from "@/hooks/useCityPresence";
 
 import { Fragment, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
@@ -18,8 +19,8 @@ import {
 import type { CityDevelopment, CityDevelopmentRecord, ProjectType, StartupBuildingAssetId } from "@/lib/city/types";
 import { useCityDevelopments } from "@/hooks/useCityDevelopments";
 import { useRewardAnnouncement } from "@/hooks/useRewardAnnouncement";
-import { canChoosePremises } from "@/lib/city/unlocks";
-import { BUILDING_ROOF_ANCHORS, CAR_ASSET_PATH, CITY_ASSET_PATHS, PEDESTRIAN_ASSET_PATH } from "./city-assets";
+import { canChoosePremises, unlocksFor } from "@/lib/city/unlocks";
+import { BUILDING_ROOF_ANCHORS, CAR_ASSET_PATH, CITY_ASSET_PATHS, PEDESTRIAN_ASSET_PATH, PET_DOG_ASSET_PATH } from "./city-assets";
 import { PremisesUpgradeModal } from "./PremisesUpgradeModal";
 import { contrastRatio } from "./billboard-texture";
 import { BillboardPreview, BuildingPreview, MarqueeDriver, ModelInstance, PreviewStage } from "./ModelPreview";
@@ -40,6 +41,8 @@ import { OnlineFounderMarker } from "./OnlineFounderMarker";
 import { plotStatusLabel } from "@/lib/city/status";
 import { FounderProgressCard } from "./FounderProgressCard";
 import { RoofProps, type RoofPropPlacement } from "./RoofProps";
+import { PlotPets } from "./PlotPets";
+import { petPlacements, type PetPlacement } from "./pet-dog";
 import { ClaimSuccessOverlay } from "./ClaimSuccessOverlay";
 import { RewardAnnouncement } from "./RewardAnnouncement";
 import { ProjectCard } from "./ProjectCard";
@@ -788,6 +791,12 @@ export function CityMap3D({
     }),
     [plotEntities, developments],
   );
+  // The 390 XP dogs. Keyed off the PAD rather than the building, unlike the roof props above: a
+  // dog stands on the grass in front, and the pad is the only thing that knows where that is.
+  const petPlacementList = useMemo<PetPlacement[]>(
+    () => petPlacements(plotEntities, developments),
+    [plotEntities, developments],
+  );
   const selectedPlot = district.plots.find((plot) => plot.id === selectedPlotId);
   const inspectedDevelopment = inspectedPlotId ? developments[inspectedPlotId] : undefined;
   const inspectedPlot = inspectedPlotId ? district.plots.find((plot) => plot.id === inspectedPlotId) : undefined;
@@ -854,6 +863,11 @@ export function CityMap3D({
     for (const development of Object.values(developments)) {
       const assetId = development.building.assetId;
       if (DEFERRED_PRELOAD_ASSETS.has(assetId)) useGLTF.preload(CITY_ASSET_PATHS[assetId]);
+    }
+    // The dog is deferred for the same reason the level-2 shells are: most maps show none, and it
+    // is only ever wanted once a plot on this map has passed 390 XP.
+    if (Object.values(developments).some((development) => unlocksFor(development.progression.xp).pet)) {
+      useGLTF.preload(PET_DOG_ASSET_PATH);
     }
   }, [developments]);
 
@@ -1256,6 +1270,7 @@ export function CityMap3D({
             <Preload all />
             <Pedestrians entities={district.entities} />
             <Cars entities={district.entities} />
+            <PlotPets placements={petPlacementList} />
             {district.entities.filter((entity) => entity.assetId === "coffee-shop").map((entity) => (
               <Fragment key={entity.id}>
                 <CafeNightLights entity={entity} />
@@ -1293,6 +1308,7 @@ export function CityMap3D({
         </Button>
       </Panel>
       </div>
+      <Image className={styles.appLogo} src="/assets/logo/indie_hackers_city_logo_transparent.png" alt="Indie Hackers City" width={1254} height={1254} sizes="112px" />
       <div className={styles.founderAccount}>
       <AccountMenu />
       {ownPlot ? (
