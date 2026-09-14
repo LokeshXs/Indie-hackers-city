@@ -6,7 +6,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(144);
+select plan(145);
 
 -- ---------------------------------------------------------------- structure
 
@@ -572,6 +572,11 @@ select results_eq(
   $$ select xp_gained, previous_xp_total, xp_total, level_changed from public.reward_announcement() $$,
   $$ values (200, 10, 210, false) $$,
   'the announcement reports what landed since the founder last looked'
+);
+select results_eq(
+  $$ select current_level_xp, next_level_xp from public.reward_announcement() $$,
+  $$ values (0, 490) $$,
+  'the announcement carries the level-one progress range rather than cosmetic reward rungs'
 );
 
 -- The signup bonus has its own celebration, so it must never appear here.

@@ -902,7 +902,9 @@ export type Database = {
         Returns: {
           achievements: Json
           building_level: number
+          current_level_xp: number
           level_changed: boolean
+          next_level_xp: number | null
           previous_building_level: number
           previous_xp_total: number
           xp_gained: number
@@ -1251,4 +1253,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
